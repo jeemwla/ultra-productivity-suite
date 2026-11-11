@@ -206,6 +206,19 @@ class AlarmApi(unittest.TestCase):
         self.assertEqual(self.c.post("/api/alarms", json=self.body(weekdays=[], target_date=None)).status_code, 400)
         self.assertEqual(self.c.post("/api/alarms", json=self.body(code_red=True, custom_phrase=" ")).status_code, 400)
 
+    def test_alarm_socket_origin_guard(self):
+        from starlette.websockets import WebSocketDisconnect
+        for headers in ({"Origin": "https://evil.example"}, {"Origin": "null"},
+                        {"Origin": "http://localhost:3000"}, {"Host": "evil.example"}):
+            with self.subTest(headers=headers):
+                with self.assertRaises(WebSocketDisconnect) as denied:
+                    with self.c.websocket_connect("ws://127.0.0.1:8081/ws", headers=headers):
+                        self.fail("untrusted alarm socket accepted")
+                self.assertEqual(denied.exception.code, 1008)
+        for origin in ("http://127.0.0.1:8081", "http://localhost:8081", "http://tauri.localhost"):
+            with self.c.websocket_connect("ws://127.0.0.1:8081/ws", headers={"Origin": origin}) as ws:
+                self.assertIsInstance(ws.receive_json(), dict)
+
 
 class InsightsChart(unittest.TestCase):
     def setUp(self):

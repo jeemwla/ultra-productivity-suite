@@ -72,8 +72,12 @@ DEV_JS = """(() => { let v = null; const tick = async () => {
 
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
-# The suite's own pages (served by these services) and the desktop app's own UI
-SUITE_ORIGIN = re.compile(r"^(https?://(127\.0\.0\.1|localhost)(:\d+)?|https?://tauri\.localhost|tauri://localhost)$")
+# Only origins that actually serve suite pages. A different localhost service is
+# not a trusted browser client. Keep this in sync with the native window URLs.
+SUITE_ORIGIN = re.compile(
+    r"(?:https?://(?:127\.0\.0\.1|localhost|\[::1\]):(?:8081|8084|8098|8301)"
+    r"|https?://tauri\.localhost|tauri://localhost)\Z"
+)
 
 
 def host_name(host_header: str) -> str:
@@ -88,12 +92,36 @@ def request_allowed(method: str, host_header: str, origin) -> bool:
         return False
     if method.upper() in ("GET", "HEAD", "OPTIONS") or not origin:
         return True
-    return bool(SUITE_ORIGIN.match(origin))
+    return bool(SUITE_ORIGIN.fullmatch(origin))
+
+
+class LocalWebSocketGuard:
+    """Check the handshake before any route accepts or starts work.
+
+    Browser handshakes have an Origin. Origin-less native/local clients retain
+    the HTTP API's existing trust model; this is not local-process authentication.
+    A sandboxed page's literal 'null' Origin is never treated as missing.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "websocket":
+            hosts = [v.decode("latin-1") for k, v in scope["headers"] if k.lower() == b"host"]
+            origins = [v.decode("latin-1") for k, v in scope["headers"] if k.lower() == b"origin"]
+            if (len(hosts) != 1 or len(origins) > 1
+                    or host_name(hosts[0]) not in LOCAL_HOSTS
+                    or (origins and not SUITE_ORIGIN.fullmatch(origins[0]))):
+                await send({"type": "websocket.close", "code": 1008})
+                return
+        await self.app(scope, receive, send)
 
 
 def add_local_guard(app):
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(CORSMiddleware, allow_origin_regex=SUITE_ORIGIN.pattern, allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(LocalWebSocketGuard)
 
     @app.middleware("http")
     async def _local_only(request, call_next):
