@@ -438,6 +438,37 @@ fn restart_frozen_dock() {
     if cmd.spawn().is_ok() { std::process::exit(0); }
 }
 
+/// `--guard <pid>`: a tiny separate process that outlives the dock. When the dock exits for any reason (quit,
+/// crash, killed from Task Manager), it puts back every taskbar button still listed in hidden_tabs.txt. The
+/// in-process watchdog covers a frozen dock; this covers a dead one. No window framework, just Win32.
+#[cfg(windows)]
+fn run_guard(pid: u32) {
+    use windows::Win32::Foundation::{CloseHandle, HWND};
+    use windows::Win32::System::Com::*;
+    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, INFINITE, PROCESS_SYNCHRONIZE};
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    unsafe {
+        let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) else { return };
+        let _ = WaitForSingleObject(h, INFINITE);
+        let _ = CloseHandle(h);
+        let Ok(list) = std::fs::read_to_string(appdata("hidden_tabs.txt")) else { return };  // clean quit removes it
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        if let Some(t) = taskbar_list() {
+            for hw in list.lines().filter_map(|l| l.trim().parse::<isize>().ok()) {
+                if IsWindow(Some(HWND(hw as _))).as_bool() { let _ = t.AddTab(HWND(hw as _)); }
+            }
+        }
+        let _ = std::fs::remove_file(appdata("hidden_tabs.txt"));
+    }
+}
+
+#[cfg(windows)]
+fn spawn_guard() {
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = Command::new(exe).args(["--guard", &std::process::id().to_string()]).spawn();
+    }
+}
+
 /// `--restart-wait <pid>`: wait (up to 15 s) for the frozen copy to exit before starting.
 #[cfg(windows)]
 fn wait_for_old_copy(args: &[String]) {
@@ -1126,6 +1157,11 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--uninstall-survey") { run_survey(); return; }
     #[cfg(windows)]
+    if let Some(pid) = args.iter().position(|a| a == "--guard").and_then(|i| args.get(i + 1)).and_then(|p| p.parse::<u32>().ok()) {
+        run_guard(pid);
+        return;
+    }
+    #[cfg(windows)]
     wait_for_old_copy(&args);
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -1154,6 +1190,7 @@ fn main() {
                 std::thread::spawn(move || taskbar_tracker(h2));
                 std::thread::spawn(organizer_loop);
                 std::thread::spawn(watchdog);
+                spawn_guard();
             }
             let h3 = handle.clone();
             std::thread::spawn(move || alarm_watch(h3));

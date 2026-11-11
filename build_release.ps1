@@ -10,9 +10,8 @@ $R = $PSScriptRoot
 # pick up tools installed since this window opened (Node, Rust)
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.cargo\bin"
 Set-Location $R
-# quit the installed app cleanly first (a force-kill would leave other apps' taskbar buttons tucked away)
-Get-Process "Ultra Suite" -ErrorAction SilentlyContinue | ForEach-Object { Start-Process $_.Path -ArgumentList "--quit"; Start-Sleep 3 }
-Get-Process ultrasuite-core -ErrorAction SilentlyContinue | Stop-Process -Force
+# Building never touches the installed app: it stays running (alarms keep ringing) while artifacts are made in
+# build\ and ultra_dock\src-tauri\target\. Installing is a separate step (build\install_outside.cmd).
 Remove-Item "$R\build\dist\ultrasuite-core" -Recurse -Force -ErrorAction SilentlyContinue
 
 $Version = (Get-Content "$R\VERSION" -Raw).Trim()

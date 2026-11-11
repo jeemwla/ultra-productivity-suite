@@ -4,6 +4,7 @@ Code Red Alarm: the alarm engine and API (works with any speaker or headphones).
 Supports desktop QHD UI and remote phone control over Tailscale.
 '''
 import asyncio
+import contextlib
 import datetime
 import json
 import os
@@ -48,6 +49,7 @@ def init_db():
                 last_triggered_date TEXT
             )
         ''')
+        conn.execute("CREATE TABLE IF NOT EXISTS alarm_events (id INTEGER PRIMARY KEY, ts TEXT, alarm_id TEXT, label TEXT, kind TEXT, detail TEXT)")
         # Seed a default Code Red alarm and a recurring weekday alarm if table is empty
         cur = conn.execute("SELECT COUNT(*) FROM alarms")
         if cur.fetchone()[0] == 0:
@@ -125,6 +127,7 @@ class ActiveRingingState:
         self.expires_at: Optional[datetime.datetime] = None
         self.math_question: Optional[str] = None
         self.math_solution: Optional[int] = None
+        self.audio: Optional[str] = None  # starting / started / failed
 
 
 ring_state = ActiveRingingState()
@@ -137,6 +140,7 @@ async def broadcast_state():
     if ring_state.is_ringing and ring_state.expires_at:
         remaining_sec = max(0, int((ring_state.expires_at - now).total_seconds()))
         if remaining_sec == 0:
+            log_event(ring_state.alarm, "expired", "rang for its full length without being stopped")
             ring_state.is_ringing = False
             ring_state.alarm = None
             ring_state.math_question = None
@@ -148,6 +152,7 @@ async def broadcast_state():
         "alarm": ring_state.alarm,
         "remaining_sec": remaining_sec,
         "math_question": ring_state.math_question,
+        "audio": getattr(ring_state, "audio", None) if ring_state.is_ringing else None,  # started / failed
         "server_time": now.strftime("%H:%M:%S"),
         "server_date": now.strftime("%Y-%m-%d (%a)"),
         "server_iso": now.strftime("%Y-%m-%dT%H:%M:%S"),  # the clock alarms ring by; the page compares it with its own
@@ -163,11 +168,41 @@ async def broadcast_state():
             ws_clients.remove(ws)
 
 
+def log_event(alarm: Optional[dict], kind: str, detail: str = ""):
+    """Ring history: due, audio_started, audio_failed, dismissed, expired (preview_* for previews).
+    'Rang' in the app means the sound actually started, not merely that the scheduler picked the alarm."""
+    alarm = alarm or {}
+    if alarm.get("is_test"):
+        kind = "preview_" + kind
+    try:
+        with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+            conn.execute("INSERT INTO alarm_events (ts, alarm_id, label, kind, detail) VALUES (?, ?, ?, ?, ?)",
+                         (local_now().strftime("%Y-%m-%dT%H:%M:%S"), alarm.get("id"), alarm.get("label"), kind, detail[:300]))
+            conn.commit()
+    except Exception as exc:
+        print(f"[AlarmEngine] history write failed: {exc}")
+
+
+async def _ring_helper(alarm_dict: dict, duration: int):
+    """Ask the speaker helper to ring; returns (started, detail). Never raises."""
+    try:
+        async with httpx.AsyncClient(timeout=2.5, headers=BRIDGE_HEADERS) as client:
+            r = await client.post(f"{HOST_AUDIO_BRIDGE_URL}/trigger", json={
+                "alarm_id": alarm_dict["id"], "duration_sec": duration, "code_red": bool(alarm_dict["code_red"])})
+        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if r.status_code == 200 and data.get("started"):
+            return True, str(data.get("output") or data.get("device") or "chosen output")
+        return False, f"helper answered {r.status_code}: {data.get('error') or 'did not start (already ringing?)'}"
+    except Exception as exc:
+        return False, f"speaker helper unreachable: {exc.__class__.__name__}"
+
+
 async def trigger_alarm_now(alarm_dict: dict):
     now = local_now()
     ring_state.is_ringing = True
     ring_state.alarm = alarm_dict
     ring_state.started_at = now
+    ring_state.audio = "starting"
     duration = int(alarm_dict.get("ring_duration_sec", 600))
     ring_state.expires_at = now + datetime.timedelta(seconds=duration)
 
@@ -183,19 +218,21 @@ async def trigger_alarm_now(alarm_dict: dict):
         ring_state.math_question = None
         ring_state.math_solution = None
 
-    # Tell the speaker helper to ring on the chosen output (forced to 100% and unmuted while ringing)
-    try:
-        async with httpx.AsyncClient(timeout=2.5, headers=BRIDGE_HEADERS) as client:
-            await client.post(
-                f"{HOST_AUDIO_BRIDGE_URL}/trigger",
-                json={
-                    "alarm_id": alarm_dict["id"],
-                    "duration_sec": duration,
-                    "code_red": bool(alarm_dict["code_red"])
-                }
-            )
-    except Exception as exc:
-        print(f"[AlarmEngine] Host audio bridge unreachable (web audio siren will still fire): {exc}")
+    # Tell the speaker helper to ring on the chosen output (forced to 100% and unmuted while ringing), and check
+    # that it really started. If not (busy with a preview, briefly unreachable), stop it and try once more.
+    started, detail = await _ring_helper(alarm_dict, duration)
+    if not started and not alarm_dict.get("is_test"):
+        try:
+            async with httpx.AsyncClient(timeout=2.5, headers=BRIDGE_HEADERS) as client:
+                await client.post(f"{HOST_AUDIO_BRIDGE_URL}/stop", json={})
+        except Exception:
+            pass
+        await asyncio.sleep(1.0)
+        started, detail = await _ring_helper(alarm_dict, duration)
+    ring_state.audio = "started" if started else "failed"
+    log_event(alarm_dict, "audio_started" if started else "audio_failed", detail)
+    if not started:
+        print(f"[AlarmEngine] speaker helper did not start ({detail}); open alarm windows still ring")
 
     await broadcast_state()
 
@@ -223,6 +260,7 @@ async def scheduler_loop():
                             conn.execute("UPDATE alarms SET enabled = 0 WHERE id = ?", (alm["id"],))
                         conn.commit()
                         print(f"[SchedulerLoop] ringing {alm['id']} ({alm['time_hhmm']}) at {now:%H:%M:%S}")
+                        log_event(alm, "due", f"scheduled {day_iso} {alm['time_hhmm']}, engine time {now:%H:%M:%S}")
                         await trigger_alarm_now(alm)
                         break
                 if not ring_state.is_ringing:
@@ -270,6 +308,14 @@ async def serve_ui():
 async def ring_status():
     """Tiny status for the desktop app: is anything ringing right now?"""
     return {"is_ringing": ring_state.is_ringing, "alarm": (ring_state.alarm or {}).get("label")}
+
+
+@app.get("/api/alarms/history")
+async def alarm_history(limit: int = 50):
+    """Recent ring events, newest first."""
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        rows = conn.execute("SELECT ts, alarm_id, label, kind, detail FROM alarm_events ORDER BY id DESC LIMIT ?", (max(1, min(limit, 500)),)).fetchall()
+    return {"events": [dict(zip(("ts", "alarm_id", "label", "kind", "detail"), r)) for r in rows]}
 
 
 @app.get("/api/next")
@@ -380,6 +426,8 @@ async def test_ring_alarm(alarm_id: str, seconds: int = 10):
     target = next((a for a in alarms if a["id"] == alarm_id), None)
     if not target:
         raise HTTPException(status_code=404, detail="Alarm not found")
+    if ring_state.is_ringing and not (ring_state.alarm or {}).get("is_test"):
+        raise HTTPException(status_code=409, detail="An alarm is ringing right now. Stop it first.")
     preview = dict(target)
     preview["is_test"] = True
     preview["ring_duration_sec"] = max(3, min(int(seconds), 30))
@@ -435,6 +483,8 @@ async def dismiss_active_alarm(req: DismissRequest):
         return {"ok": True, "message": "No alarm currently ringing."}
 
     active = ring_state.alarm
+    if req.alarm_id not in (None, "", "manual") and req.alarm_id != active.get("id"):
+        raise HTTPException(status_code=409, detail="That alarm is no longer ringing; a different one is.")
     if active.get("code_red") and not active.get("is_test"):
         expected = (active.get("custom_phrase") or "").strip()
         if req.typed_phrase.strip() != expected:
@@ -450,6 +500,7 @@ async def dismiss_active_alarm(req: DismissRequest):
                 detail="Math mission answer incorrect! Solve the arithmetic equation to disarm."
             )
 
+    log_event(active, "dismissed", f"after {int((local_now() - ring_state.started_at).total_seconds()) if ring_state.started_at else 0} s")
     ring_state.is_ringing = False
     ring_state.alarm = None
     ring_state.math_question = None

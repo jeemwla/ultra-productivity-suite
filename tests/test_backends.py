@@ -36,6 +36,16 @@ class LhmParsing(unittest.TestCase):
         self.assertEqual(self.m._to_float("512 B/s"), 512.0)
 
 
+class HealthVerdict(unittest.TestCase):
+    def test_missing_temperatures_are_not_called_healthy(self):
+        from backend import lhm_collector as m
+        v = m.health_verdict(100, [], ["CPU", "GPU", "Storage"])
+        self.assertNotEqual(v["label"], "All good")
+        self.assertIn("CPU and GPU temperature unavailable", v["notes"][-1])
+        self.assertEqual(m.health_verdict(100, [], ["Storage"])["label"], "All good")
+        self.assertEqual(m.health_verdict(40, ["CPU is hot (95°C)"], ["GPU"])["label"], "Running hot")
+
+
 class DriveMatching(unittest.TestCase):
     def test_windows_and_lhm_names_match(self):
         from backend import storage_health
@@ -134,6 +144,7 @@ class AlarmApi(unittest.TestCase):
         import tempfile
         cls._data = os.environ.get("ULTRASUITE_DATA")
         os.environ["ULTRASUITE_DATA"] = tempfile.mkdtemp()
+        os.environ["HOST_AUDIO_BRIDGE_URL"] = "http://127.0.0.1:9"  # never reach the real speaker helper
         d = os.path.join(ROOT, "code_red_alarm", "backend")
         spec = importlib.util.spec_from_file_location("alarm_pkg_test", os.path.join(d, "__init__.py"), submodule_search_locations=[d])
         pkg = importlib.util.module_from_spec(spec)
@@ -166,6 +177,21 @@ class AlarmApi(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         a = next(x for x in r.json()["alarms"] if x["id"] == aid)
         self.assertEqual((a["label"], a["time_hhmm"], a["last_triggered_date"]), ("Gym late", "07:45", None))
+
+    def test_failed_sound_is_recorded_not_reported_as_rang(self):
+        import asyncio
+        alarm = {"id": "alm-test-audio", "label": "Audio check", "code_red": False, "ring_duration_sec": 60, "math_mission_difficulty": 0}
+        asyncio.run(self.m.trigger_alarm_now(alarm))  # helper address points at a closed port in this test
+        self.assertEqual(self.m.ring_state.audio, "failed")
+        kinds = [e["kind"] for e in self.c.get("/api/alarms/history").json()["events"] if e["alarm_id"] == "alm-test-audio"]
+        self.assertIn("audio_failed", kinds)
+        # while a real alarm rings, a preview is refused and a stale stop request for another alarm is rejected
+        aid = self.c.post("/api/alarms", json=self.body()).json()["id"]
+        self.assertEqual(self.c.post(f"/api/alarms/{aid}/test-ring").status_code, 409)
+        self.assertEqual(self.c.post("/api/alarms/dismiss", json={"alarm_id": "some-other-alarm"}).status_code, 409)
+        self.assertEqual(self.c.post("/api/alarms/dismiss", json={"alarm_id": "alm-test-audio"}).status_code, 200)
+        self.assertFalse(self.m.ring_state.is_ringing)
+        self.assertIn("dismissed", [e["kind"] for e in self.c.get("/api/alarms/history").json()["events"]])
 
     def test_rejects_other_websites_and_rebinding(self):
         r = self.c.delete("/api/alarms/x", headers={"Origin": "https://evil.example"})

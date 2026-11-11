@@ -131,10 +131,11 @@ def summarize(groups: List[dict]) -> dict:
     out["storage_max_temp"] = max(drive_temps, default=None)
 
     # Plain-language health
-    notes, score = [], 100
+    notes, score, missing = [], 100, []
     def judge(label, val, warm, hot):
         nonlocal score
         if val is None:
+            missing.append(label)
             return
         if val >= hot:
             notes.append(f"{label} is hot ({val:.0f}°C)"); score -= 35
@@ -146,10 +147,19 @@ def summarize(groups: List[dict]) -> dict:
     if (out.get("ram_load") or 0) >= 90:
         notes.append(f"Memory is almost full ({out['ram_load']:.0f}%)"); score -= 15
     score = max(0, score)
-    out["health"] = {"score": score,
-                     "label": "All good" if score >= 85 else ("Keep an eye on it" if score >= 60 else "Running hot"),
-                     "notes": notes or ["Temperatures and memory are in a healthy range."]}
+    out["health"] = health_verdict(score, notes, missing)
     return out
+
+
+def health_verdict(score: int, notes: list, missing: list) -> dict:
+    """Never claim 'All good' about readings that don't exist: name what couldn't be checked."""
+    unchecked = [m for m in missing if m in ("CPU", "GPU")]
+    if score >= 85 and unchecked:
+        label = "No warnings in available readings"
+        extra = f"{' and '.join(unchecked)} temperature unavailable, so {'it was' if len(unchecked) == 1 else 'they were'} not checked."
+        return {"score": score, "label": label, "notes": notes + [extra], "unchecked": unchecked}
+    label = "All good" if score >= 85 else ("Keep an eye on it" if score >= 60 else "Running hot")
+    return {"score": score, "label": label, "notes": notes or ["Temperatures and memory are in a healthy range."], "unchecked": unchecked}
 
 
 _FC_CACHE = {"path": None, "mtime": 0, "data": None}
