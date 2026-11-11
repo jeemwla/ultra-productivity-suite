@@ -1,0 +1,6 @@
+# Exact build-tool versions for build_release.ps1 (checked by tools/check_build_env.py; nothing is installed for you).
+# Install into the build interpreter with:  python -m pip install -r requirements.txt -r requirements-build.txt
+# Versions checked on PyPI on 2026-11-11; they match what the build PC had installed that day.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+pillow==13.0.0

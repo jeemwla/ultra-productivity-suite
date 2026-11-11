@@ -2,10 +2,13 @@
 <#
 .SYNOPSIS
   Builds the Ultra Suite Windows installer: build\dist\ultrasuite-core (PyInstaller) + Ultra Suite_x64-setup.exe (Tauri/NSIS).
-  Needs: Python 3.11+ with requirements.txt and pyinstaller, Rust (MSVC), VS Build Tools (C++), Node.js.
+  Needs: Python 3.11+ with requirements.txt and the exact pins in requirements-build.txt, Rust (MSVC),
+  VS Build Tools (C++), Node.js. The Tauri CLI version comes from ultra_dock\package-lock.json (npm ci).
+  Refuses uncommitted tracked changes unless -AllowDirty; build\build-environment.json records the inputs.
   Output: ultra_dock\src-tauri\target\release\bundle\nsis\Ultra Suite_<version>_x64-setup.exe
   Every native step must exit 0 or the build stops; the installer reported at the end is verified to be new.
 #>
+param([switch]$AllowDirty)
 $ErrorActionPreference = "Stop"
 $R = $PSScriptRoot
 $helpers = Join-Path $R "tools\build_helpers.ps1"
@@ -24,6 +27,11 @@ if (-not (Test-Path -LiteralPath "$R\build")) {
     New-Item -ItemType Directory -Path "$R\build" | Out-Null
 }
 Remove-BuildOutput -Target "$R\build\dist\ultrasuite-core" -BuildRoot "$R\build"
+# Exact build-tool versions in the prepared interpreter; record commit, interpreter, packages and tool versions.
+$envArgs = @("-I", "$R\tools\check_build_env.py", "--repo", $R, "--requirements", "$R\requirements-build.txt",
+    "--record", "$R\build\build-environment.json")
+if ($AllowDirty) { $envArgs += "--allow-dirty" }
+Invoke-Native -Step "build environment" -FilePath $PythonExe -ArgumentList $envArgs
 
 $Version = (Get-Content "$R\VERSION" -Raw).Trim()
 Write-Host "Ultra Suite $Version" -ForegroundColor Cyan
@@ -63,6 +71,8 @@ Invoke-Native -Step "packaged file check" -FilePath $PythonExe -ArgumentList @("
 Write-Host "[3/3] Building the installer" -ForegroundColor Cyan
 Set-Location "$R\ultra_dock"
 $installerStarted = [DateTime]::UtcNow
-Invoke-Native -Step "Tauri installer" -FilePath "npx" -ArgumentList @("-y", "@tauri-apps/cli@2", "build")
+# The Tauri CLI version and its download integrity come from the tracked package-lock.json; install scripts stay off.
+Invoke-Native -Step "Tauri CLI (npm ci)" -FilePath "npm.cmd" -ArgumentList @("ci", "--ignore-scripts", "--no-audit", "--no-fund")
+Invoke-Native -Step "Tauri installer" -FilePath "$R\ultra_dock\node_modules\.bin\tauri.cmd" -ArgumentList @("build")
 $installer = Assert-FreshFile -Path "$R\ultra_dock\src-tauri\target\release\bundle\nsis\Ultra Suite_${Version}_x64-setup.exe" -NotBeforeUtc $installerStarted -What "The $Version installer"
 $installer | Select-Object Name, @{n="MB";e={[math]::Round($_.Length/1MB,1)}}, @{n="Built (UTC)";e={$_.LastWriteTimeUtc.ToString("u")}}

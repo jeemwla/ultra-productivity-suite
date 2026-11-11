@@ -1,0 +1,8 @@
+{
+  "name": "ultra-suite-desktop",
+  "private": true,
+  "description": "Build tooling only. The UI is static (../ui); this pins the Tauri CLI used by build_release.ps1.",
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}
