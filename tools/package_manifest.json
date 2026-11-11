@@ -27,6 +27,7 @@
     "pc_sentinel/backend/native_sensors.py",
     "pc_sentinel/backend/net_monitor.py",
     "pc_sentinel/backend/power_context.py",
+    "pc_sentinel/backend/process_icons.py",
     "pc_sentinel/backend/process_metadata.py",
     "pc_sentinel/backend/process_names.py",
     "pc_sentinel/backend/speedtest.py",
