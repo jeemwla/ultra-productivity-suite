@@ -10,7 +10,9 @@ $R = $PSScriptRoot
 # pick up tools installed since this window opened (Node, Rust)
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.cargo\bin"
 Set-Location $R
-Get-Process "Ultra Suite", ultrasuite-core -ErrorAction SilentlyContinue | Stop-Process -Force
+# quit the installed app cleanly first (a force-kill would leave other apps' taskbar buttons tucked away)
+Get-Process "Ultra Suite" -ErrorAction SilentlyContinue | ForEach-Object { Start-Process $_.Path -ArgumentList "--quit"; Start-Sleep 3 }
+Get-Process ultrasuite-core -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item "$R\build\dist\ultrasuite-core" -Recurse -Force -ErrorAction SilentlyContinue
 
 $Version = (Get-Content "$R\VERSION" -Raw).Trim()

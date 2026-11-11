@@ -402,16 +402,59 @@ fn anon_id() -> String {
 // ----------------------------------------------------------------------------- app windows
 /// Gives an app window its own Windows identity (AppUserModelID), so the taskbar treats it as its own app:
 /// separate button, its own icon, and "Pin to taskbar" relaunches that app instead of the whole suite.
+/// Writes AppUserModel string properties (5 = ID, 2 = relaunch command, 3 = relaunch icon, 4 = display name).
+#[cfg(windows)]
+unsafe fn write_aumid_props(store: &windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore, vals: &[(u32, String)]) {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::PROPERTYKEY;
+    use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PROPVARIANT};
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::UI::Shell::SHStrDupW;
+    const FMT: windows::core::GUID = windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3);
+    // relaunch details first, the ID last (Windows reads the others when the ID is set)
+    for (pid, v) in vals.iter().rev() {
+        let w: Vec<u16> = v.encode_utf16().chain(std::iter::once(0)).collect();
+        // the string must live in COM memory: PROPVARIANT frees it with CoTaskMemFree
+        let Ok(owned) = SHStrDupW(PCWSTR(w.as_ptr())) else { continue };
+        let mut pv = PROPVARIANT::default();
+        (*pv.Anonymous.Anonymous).vt = VT_LPWSTR;
+        (*pv.Anonymous.Anonymous).Anonymous.pwszVal = owned;
+        let _ = store.SetValue(&PROPERTYKEY { fmtid: FMT, pid: *pid }, &pv);
+        let _ = PropVariantClear(&mut pv);
+        std::mem::forget(pv);
+    }
+    let _ = store.Commit();
+}
+
+/// Start menu shortcuts carry the same AppUserModelID as their window, so a pinned shortcut and the
+/// running app are one taskbar button (instead of a pin plus a separate running button).
+#[cfg(windows)]
+fn fix_shortcut_ids() {
+    use windows::core::{Interface, HSTRING, PCWSTR};
+    use windows::Win32::System::Com::*;
+    use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    let Ok(appdata) = std::env::var("APPDATA") else { return };
+    let dir = PathBuf::from(appdata).join(r"Microsoft\Windows\Start Menu\Programs");
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        for (file, name) in [("PC Sentinel.lnk", "sentinel"), ("Code Red Alarm.lnk", "alarm"), ("Ultra Suite Insights.lnk", "insights")] {
+            let path = dir.join(file);
+            if !path.exists() { continue; }
+            let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER) else { continue };
+            let Ok(pf) = link.cast::<IPersistFile>() else { continue };
+            if pf.Load(&HSTRING::from(path.as_os_str()), STGM_READWRITE).is_err() { continue; }
+            let Ok(store) = link.cast::<IPropertyStore>() else { continue };
+            write_aumid_props(&store, &[(5, format!("UltraSuite.{name}"))]);
+            let _ = pf.Save(PCWSTR::null(), true);
+        }
+    }
+}
+
 #[cfg(windows)]
 fn set_app_identity(app: &AppHandle, win: &WebviewWindow, name: &str, title: &str) {
-    use windows::core::{PCWSTR, PWSTR};
-    use windows::Win32::Foundation::{HWND, PROPERTYKEY};
-    use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PROPVARIANT};
-    use windows::Win32::UI::Shell::SHStrDupW;
-    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
-    const FMT: windows::core::GUID = windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3);
-    let key = |pid: u32| PROPERTYKEY { fmtid: FMT, pid };
     let Ok(h) = win.hwnd() else { return };
     let hwnd = HWND(h.0 as _);
     let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
@@ -425,20 +468,7 @@ fn set_app_identity(app: &AppHandle, win: &WebviewWindow, name: &str, title: &st
     let vals: Vec<(u32, String)> = vec![(5, aumid), (2, cmd), (3, icon), (4, title.to_string())];
     unsafe {
         let Ok(store) = SHGetPropertyStoreForWindow::<IPropertyStore>(hwnd) else { return };
-        // relaunch details first, the ID last (Windows reads the others when the ID is set)
-        for (pid, v) in vals.iter().rev() {
-            let w: Vec<u16> = v.encode_utf16().chain(std::iter::once(0)).collect();
-            // the string must live in COM memory: PROPVARIANT frees it with CoTaskMemFree
-            let Ok(owned) = SHStrDupW(PCWSTR(w.as_ptr())) else { continue };
-            let mut pv = PROPVARIANT::default();
-            (*pv.Anonymous.Anonymous).vt = VT_LPWSTR;
-            (*pv.Anonymous.Anonymous).Anonymous.pwszVal = owned;
-            let _ = store.SetValue(&key(*pid), &pv);
-            let _ = PropVariantClear(&mut pv);
-            std::mem::forget(pv);
-        }
-        let _ = store.Commit();
-        let _ = PWSTR::null();
+        write_aumid_props(&store, &vals);
     }
 }
 #[cfg(not(windows))]
@@ -698,7 +728,10 @@ fn main() {
                 .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0).build()?;
             #[cfg(windows)]
             make_noactivate(&strip);
-            set_autostart();
+            // only the installed app registers itself to start with Windows (a dev build must never take over that entry)
+            if !cfg!(debug_assertions) { set_autostart(); }
+            #[cfg(windows)]
+            if !cfg!(debug_assertions) { std::thread::spawn(fix_shortcut_ids); }
             let h1 = handle.clone();
             std::thread::spawn(move || ensure_core(&h1));
             #[cfg(windows)]
