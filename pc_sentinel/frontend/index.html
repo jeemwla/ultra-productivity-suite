@@ -56,7 +56,7 @@ a{color:var(--accent);text-decoration:none}
 .chip{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:999px;background:var(--surface-2);font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3);flex:none}
 .dot.good{background:var(--good)}.dot.warning{background:var(--warning)}.dot.critical{background:var(--critical)}
-.main{overflow:auto}
+.main{overflow:auto;min-width:0}
 .top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 32px 14px;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px)}
 .top h1{font:600 22px/1.2 var(--font-display);letter-spacing:-.015em}
 .top p{color:var(--ink-3);font-size:13px;margin-top:2px}
@@ -66,12 +66,13 @@ a{color:var(--accent);text-decoration:none}
 @keyframes pagein{from{opacity:0;transform:translateY(8px)}}
 
 /* ---------- Building blocks ---------- */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
-.ch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;padding:16px 18px 0}
 .ch h2{font:600 15px/1.3 var(--font-display)}
 .ch .sub{font-size:12.5px;color:var(--ink-3)}
 .cb{padding:14px 18px 18px}
 .grid{display:grid;gap:16px}
+.grid>*{min-width:0}
 .g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .g21{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
 .mt{margin-top:16px}
@@ -150,9 +151,9 @@ a{color:var(--accent);text-decoration:none}
 /* power */
 .stack{display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--surface-2);margin:14px 0 10px;gap:2px}
 .stack i{display:block;height:100%;transition:width .9s var(--ease)}
-.leg2{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12.5px}
+.leg2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px;font-size:12.5px}
 .leg2 div{display:flex;justify-content:space-between;gap:8px;color:var(--ink-2)}
-.leg2 span:first-child{display:inline-flex;align-items:center;gap:7px}.leg2 i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.leg2 span:first-child{display:inline-flex;align-items:center;gap:7px;min-width:0;overflow-wrap:anywhere}.leg2 .num{white-space:nowrap}.leg2 i{width:9px;height:9px;border-radius:3px;display:inline-block;flex:none}
 .plans{display:grid;gap:8px}
 .plan{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-align:left;transition:border-color .15s,background .15s}
 .plan:hover{border-color:var(--line-strong)}
@@ -235,8 +236,8 @@ details.grp summary{list-style:none;display:flex;justify-content:space-between;a
 details.grp summary::-webkit-details-marker{display:none}
 details.grp summary .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-right:8px}
 details.grp summary .c{font-size:12.5px;color:var(--ink-3);font-weight:500}
-.subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;padding:4px 14px 14px}
-.subsec{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:12px;padding:4px 14px 14px}
+.subsec{border:1px solid var(--line);border-radius:10px;overflow-x:auto;overscroll-behavior-x:contain}
 .subsec h4{display:flex;justify-content:space-between;align-items:center;font:600 12.5px var(--font);padding:9px 12px;background:var(--surface-2)}
 .subsec h4 span{font-weight:500;color:var(--ink-3)}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -245,11 +246,15 @@ td{padding:6px 12px;border-top:1px solid var(--line);font-variant-numeric:tabula
 td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{width:34px}
 
 /* system */
-.kvt{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;font-size:13.5px}
+.kvt{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 16px;font-size:13.5px;overflow-wrap:anywhere}
 .kvt span:nth-child(odd){color:var(--ink-3)}
-.field{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.field{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.field.report-export{display:block}
 .field:first-child{border-top:0}
 .field input[type=number]{width:84px;height:34px;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;background:var(--surface);text-align:right}
+#desktop-psu .field{flex-direction:column;align-items:flex-start;gap:6px}
+#desktop-psu .field input[type=text]{width:100%;min-width:0;height:36px;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;background:var(--surface)}
+.form-actions{display:flex;flex-wrap:wrap;gap:8px}
 .toggle{position:relative;width:40px;height:22px;flex:none}.toggle input{position:absolute;inset:0;opacity:0;z-index:1;cursor:pointer}
 .toggle span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .2s}
 .toggle span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .25s var(--ease)}
@@ -277,12 +282,13 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
   .nav .badge{position:absolute;top:6px;right:14px;margin:0}
   .main{overflow:visible;padding-bottom:80px}
   .top,.content{padding-left:16px;padding-right:16px}
-  .g4,.g2{grid-template-columns:1fr 1fr}.results{grid-template-columns:1fr 1fr}
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:minmax(0,1fr)}.results{grid-template-columns:1fr 1fr}
   .row{grid-template-columns:28px minmax(0,1fr) 70px}.row .bar{display:none}
   .fan{grid-template-columns:40px minmax(0,1fr) 80px}.fan .bars{display:none}
   .ping{grid-template-columns:minmax(0,1fr) 70px}.ping .spark-wrap{display:none}
-  .drive .kv{grid-template-columns:1fr 1fr}.kvt{grid-template-columns:110px 1fr}
+  .drive .kv{grid-template-columns:1fr 1fr}.kvt{grid-template-columns:110px minmax(0,1fr)}
 }
+@media(max-width:480px){.leg2{grid-template-columns:minmax(0,1fr)}.gauge-wrap{width:min(310px,100%);height:auto;aspect-ratio:310/330}.gauge-wrap svg{width:100%;height:auto}.g-center{top:53.3%}}
 
 .process-list.expanded{max-height:540px;overflow:auto;overscroll-behavior:contain;padding:2px}.process-group{margin:0;border-bottom:1px solid var(--line)}.process-summary{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(40px,80px) 75px;gap:10px;align-items:center;list-style:none;cursor:pointer;padding:10px 0}.process-summary::-webkit-details-marker{display:none}.process-summary .nm{min-width:0;overflow-wrap:anywhere}.process-summary small{display:block;color:var(--ink-3);font-size:11px;line-height:1.4;margin-top:3px}.process-summary .vv{text-align:right;font-variant-numeric:tabular-nums}.process-details{padding:4px 8px 14px 40px;font-size:12px}.process-details p{margin:8px 0;overflow-wrap:anywhere}.process-details code{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.process-detail-table{max-height:250px;overflow:auto}.process-detail-table table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}.process-detail-table th,.process-detail-table td{padding:5px 8px;border-bottom:1px solid var(--line)}.process-detail-table th{position:sticky;top:0;background:var(--surface)}@media(max-width:650px){.process-summary{grid-template-columns:28px minmax(0,1fr) 72px}.process-summary .bar{display:none}.process-details{padding-left:6px}#apps-search{width:100%}}*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border:2px solid transparent;background-clip:padding-box;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
 
@@ -351,9 +357,9 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <details class="mt"><summary>How the estimate is calculated</summary><div class="muted mt" id="pw-assumptions"></div></details>
             <div class="mt" id="desktop-psu"><h3>Desktop power supply (optional)</h3><p class="muted">Enter the rated output and size from the PSU label or receipt. These details stay on this PC.</p>
             <div class="field mt"><label for="psu-w">Rated output (W)</label><input id="psu-w" type="number" min="50" max="5000" step="1" placeholder="e.g. 1000"></div>
-            <div class="field mt"><label for="psu-model">Model</label><input id="psu-model" maxlength="120" placeholder="Optional model name"></div>
-            <div class="field mt"><label for="psu-size">Size / form factor</label><input id="psu-size" maxlength="40" placeholder="e.g. ATX, SFX, SFX-L"></div>
-            <div class="mt"><button type="button" id="psu-save">Save PSU details</button> <button type="button" id="psu-clear">Clear</button></div><p class="muted mt" id="psu-save-status" role="status"></p></div>
+            <div class="field mt"><label for="psu-model">Model</label><input type="text" id="psu-model" maxlength="120" placeholder="Optional model name"></div>
+            <div class="field mt"><label for="psu-size">Size / form factor</label><input type="text" id="psu-size" maxlength="40" placeholder="e.g. ATX, SFX, SFX-L"></div>
+            <div class="mt form-actions"><button class="btn primary" type="button" id="psu-save">Save PSU details</button><button class="btn" type="button" id="psu-clear">Clear</button></div><p class="muted mt" id="psu-save-status" role="status"></p></div>
             <p class="muted mt" id="laptop-power-note" hidden>Laptop power depends on the battery, charger and manufacturer limits. Desktop PSU ratings do not apply. Battery details are available in the Battery section when reported.</p>
             <div class="meter" id="psu-meter" hidden><i style="width:0"></i></div><div style="margin-top:12px"><span class="status idle" id="psu-st">Whole-system power is not measured</span><p class="muted" id="psu-peak"></p></div></div></section>
           <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">How Windows balances speed and power</span></div><div class="cb">
@@ -417,7 +423,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <div class="field"><label for="al-ram">Memory warning at (%)</label><input id="al-ram" type="number" min="50" max="99" value="92"></div></div></section>
           <section class="card"><div class="ch"><h2>About</h2><span class="sub" id="ab-ver"></span></div><div class="cb">
             <div class="field"><span>Updates</span><button class="btn" id="ab-upd">Check for updates</button></div>
-            <div class="field"><span>Save a full report (JSON)</span><button class="btn" id="ab-export">Export report</button></div>
+            <div class="field report-export"><span>Save a full report (JSON)</span><button class="btn" id="ab-export">Export report</button></div>
             <div class="field"><span>Send an idea or bug</span><button class="btn" id="ab-fb">Feedback</button></div></div></section>
         </div>
       </section>
@@ -582,7 +588,7 @@ function renderApps(){
   const scrollTop=box.scrollTop;
   const open=new Set([...box.querySelectorAll("details[open]")].map(x=>x.dataset.group)),focus=document.activeElement?.closest?.(".process-group")?.dataset.group;
   box.dataset.sig=signature;box.innerHTML=list.map(a=>{const id=a.group_id,name=a.display_name||a.name||"Unknown process",explanation=a.explanation||"Role not identified. The executable filename is shown.";
-   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}</span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}<br>${esc(explanation)}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
+   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}</span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}<br>${esc(explanation)}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button class="btn" type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
   if(focus)[...box.querySelectorAll(".process-group")].find(n=>n.dataset.group===focus)?.querySelector("summary")?.focus({preventScroll:true});
   box.scrollTop=scrollTop;
  }
@@ -610,7 +616,7 @@ async function loadPower(){ try { [plans, disps, pmode] = await Promise.all([api
 function renderPMode(){ $("pmode-wrap").hidden = !(pmode && pmode.available); if (pmode) $("pmode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.pm === pmode.mode)); }
 $("pmode").addEventListener("click", async (e) => { const b = e.target.closest("[data-pm]"); if (!b || b.getAttribute("aria-pressed") === "true") return;
   try { pmode = await api("/api/power/mode", { method: "POST", body: JSON.stringify({ mode: b.dataset.pm }) }); renderPMode(); toast(`Power mode: ${b.textContent}`); } catch (err) { toast(err.message, true); } });
-const PLAN_DESC = { "power saver": "Longest battery, lowest heat", "balanced": "Windows default, adjusts to what you do", "high performance": "Faster response, more power", "ultimate performance": "Maximum speed, most power" };
+const PLAN_DESC = { "power saver": "Energy-saving settings", "balanced": "Automatic balancing", "high performance": "Performance-oriented settings", "ultimate performance": "Aggressive performance settings" };
 function renderPowerCtl(){
   renderPMode();
   if (plans) {
@@ -782,7 +788,7 @@ function renderSensors(){
     if (q && !d.open) d.open = true;
     if (d.dataset.struct !== struct) { d.dataset.struct = struct;
       d.innerHTML = `<summary><span><span class="k">${KL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary><div class="subgrid">` + SEC.map(([t, title, unit]) => { const list = rows.filter(x => x.type === t); if (!list.length) return "";
-        return `<div class="subsec"><h4>${title}${unit ? ` (${unit})` : ""}<span>${list.length}</span></h4><table><thead><tr><th></th><th>Sensor</th><th class="n">Now</th><th class="n">Min</th><th class="n">Max</th></tr></thead><tbody>
+        return `<div class="subsec" tabindex="0" role="group" aria-label="${esc(g.name)}: ${esc(title)} readings"><h4>${title}${unit ? ` (${unit})` : ""}<span>${list.length}</span></h4><table><thead><tr><th></th><th>Sensor</th><th class="n">Now</th><th class="n">Min</th><th class="n">Max</th></tr></thead><tbody>
         ${list.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}" data-sid="${esc(x.id)}"><td class="cbx"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td><td>${esc(x.name)}</td><td class="n"><b class="nv"></b></td><td class="n mn"></td><td class="n mx"></td></tr>`).join("")}</tbody></table></div>`; }).join("") + `</div>`; }
     rows.forEach(x => { const tr = d.querySelector(`tr[data-sid="${CSS.escape(x.id)}"]`); if (!tr) return; const f = x.type === "Throughput" ? rate : n1; if (x.type === "Throughput") tr.querySelector(".nv").textContent = rate(x.value); else tween(tr.querySelector(".nv"), x.value, n1, 700);
       tr.querySelector(".mn").textContent = x.min == null ? "–" : f(+x.min); tr.querySelector(".mx").textContent = x.max == null ? "–" : f(+x.max); }); });
