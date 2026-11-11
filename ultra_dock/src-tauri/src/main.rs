@@ -11,6 +11,7 @@
 
 use base64::Engine;
 mod recovery;
+mod wake;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -890,32 +891,30 @@ fn core_supervisor(app: AppHandle) {
     }
 }
 
-/// Wake a sleeping PC in time for the next alarm. A wake timer (allowed by Windows' "Allow wake timers" power
-/// setting, on by default) is set for one minute before the alarm; the alarm engine catches up on wake and rings.
+/// Ask Windows to wake one minute before the alarm. Actual wake support depends on
+/// hardware and the user's power policy; a successful API call is not proof of wake.
 #[cfg(windows)]
 fn alarm_wake_timer() {
     use windows::Win32::System::Threading::{CancelWaitableTimer, CreateWaitableTimerW, SetWaitableTimer};
     let Ok(timer) = (unsafe { CreateWaitableTimerW(None, true, None) }) else { return };
     let mut armed: Option<i64> = None;
     loop {
-        let next = http_get(8081, "/api/next")
-            .and_then(|b| serde_json::from_str::<Value>(&b).ok())
-            .and_then(|v| v["in_sec"].as_i64());
-        match next {
-            Some(secs) if secs > 90 => {
-                let wake_in = secs - 60;
-                let target = now_secs() as i64 + wake_in;
-                if armed.map(|a| (a - target).abs() > 30).unwrap_or(true) {
-                    let due = -(wake_in * 10_000_000);  // negative = relative, in 100 ns units
-                    if unsafe { SetWaitableTimer(timer, &due, 0, None, None, true) }.is_ok() {
-                        armed = Some(target);
-                        println!("[wake] PC will wake in {wake_in} s for the next alarm");
-                    }
+        let body = http_get(8081, "/api/next");
+        match wake::decide(wake::observe(body.as_deref()), wake::now_filetime(), armed) {
+            wake::Action::Arm(due) => {
+                // Positive FILETIME is an absolute UTC deadline, including time
+                // spent asleep. Relative timers on Windows 8+ pause during sleep.
+                if unsafe { SetWaitableTimer(timer, &due, 0, None, None, true) }.is_ok() {
+                    armed = Some(due);
+                    println!("[wake] absolute wake request armed");
                 }
             }
-            _ => { if armed.take().is_some() { unsafe { let _ = CancelWaitableTimer(timer); } } }
+            wake::Action::Cancel => {
+                if unsafe { CancelWaitableTimer(timer) }.is_ok() { armed = None; }
+            }
+            wake::Action::Keep => {}
         }
-        std::thread::sleep(Duration::from_secs(60));
+        std::thread::sleep(Duration::from_secs(5));
     }
 }
 
