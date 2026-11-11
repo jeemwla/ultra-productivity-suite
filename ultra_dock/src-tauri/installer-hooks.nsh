@@ -5,6 +5,18 @@
   IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 +3
     ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --quit'
     Sleep 1500
+  ; --quit only stops a background core that this window started. A core left from an earlier session keeps running
+  ; and locks its files, so stop it (as the uninstaller does). Alarms are back as soon as the new version starts.
+  nsExec::Exec 'taskkill /IM ultrasuite-core.exe /F'
+  Sleep 1000
+  ; Remove the previous version's bundled program files, so files dropped from the package do not linger after an
+  ; upgrade. Only the program's own core folder is removed; alarms and settings live in %LOCALAPPDATA%\UltraSuite and
+  ; %APPDATA%\UltraSuite, which are separate folders. Guard against an empty install path.
+  StrCmp "$INSTDIR" "" ultra_skip_clean
+  IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 ultra_skip_clean
+    RMDir /r "$INSTDIR\core"
+    Delete "$INSTDIR\appicons\deck.ico"
+  ultra_skip_clean:
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
