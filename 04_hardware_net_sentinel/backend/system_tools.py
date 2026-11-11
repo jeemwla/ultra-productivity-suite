@@ -24,6 +24,36 @@ NO_WINDOW = 0x08000000
 IS_WIN = os.name == "nt"
 _proc_cache = {"at": 0.0, "data": None}
 _procs = {}
+_gpu_pdh = None
+
+
+def _gpu_by_pid() -> dict:
+    """Per-process GPU use the way Task Manager shows it: the busiest engine type (3D, Copy, Video...) per process."""
+    global _gpu_pdh
+    if not IS_WIN:
+        return {}
+    try:
+        if _gpu_pdh is None:
+            from .native_sensors import Pdh
+            _gpu_pdh = Pdh([r"\GPU Engine(*)\Utilization Percentage", r"\GPU Process Memory(*)\Dedicated Usage"])
+        data = _gpu_pdh.collect()
+    except Exception:
+        return {}
+    eng = {}
+    for inst, v in (data.get(r"\GPU Engine(*)\Utilization Percentage") or {}).items():
+        m = re.match(r"pid_(\d+)_.*engtype_(.+)$", inst)
+        if m:
+            k = (int(m.group(1)), m.group(2))
+            eng[k] = eng.get(k, 0.0) + v
+    out = {}
+    for (pid, _t), v in eng.items():
+        out.setdefault(pid, {"gpu": 0.0, "vram_mb": 0.0})
+        out[pid]["gpu"] = max(out[pid]["gpu"], v)
+    for inst, v in (data.get(r"\GPU Process Memory(*)\Dedicated Usage") or {}).items():
+        m = re.match(r"pid_(\d+)_", inst)
+        if m:
+            out.setdefault(int(m.group(1)), {"gpu": 0.0, "vram_mb": 0.0})["vram_mb"] += v / 1048576
+    return out
 
 
 def _run(args, timeout=20):
@@ -36,6 +66,7 @@ def top_apps(limit=8):
         return _proc_cache["data"]
     ncpu = psutil.cpu_count() or 1
     apps = {}
+    gpu = _gpu_by_pid()
     # psutil measures CPU between two calls on the SAME Process object, so keep them alive across polls
     alive = set()
     for p in psutil.process_iter(["name", "memory_info", "exe"]):
@@ -53,8 +84,11 @@ def top_apps(limit=8):
                 continue
             cpu = tracked.cpu_percent(None) / ncpu
             mem = p.info["memory_info"].rss if p.info.get("memory_info") else 0
-            a = apps.setdefault(name.lower(), {"name": name, "cpu": 0.0, "mem_mb": 0.0, "count": 0, "exe": p.info.get("exe")})
+            a = apps.setdefault(name.lower(), {"name": name, "cpu": 0.0, "mem_mb": 0.0, "gpu": 0.0, "vram_mb": 0.0, "count": 0, "exe": p.info.get("exe")})
             a["cpu"] += cpu; a["mem_mb"] += mem / 1048576; a["count"] += 1
+            g = gpu.get(p.pid)
+            if g:
+                a["gpu"] += g["gpu"]; a["vram_mb"] += g["vram_mb"]
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     for pid in list(_procs):
@@ -62,8 +96,9 @@ def top_apps(limit=8):
             del _procs[pid]
     rows = list(apps.values())
     for r in rows:
-        r["cpu"] = round(r["cpu"], 1); r["mem_mb"] = round(r["mem_mb"])
+        r["cpu"] = round(r["cpu"], 1); r["mem_mb"] = round(r["mem_mb"]); r["gpu"] = round(min(100.0, r["gpu"]), 1); r["vram_mb"] = round(r["vram_mb"])
     data = {"by_cpu": sorted(rows, key=lambda r: -r["cpu"])[:limit], "by_mem": sorted(rows, key=lambda r: -r["mem_mb"])[:limit],
+            "by_gpu": sorted(rows, key=lambda r: (-r["gpu"], -r["vram_mb"]))[:limit], "gpu_available": bool(gpu),
             "total_processes": sum(r["count"] for r in rows)}
     _proc_cache.update(at=time.time(), data=data)
     return data

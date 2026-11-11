@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
 <title>PC Sentinel</title>
 <script src="/__ui/theme.js"></script><script src="/__dev/reload.js"></script>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='3' width='26' height='26' rx='7' fill='%232a78d6'/><path d='M8 18h4l2-6 4 10 2-4h4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<link rel="icon" type="image/png" href="/__ui/icons/sentinel.png" />
 <style>
 :root{
   --bg:#f4f5f7; --surface:#fcfcfb; --surface-2:#eff0f2; --line:#e3e5e9; --line-strong:#d0d4da;
@@ -305,7 +305,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
         <div class="banner good" id="health" hidden><div class="ic" id="health-ic">✓</div><div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div></div>
         <div class="grid g4" id="tiles"></div>
         <div class="grid g21 mt">
-          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div class="rows" id="apps"></div></div></section>
+          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div class="rows" id="apps"></div></div></section>
           <section class="card"><div class="ch"><h2>Quick controls</h2><span class="sub">Changes apply instantly</span></div><div class="cb">
             <div class="muted" style="margin-bottom:6px">Power plan</div><div class="seg" id="qc-plan" style="margin-bottom:16px"></div>
             <div id="qc-disp"></div></div></section>
@@ -544,12 +544,16 @@ let appsKey = "cpu";
 $("apps-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; appsKey = b.dataset.k; $("apps-seg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderApps(); });
 let apps = null; const COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#6250d6", "#008300", "#e34948"];
 async function loadApps(){ try { apps = await api("/api/processes"); renderApps(); } catch {} }
-function renderApps(){ if (!apps) return; const list = appsKey === "cpu" ? apps.by_cpu : apps.by_mem; const val = (a) => appsKey === "cpu" ? a.cpu : a.mem_mb; const max = Math.max(1, ...list.map(val)), box = $("apps");
+const mb = (v) => v >= 1024 ? n1(v / 1024) + " GB" : n0(v) + " MB";
+function renderApps(){ if (!apps) return; const list = (appsKey === "cpu" ? apps.by_cpu : appsKey === "gpu" ? apps.by_gpu : apps.by_mem) || []; const val = (a) => appsKey === "cpu" ? a.cpu : appsKey === "gpu" ? a.gpu : a.mem_mb; const max = Math.max(1, ...list.map(val)), box = $("apps");
   if (box.dataset.sig !== appsKey + list.map(a => a.name).join()) { box.dataset.sig = appsKey + list.map(a => a.name).join();
     box.innerHTML = list.map(a => `<div class="row" data-n="${esc(a.name)}"><span class="av" style="background:${COLORS[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % COLORS.length]}">${esc(a.name.slice(0, 2).toUpperCase())}</span>
     <span class="nm">${esc(a.name)}<small></small></span><span class="bar meter"><i style="width:0"></i></span><span class="vv"></span></div>`).join("") || `<div class="empty">Measuring…</div>`; }
-  list.forEach((a, i) => { const r = box.children[i]; if (!r || !r.querySelector) return; r.querySelector("small").textContent = a.count > 1 ? `${a.count} processes` : ""; r.querySelector(".bar i").style.width = `${val(a) / max * 100}%`;
-    r.querySelector(".vv").textContent = appsKey === "cpu" ? n1(a.cpu) + "%" : (a.mem_mb >= 1024 ? n1(a.mem_mb / 1024) + " GB" : n0(a.mem_mb) + " MB"); }); }
+  list.forEach((a, i) => { const r = box.children[i]; if (!r || !r.querySelector) return;
+    r.querySelector("small").textContent = appsKey === "gpu" ? (a.vram_mb ? `${mb(a.vram_mb)} video memory` : "") : a.count > 1 ? `${a.count} processes` : "";
+    r.querySelector(".bar i").style.width = `${(appsKey === "cpu" || appsKey === "gpu" ? val(a) : val(a) / max * 100)}%`;
+    r.querySelector(".vv").textContent = appsKey === "mem" ? mb(a.mem_mb) : n1(val(a)) + "%"; });
+  if (appsKey === "gpu" && apps.gpu_available === false) { box.dataset.sig = ""; box.innerHTML = `<div class="empty">Windows isn't reporting per-app GPU use on this PC.</div>`; } }
 
 /* ---------- power ---------- */
 let plans = null, disps = null;

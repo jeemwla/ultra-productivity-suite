@@ -400,6 +400,50 @@ fn anon_id() -> String {
 }
 
 // ----------------------------------------------------------------------------- app windows
+/// Gives an app window its own Windows identity (AppUserModelID), so the taskbar treats it as its own app:
+/// separate button, its own icon, and "Pin to taskbar" relaunches that app instead of the whole suite.
+#[cfg(windows)]
+fn set_app_identity(app: &AppHandle, win: &WebviewWindow, name: &str, title: &str) {
+    use windows::core::{PCWSTR, PWSTR};
+    use windows::Win32::Foundation::{HWND, PROPERTYKEY};
+    use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PROPVARIANT};
+    use windows::Win32::UI::Shell::SHStrDupW;
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+    const FMT: windows::core::GUID = windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3);
+    let key = |pid: u32| PROPERTYKEY { fmtid: FMT, pid };
+    let Ok(h) = win.hwnd() else { return };
+    let hwnd = HWND(h.0 as _);
+    let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
+    let icon = [app.path().resource_dir().ok().map(|r| r.join("appicons")),
+                std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("appicons"))),
+                Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("appicons"))]
+        .into_iter().flatten().map(|d| d.join(format!("{name}.ico"))).find(|p| p.exists())
+        .map(|p| format!("{},0", p.display())).unwrap_or_else(|| format!("{exe},0"));
+    let aumid = format!("UltraSuite.{}", name);
+    let cmd = format!("\"{exe}\" --open {name}");
+    let vals: Vec<(u32, String)> = vec![(5, aumid), (2, cmd), (3, icon), (4, title.to_string())];
+    unsafe {
+        let Ok(store) = SHGetPropertyStoreForWindow::<IPropertyStore>(hwnd) else { return };
+        // relaunch details first, the ID last (Windows reads the others when the ID is set)
+        for (pid, v) in vals.iter().rev() {
+            let w: Vec<u16> = v.encode_utf16().chain(std::iter::once(0)).collect();
+            // the string must live in COM memory: PROPVARIANT frees it with CoTaskMemFree
+            let Ok(owned) = SHStrDupW(PCWSTR(w.as_ptr())) else { continue };
+            let mut pv = PROPVARIANT::default();
+            (*pv.Anonymous.Anonymous).vt = VT_LPWSTR;
+            (*pv.Anonymous.Anonymous).Anonymous.pwszVal = owned;
+            let _ = store.SetValue(&key(*pid), &pv);
+            let _ = PropVariantClear(&mut pv);
+            std::mem::forget(pv);
+        }
+        let _ = store.Commit();
+        let _ = PWSTR::null();
+    }
+}
+#[cfg(not(windows))]
+fn set_app_identity(_app: &AppHandle, _win: &WebviewWindow, _name: &str, _title: &str) {}
+
 fn open_view(app: &AppHandle, name: &str) {
     let (title, url, w, h) = match name {
         "alarm" => ("Code Red Alarm", "http://127.0.0.1:8081/", 1360.0, 920.0),
@@ -409,10 +453,22 @@ fn open_view(app: &AppHandle, name: &str) {
     };
     if let Some(win) = app.get_webview_window(name) { let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return; }
     ensure_core(app);
-    if let Ok(win) = WebviewWindowBuilder::new(app, name, WebviewUrl::External(url.parse().unwrap()))
-        .title(title).inner_size(w, h).min_inner_size(900.0, 620.0).center().visible(true).build() {
+    // every app window gets its own icon (title bar, taskbar, Alt+Tab)
+    let icon_bytes: &[u8] = match name {
+        "alarm" => include_bytes!("../icons/apps/alarm.png"),
+        "sentinel" => include_bytes!("../icons/apps/sentinel.png"),
+        _ => include_bytes!("../icons/apps/insights.png"),
+    };
+    let mut builder = WebviewWindowBuilder::new(app, name, WebviewUrl::External(url.parse().unwrap()))
+        .title(title).inner_size(w, h).min_inner_size(900.0, 620.0).center().visible(false);
+    if let Ok(img) = tauri::image::Image::from_bytes(icon_bytes) {
+        builder = match builder.icon(img) { Ok(b) => b, Err(_) => return };
+    }
+    if let Ok(win) = builder.build() {
         let w2 = win.clone();
         win.on_window_event(move |e| { if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w2.hide(); } });
+        set_app_identity(app, &win, name, title);
+        let _ = win.show();
         let _ = win.set_focus();
     }
 }

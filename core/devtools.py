@@ -11,6 +11,7 @@ Shared routes every Ultra Suite web app mounts (alarm, sentinel, insights):
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,15 @@ DEV_JS = """(() => { let v = null; const tick = async () => {
 
 def add_shared_routes(app, frontend_dir: str):
     dev = os.environ.get("ULTRASUITE_DEV") == "1"
+
+    @app.get("/__ui/icons/{name}")
+    async def ui_icon(name: str):
+        if not re.fullmatch(r"[a-z]+\.png", name or ""):
+            raise HTTPException(404)
+        p = os.path.join(STATIC, "icons", name)
+        if not os.path.isfile(p):
+            raise HTTPException(404)
+        return FileResponse(p, media_type="image/png", headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/__ui/{name}")
     async def ui_asset(name: str):
