@@ -148,6 +148,8 @@ class DISPLAY_DEVICEW(ctypes.Structure):
 def displays():
     if not IS_WIN:
         return {"displays": []}
+    from . import display_identity
+    identities = display_identity.active_targets()
     u32 = ctypes.windll.user32
     out, i = [], 0
     while True:
@@ -168,12 +170,19 @@ def displays():
             m += 1
             if dm.dmPelsWidth == cur.dmPelsWidth and dm.dmPelsHeight == cur.dmPelsHeight and dm.dmDisplayFrequency > 1:
                 rates.add(int(dm.dmDisplayFrequency))
-        mon = DISPLAY_DEVICEW(); mon.cb = ctypes.sizeof(mon)
-        u32.EnumDisplayDevicesW(dd.DeviceName, 0, ctypes.byref(mon), 0)
-        out.append({"device": dd.DeviceName, "name": mon.DeviceString or dd.DeviceString, "gpu": dd.DeviceString,
+        monitors, index = [], 0
+        while index < 256:
+            mon = DISPLAY_DEVICEW(); mon.cb = ctypes.sizeof(mon)
+            if not u32.EnumDisplayDevicesW(dd.DeviceName, index, ctypes.byref(mon), 1):  # EDD_GET_DEVICE_INTERFACE_NAME
+                break
+            index += 1
+            if mon.StateFlags & 1:  # DISPLAY_DEVICE_ACTIVE, excludes stale disconnected monitor children.
+                monitors.append({"device_path": mon.DeviceID, "description": mon.DeviceString})
+        identity = display_identity.describe_display(dd.DeviceName, monitors, identities["targets"])
+        out.append({"device": dd.DeviceName, **identity, "gpu": dd.DeviceString,
                     "width": cur.dmPelsWidth, "height": cur.dmPelsHeight, "hz": int(cur.dmDisplayFrequency),
                     "rates": sorted(rates), "primary": bool(dd.StateFlags & 0x4)})
-    return {"displays": sorted(out, key=lambda d: not d["primary"])}
+    return {"displays": sorted(out, key=lambda d: not d["primary"]), "identity_query_status": identities["status"]}
 
 
 def set_refresh(device: str, hz: int):
@@ -287,11 +296,11 @@ def register(app):
         return set_power_plan(body.get("guid", ""))
 
     @app.get("/api/display")
-    async def _disp():
+    def _disp():
         return displays()
 
     @app.post("/api/display")
-    async def _set_disp(body: dict):
+    def _set_disp(body: dict):
         return set_refresh(body.get("device", ""), int(body.get("hz", 0)))
 
     @app.get("/api/power/mode")

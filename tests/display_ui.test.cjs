@@ -1,0 +1,9 @@
+// Actual display renderer, offline. This does not exercise native refresh controls.
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const vm=require('node:vm');const path=require('node:path');
+const html=fs.readFileSync(path.join(__dirname,'../pc_sentinel/frontend/index.html'),'utf8');
+const source=html.slice(html.indexOf('function renderPowerCtl(){'),html.indexOf('\ndocument.addEventListener("click", async (e) => {',html.indexOf('function renderPowerCtl(){')));
+function render(displays){const boxes={};const ctx=vm.createContext({plans:null,disps:{displays},renderPMode(){},$:id=>boxes[id]??={innerHTML:''},esc:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;')});vm.runInContext(source,ctx);ctx.renderPowerCtl();return boxes;}
+const base={device:'DISPLAY1',gpu:'Example GPU',width:2560,height:1440,hz:240,rates:[60,240],primary:true};
+test('Windows-reported model is the main label and remains escaped',()=>{const b=render([{...base,model:'<Monitor X>',name:'<Monitor X>',identity_status:'reported'}]);assert.match(b.disps.innerHTML,/<b>&lt;Monitor X>/);assert.match(b.disps.innerHTML,/Windows\/EDID-reported model/);assert.match(b.disps.innerHTML,/Display 1/);});
+test('missing model is explicit and never replaced by a prediction',()=>{const b=render([{...base,name:'Unknown monitor',model:null}]);assert.match(b.disps.innerHTML,/Unknown monitor/);assert.match(b.disps.innerHTML,/no prediction selected/);});
+test('mirrored targets retain both names rather than claiming one model',()=>{const b=render([{...base,name:'Multiple monitors (mirrored view)',identity_status:'multiple_targets',monitors:[{name:'Monitor A'},{name:'Monitor B'}]}]);assert.match(b.disps.innerHTML,/Mirrored targets: Monitor A, Monitor B/);assert.doesNotMatch(b.disps.innerHTML,/Windows\/EDID-reported model/);});

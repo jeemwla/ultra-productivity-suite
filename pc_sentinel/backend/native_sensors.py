@@ -105,6 +105,7 @@ def device_info() -> dict:
     global _info
     if _info is not None:
         return _info
+    from .display_identity import computer_identity
     raw = _ps("$o=[ordered]@{};"
               "$p=Get-CimInstance Win32_Processor|Select-Object -First 1 Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed;"
               "$o.cpu=$p;$o.gpus=@(Get-CimInstance Win32_VideoController|Select-Object Name,DriverVersion,AdapterRAM);"
@@ -123,6 +124,7 @@ def device_info() -> dict:
     is_laptop = bool(d.get("battery")) and (bool(set(chassis) & laptop_types) or (d.get("system") or {}).get("PCSystemType") == 2)
     gpus = [g.get("Name") for g in (d.get("gpus") or []) if g.get("Name") and "basic display" not in g.get("Name", "").lower()]
     _info = {
+        **computer_identity(),
         "cpu": ((d.get("cpu") or {}).get("Name") or "CPU").strip(),
         "cores": (d.get("cpu") or {}).get("NumberOfCores"), "threads": (d.get("cpu") or {}).get("NumberOfLogicalProcessors"),
         "base_mhz": (d.get("cpu") or {}).get("MaxClockSpeed"),

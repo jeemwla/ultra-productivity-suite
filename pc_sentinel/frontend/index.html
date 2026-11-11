@@ -577,7 +577,7 @@ function renderPowerCtl(){
     $("plans").innerHTML = plans.plans.map(p => `<button class="plan" data-g="${p.guid}" aria-pressed="${p.active}"><span class="r"></span><span><b>${esc(p.name)}</b><small>${esc(PLAN_DESC[p.name.toLowerCase()] || "Custom plan")}</small></span></button>`).join("") || `<div class="empty">No power plans reported</div>`;
     $("qc-plan").innerHTML = plans.plans.slice(0, 5).map(p => `<button data-g="${p.guid}" aria-pressed="${p.active}">${esc(p.name.replace(/ performance$/i, ""))}</button>`).join(""); }
   if (disps) { const seg = (d) => `<div class="seg" data-dev="${esc(d.device)}">${d.rates.map(r => `<button data-hz="${r}" aria-pressed="${r === d.hz}">${r} Hz</button>`).join("")}</div>`;
-    $("disps").innerHTML = disps.displays.map((d, i) => `<div class="disp"><div class="h"><b>Display ${i + 1}${d.primary ? " (main)" : ""} · ${d.width}×${d.height}</b><span class="muted">${esc(d.gpu)}</span></div><div style="margin-top:10px">${seg(d)}</div></div>`).join("") || `<div class="empty">No displays reported</div>`;
+    $("disps").innerHTML = disps.displays.map((d, i) => `<div class="disp"><div class="h"><b>${esc(d.model || d.name || "Unknown monitor")}${d.primary ? " (main)" : ""} · ${d.width}×${d.height}</b><span class="muted">Display ${i + 1} · ${esc(d.gpu)}</span></div><p class="muted" style="margin-top:6px">${d.identity_status === "multiple_targets" ? `Mirrored targets: ${(d.monitors || []).map(m => esc(m.name || "Unknown monitor")).join(", ")}` : d.model ? "Windows/EDID-reported model" : "Model unavailable; no prediction selected"}</p><div style="margin-top:10px">${seg(d)}</div></div>`).join("") || `<div class="empty">No displays reported</div>`;
     const p = disps.displays[0]; $("qc-disp").innerHTML = p && p.rates.length > 1 ? `<div class="muted" style="margin-bottom:6px">Main display refresh rate</div>${seg(p)}` : ""; }
 }
 document.addEventListener("click", async (e) => {
@@ -875,7 +875,8 @@ let snap = null, lastMsg = 0, retry = 0;
 function push(k, v){ H[k].push(v == null ? null : v); if (H[k].length > HMAX) H[k].shift(); }
 function render(){
   if (!snap) return; const hw = snap.hardware, s = hw.summary || {}, dev = hw.device || {};
-  $("brand-sub").textContent = s.cpu_name ? `${dev.type === "laptop" ? "Laptop" : "Desktop"} · ${s.cpu_name.replace(/\b(AMD|Intel\(R\)|Core\(TM\))\s*/g, "").split(" ").slice(0, 3).join(" ")}` : "Your PC, at a glance";
+  $("brand-sub").textContent = dev.hostname || "Your PC";
+  $("brand-sub").title = dev.hostname ? "Windows computer name" : "Windows computer name is unavailable";
   $("basic").hidden = hw.level !== "basic"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor.";
   $("lhm-go").hidden = hw.can_install_lhm === false; $("nav-battery").hidden = !dev.has_battery;
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
