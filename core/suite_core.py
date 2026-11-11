@@ -338,14 +338,12 @@ def supervise(groups, *, start_timeout=20.0, poll=0.5, stop_timeout=10.0, should
 
 
 def start_local_addons(server_cls):
-    """Personal extras that are not part of Ultra Suite and never ship with it.
+    """Optional personal extras that are not part of Ultra Suite and never ship with it.
 
-    The owner's deck deck knobs talk to a small volume service on 127.0.0.1:8093. Its file lives outside the
-    repo (installed: %APPDATA%\\UltraSuite\\local\\volume_knob_daemon.py; from source: private\\deck_deck\\plugin\\).
-    When the file isn't there, nothing runs.
+    If %APPDATA%\\UltraSuite\\local\\volume_knob_daemon.py exists (or ULTRASUITE_LOCAL_ADDON names a file), it is
+    served on 127.0.0.1:8093. When no such file exists, nothing runs.
     """
-    places = [os.path.join(CONF_DIR, "local", "volume_knob_daemon.py"),
-              os.path.join(ROOT, "private", "deck_deck", "plugin", "volume_knob_daemon.py")]
+    places = [os.environ.get("ULTRASUITE_LOCAL_ADDON", ""), os.path.join(CONF_DIR, "local", "volume_knob_daemon.py")]
     path = next((p for p in places if os.path.isfile(p)), None)
     if not path or port_busy(8093):
         return

@@ -8,7 +8,7 @@
     "AI": ["chatgpt", "claude", "ollama", "cursor", "comet", "perplexity", "copilot", "codex"],
     "Web": ["chrome", "msedge", "firefox", "opera", "brave", "vivaldi", "arc"],
     "Create": ["obs64", "obs32", "resolve", "capcut", "audacity", "clipchamp", "photoshop", "premiere", "figma", "spotify"],
-    "Tools": ["occt", "signalrgb", "icue", "nzxt", "fancontrol", "afterburner", "rtss", "windscribe", "everything", "docker", "windowsterminal", "cmd.exe", "powershell", "code.exe", "deck", "trcc", "applicationframehost", "systemsettings", "taskmgr", "notepad", "obsidian", "ultra suite"]
+    "Tools": ["occt", "signalrgb", "icue", "nzxt", "fancontrol", "afterburner", "rtss", "windscribe", "everything", "docker", "windowsterminal", "cmd.exe", "powershell", "code.exe", "trcc", "applicationframehost", "systemsettings", "taskmgr", "notepad", "obsidian", "ultra suite"]
   },
   "overrides": {}
 }

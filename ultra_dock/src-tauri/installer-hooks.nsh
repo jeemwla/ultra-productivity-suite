@@ -15,7 +15,7 @@
   StrCmp "$INSTDIR" "" ultra_skip_clean
   IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 ultra_skip_clean
     RMDir /r "$INSTDIR\core"
-    Delete "$INSTDIR\appicons\deck.ico"
+    RMDir /r "$INSTDIR\appicons"
   ultra_skip_clean:
 !macroend
 
@@ -26,9 +26,8 @@
   CreateShortCut "$SMPROGRAMS\PC Sentinel.lnk" "$INSTDIR\${MAINBINARYNAME}.exe" "--open sentinel" "$INSTDIR\appicons\sentinel.ico" 0
   CreateShortCut "$SMPROGRAMS\Ultra Dock.lnk" "$INSTDIR\${MAINBINARYNAME}.exe" "--show-dock" "$INSTDIR\appicons\dock.ico" 0
 
-  ; Clean up what older versions left behind: the deck shortcut, and the separate Laptop Pack add-on
+  ; Clean up what older versions left behind: the separate Laptop Pack add-on
   ; (its battery features are built into PC Sentinel now)
-  Delete "$SMPROGRAMS\deck Deck Setup.lnk"
   RMDir /r "$APPDATA\UltraSuite\addons\laptop_pack"
   RMDir "$APPDATA\UltraSuite\addons"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UltraSuiteLaptopPack"
@@ -66,5 +65,4 @@
   Delete "$SMPROGRAMS\Code Red Alarm.lnk"
   Delete "$SMPROGRAMS\PC Sentinel.lnk"
   Delete "$SMPROGRAMS\Ultra Dock.lnk"
-  Delete "$SMPROGRAMS\deck Deck Setup.lnk"
 !macroend
