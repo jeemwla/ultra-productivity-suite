@@ -276,14 +276,14 @@ fn enum_app_windows() -> Vec<(isize, String, String)> {
         let mut cloaked: u32 = 0;
         let _ = DwmGetWindowAttribute(h, DWMWA_CLOAKED, &mut cloaked as *mut _ as *mut _, 4);
         if cloaked != 0 { return true.into(); }
-        let len = GetWindowTextLengthW(h);
-        if len <= 0 { return true.into(); }
-        let mut buf = vec![0u16; (len + 1) as usize];
-        GetWindowTextW(h, &mut buf);
-        let title = String::from_utf16_lossy(&buf[..len as usize]);
         let mut pid = 0u32;
         GetWindowThreadProcessId(h, Some(&mut pid));
         if pid == std::process::id() { return true.into(); }
+        // InternalGetWindowText never sends a message, so a busy window (or our own main thread) can't stall us
+        let mut buf = [0u16; 512];
+        let len = InternalGetWindowText(h, &mut buf);
+        if len <= 0 { return true.into(); }
+        let title = String::from_utf16_lossy(&buf[..len as usize]);
         let mut exe = String::new();
         if let Ok(ph) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
             let mut pbuf = vec![0u16; 1024];
@@ -344,7 +344,8 @@ fn organizer_loop() {
         let pins = pinned_apps();
         let wins = enum_app_windows();
         let fg = unsafe { GetForegroundWindow().0 as isize };
-        let on = ORGANIZE.load(Ordering::Relaxed);
+        // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
+        let on = ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed);
         let mut snap = vec![];
         {
             let mut g = HIDDEN.lock().unwrap();
@@ -373,27 +374,83 @@ fn organizer_loop() {
     }
 }
 
+// ----------------------------------------------------------------------------- watchdog
+/// Safety net: the organizer may only tuck buttons away while the dock can show them. Every 2 seconds this
+/// pings the strip's window (its main thread) and checks that the strip page is still asking for the folder
+/// list. Two missed pings, or a shown strip that stopped refreshing for 15 seconds, marks the dock unhealthy;
+/// the organizer then puts every button back on the normal taskbar until the dock recovers.
+static UI_SEEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static HEALTHY: AtomicBool = AtomicBool::new(true);
+static STRIP_SHOWN: AtomicBool = AtomicBool::new(false);
+static STRIP_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+fn now_secs() -> u64 { SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
+
+/// Pure decision, kept separate so it can be tested: is the dock fit to keep buttons tucked away?
+fn dock_healthy(missed_pings: u32, strip_shown: bool, secs_since_ui: u64) -> bool {
+    missed_pings < 2 && (!strip_shown || secs_since_ui < 15)
+}
+
+#[cfg(windows)]
+fn watchdog() {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_NULL};
+    let started = now_secs();
+    let mut missed = 0u32;
+    let mut was = true;
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+        let h = STRIP_HWND.load(Ordering::Relaxed);
+        let answered = h == 0 || unsafe {
+            let mut res = 0usize;
+            SendMessageTimeoutW(HWND(h as _), WM_NULL, WPARAM(0), LPARAM(0), SMTO_ABORTIFHUNG, 1500, Some(&mut res)).0 != 0
+        };
+        missed = if answered { 0 } else { missed + 1 };
+        let seen = UI_SEEN.load(Ordering::Relaxed);
+        let since = now_secs().saturating_sub(if seen == 0 { started } else { seen });
+        let ok = dock_healthy(missed, STRIP_SHOWN.load(Ordering::Relaxed), since);
+        HEALTHY.store(ok, Ordering::Relaxed);
+        if ok != was { println!("[watchdog] dock {}", if ok { "healthy again: organizing" } else { "not responding: taskbar buttons restored" }); was = ok; }
+    }
+}
+
+#[cfg(test)]
+mod watchdog_tests {
+    use super::dock_healthy;
+    #[test]
+    fn decides_when_buttons_must_come_back() {
+        assert!(dock_healthy(0, true, 1));
+        assert!(dock_healthy(1, true, 1), "one slow ping is tolerated");
+        assert!(!dock_healthy(2, true, 1), "a frozen main thread gives the buttons back");
+        assert!(!dock_healthy(0, true, 20), "a shown strip that stopped refreshing gives them back");
+        assert!(dock_healthy(0, false, 600), "a hidden strip (full-screen game) may stop refreshing");
+    }
+}
+
 #[tauri::command]
 fn get_windows() -> Value {
+    UI_SEEN.store(now_secs(), Ordering::Relaxed);  // the strip is alive and showing the folders
     let wins = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
     json!({ "organize": ORGANIZE.load(Ordering::Relaxed), "windows": wins, "order": org_config().order })
 }
 
+/// Bring another app's window forward. Runs on a throwaway thread and only uses calls that don't wait on the
+/// target: a busy or frozen app (a launcher, a game, Docker) once blocked the main thread here forever, which
+/// froze the whole dock while its taskbar buttons were tucked away.
 #[tauri::command]
 fn activate(hwnd: isize) {
     #[cfg(windows)]
-    unsafe {
+    std::thread::spawn(move || unsafe {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_MENU};
         use windows::Win32::UI::WindowsAndMessaging::*;
         let h = HWND(hwnd as _);
-        if IsIconic(h).as_bool() { let _ = ShowWindow(h, SW_RESTORE); }
+        if IsIconic(h).as_bool() { let _ = ShowWindowAsync(h, SW_RESTORE); }
         // a quick Alt tap lets a background app hand focus to another window (standard Windows rule)
         keybd_event(VK_MENU.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
         keybd_event(VK_MENU.0 as u8, 0, KEYEVENTF_KEYUP, 0);
         let _ = SetForegroundWindow(h);
-        SwitchToThisWindow(h, true);
-    }
+    });
 }
 
 #[tauri::command]
@@ -519,7 +576,10 @@ fn quit(app: AppHandle) {
 fn open_app_view(app: AppHandle, name: String) { open_view(&app, &name); }
 
 #[tauri::command]
-fn send_event(kind: String, reason: Option<String>, message: Option<String>) -> bool { post_event(&kind, reason, message) }
+async fn send_event(kind: String, reason: Option<String>, message: Option<String>) -> bool {
+    // a network call: keep it off the main thread
+    tauri::async_runtime::spawn_blocking(move || post_event(&kind, reason, message)).await.unwrap_or(false)
+}
 
 fn post_event(kind: &str, reason: Option<String>, message: Option<String>) -> bool {
     if COLLECTOR.is_empty() { return false; }
@@ -768,6 +828,7 @@ fn taskbar_tracker(app: AppHandle) {
             let limit = tray_left.unwrap_or(r.right - (480.0 * scale) as i32) - (8.0 * scale) as i32;
             if x + w as i32 > limit { w = (limit - x).max(0) as u32; }
             let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && w > 8;
+            STRIP_SHOWN.store(show, Ordering::Relaxed);
             let state = (x, r.top, w, h, show);
             if state == last { continue; }
             last = state;
@@ -879,6 +940,7 @@ fn main() {
                 .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0).build()?;
             #[cfg(windows)]
             make_noactivate(&strip);
+            if let Ok(h) = strip.hwnd() { STRIP_HWND.store(h.0 as isize, Ordering::Relaxed); }
             // only the installed app registers itself to start with Windows (a dev build must never take over that entry)
             if !cfg!(debug_assertions) { set_autostart(); }
             #[cfg(windows)]
@@ -890,6 +952,7 @@ fn main() {
                 let h2 = handle.clone();
                 std::thread::spawn(move || taskbar_tracker(h2));
                 std::thread::spawn(organizer_loop);
+                std::thread::spawn(watchdog);
             }
             let h3 = handle.clone();
             std::thread::spawn(move || alarm_watch(h3));
