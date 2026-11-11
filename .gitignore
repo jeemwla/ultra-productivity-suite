@@ -25,3 +25,6 @@ build/
 
 # Private reports for the owner (never published)
 private/
+
+# Dev mode data
+.devdata/

@@ -179,6 +179,7 @@ fn restore_all() {
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
     let ids: Vec<isize> = HIDDEN.lock().ok().and_then(|mut g| g.as_mut().map(|s| s.drain().collect())).unwrap_or_default();
     if let Some(t) = taskbar_list() { for h in ids { unsafe { let _ = t.AddTab(HWND(h as _)); } } }
+    let _ = std::fs::remove_file(appdata("hidden_tabs.txt"));
 }
 
 #[cfg(windows)]
@@ -187,6 +188,7 @@ fn organizer_loop() {
     use windows::Win32::System::Com::*;
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsWindow};
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
+    restore_from_last_run();
     let Some(tbl) = taskbar_list() else { return };
     let mut last_reapply = Instant::now();
     loop {
@@ -216,6 +218,7 @@ fn organizer_loop() {
             if !on { for h in hidden.drain() { unsafe { let _ = tbl.AddTab(HWND(h as _)); } } }
             if reapply { last_reapply = Instant::now(); }
         }
+        save_hidden_list();
         let order = &cfg.order;
         snap.sort_by(|a, b| (order.iter().position(|o| *o == a.category).unwrap_or(98), &a.name).cmp(&(order.iter().position(|o| *o == b.category).unwrap_or(98), &b.name)));
         if let Ok(mut s) = SNAPSHOT.lock() { *s = snap; }
@@ -579,6 +582,37 @@ fn handle_args(app: &AppHandle, args: &[String]) {
         }
     }
     if args.iter().any(|a| a == "--show-dock") { STRIP_HIDDEN.store(false, Ordering::Relaxed); ORGANIZE.store(true, Ordering::Relaxed); }
+    if args.iter().any(|a| a == "--quit") {
+        // clean shutdown (puts every tucked-away taskbar button back first)
+        #[cfg(windows)]
+        restore_all();
+        stop_core();
+        app.exit(0);
+    }
+}
+
+/// Crash safety: remember which taskbar buttons we tucked away, so a restart can put them back
+/// even if the previous run was killed before it could restore them.
+fn save_hidden_list() {
+    if let Ok(g) = HIDDEN.lock() {
+        let ids: Vec<String> = g.as_ref().map(|s| s.iter().map(|h| h.to_string()).collect()).unwrap_or_default();
+        let _ = std::fs::write(appdata("hidden_tabs.txt"), ids.join("\n"));
+    }
+}
+
+#[cfg(windows)]
+fn restore_from_last_run() {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::*;
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    let Ok(s) = std::fs::read_to_string(appdata("hidden_tabs.txt")) else { return };
+    unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
+    if let Some(t) = taskbar_list() {
+        for h in s.lines().filter_map(|l| l.trim().parse::<isize>().ok()) {
+            if unsafe { IsWindow(Some(HWND(h as _))).as_bool() } { unsafe { let _ = t.AddTab(HWND(h as _)); } }
+        }
+    }
+    let _ = std::fs::remove_file(appdata("hidden_tabs.txt"));
 }
 
 fn run_survey() {

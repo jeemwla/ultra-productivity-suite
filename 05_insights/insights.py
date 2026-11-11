@@ -186,6 +186,15 @@ async def delete_events(body: dict):
     return {"ok": True, "deleted": n}
 
 
+try:
+    import sys as _s2
+    _s2.path.insert(0, os.path.join(HERE, "..", "core"))
+    from devtools import add_shared_routes as _asr
+    _asr(dashboard, HERE)
+except Exception as _exc2:
+    print(f"[devtools] disabled: {_exc2}")
+
+
 async def serve():
     import uvicorn
     servers = [uvicorn.Server(uvicorn.Config(collector, host="127.0.0.1", port=8300, log_level="warning", log_config=None)),

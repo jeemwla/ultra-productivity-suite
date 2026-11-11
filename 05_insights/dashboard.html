@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ultra Suite Insights</title>
+<script src="/__ui/theme.js"></script><script src="/__dev/reload.js"></script>
+
 <style>
 :root{--bg:#f4f5f7;--surface:#fcfcfb;--surface-2:#eff0f2;--line:#e3e5e9;--line-strong:#d0d4da;--ink:#0b0b0b;--ink-2:#52514e;--ink-3:#7d7c78;
   --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--grid:#e8e9ec;--good:#0ca30c;--critical:#d03b3b;--accent:#2a78d6;
@@ -53,7 +55,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;colo
 <div class="wrap">
   <header>
     <div><h1>Ultra Suite Insights</h1><p>Installs, uninstalls, feedback and GitHub, live</p></div>
-    <div class="right"><span class="chip" id="live"><span class="dot"></span>Loading…</span>
+    <div class="right"><span data-theme-slot></span><span class="chip" id="live"><span class="dot"></span>Loading…</span>
       <div class="seg" id="seg"><button data-r="day">Day</button><button data-r="week">Week</button><button data-r="month" aria-pressed="true">Month</button><button data-r="year">Year</button></div></div>
   </header>
   <div class="kpis">

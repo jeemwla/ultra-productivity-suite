@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
 <title>Code Red Alarm</title>
+<script src="/__ui/theme.js"></script><script src="/__dev/reload.js"></script>
+
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23e5484d'/><path d='M16 9v8l5 3' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round'/></svg>" />
 <style>
 :root{
@@ -180,7 +182,7 @@ input[type=time].in{font-variant-numeric:tabular-nums}
       <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/></svg></div>
       <div><h1>Code Red Alarm</h1><p>Wake-up alarms that can't be ignored</p></div>
     </div>
-    <div class="chips" role="status" aria-live="polite">
+    <div class="chips" role="status" aria-live="polite"><span data-theme-slot></span>
       <span class="chip" id="chip-engine"><span class="dot"></span>Connecting…</span>
       <span class="chip" id="chip-speaker"><span class="dot"></span>Speaker: checking…</span>
     </div>

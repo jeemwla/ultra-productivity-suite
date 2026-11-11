@@ -8,6 +8,7 @@ If LibreHardwareMonitor is not reachable, it says so (no made-up numbers).
 """
 import os
 import re
+import time
 from typing import Dict, List, Optional
 import httpx
 
@@ -33,11 +34,20 @@ def _clean(text: str) -> str:
     return re.sub(r"[^\w\s()\-#/.,+:&]", "", text).strip() or "Unknown"
 
 
+_RATE = {"b/s": 1, "kb/s": 1e3, "mb/s": 1e6, "gb/s": 1e9}
+
+
 def _to_float(val) -> Optional[float]:
     if val is None:
         return None
-    m = _num.search(str(val))
-    return float(m.group(0).replace(",", ".")) if m else None
+    s = str(val)
+    m = _num.search(s)
+    if not m:
+        return None
+    x = float(m.group(0).replace(",", "."))
+    # LibreHardwareMonitor prints throughput as "13.9 KB/s" or "1.2 MB/s": normalize to bytes per second
+    unit = s[m.end():].strip().lower()
+    return x * _RATE[unit] if unit in _RATE else x
 
 
 def _type_from_value(v: str) -> str:
@@ -92,7 +102,9 @@ def summarize(groups: List[dict]) -> dict:
     cpu = next(iter(by_kind("cpu")), None)
     if cpu:
         s = cpu["sensors"]
-        t = _pick(s, "Temperature", "Package", "Tctl", "Core (Tctl", "CPU")
+        # only a real CPU sensor counts (ACPI thermal zones are often board/ambient values)
+        t = next((x for want in ("Package", "Tctl", "Core (Tctl", "CPU Core", "Core Average", "CPU") for x in s
+                  if x["type"] == "Temperature" and want.lower() in x["name"].lower() and "acpi" not in x["name"].lower()), None)
         out.update(cpu_name=cpu["name"], cpu_temp=t and t["value"],
                    cpu_load=(_pick(s, "Load", "CPU Total", "Total") or {}).get("value"),
                    cpu_power=(_pick(s, "Power", "Package", "CPU Package") or {}).get("value"))
@@ -237,24 +249,84 @@ def power_report(groups: List[dict], summary: dict) -> dict:
             "dc_total_w": round(dc_total, 1), "wall_w": round(dc_total / 0.9, 1)}
 
 
-async def collect_hardware_telemetry() -> Dict:
+KIND_ORDER = ["cpu", "gpu", "memory", "storage", "motherboard", "battery", "network", "psu", "other"]
+_wmi_cache = {"at": 0.0, "groups": None}
+_mon_cache = {"at": 0.0, "data": None}
+
+WMI_PS = r"""
+$ErrorActionPreference='SilentlyContinue'
+foreach($ns in 'root\LibreHardwareMonitor','root\OpenHardwareMonitor'){
+  $hw = Get-CimInstance -Namespace $ns -ClassName Hardware
+  if($hw){ $s = Get-CimInstance -Namespace $ns -ClassName Sensor
+    [ordered]@{ns=$ns; hw=@($hw|Select-Object Identifier,Name,HardwareType); s=@($s|Select-Object Identifier,Name,SensorType,Value,Min,Max,Parent)} | ConvertTo-Json -Depth 4 -Compress; break } }
+"""
+
+
+def _wmi_groups() -> Optional[List[dict]]:
+    """LibreHardwareMonitor / OpenHardwareMonitor via WMI (works when their web server is off)."""
+    if _wmi_cache["groups"] is not None and time.time() - _wmi_cache["at"] < 3:
+        return _wmi_cache["groups"]
+    import json, subprocess
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        raw = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WMI_PS], capture_output=True, text=True,
+                             timeout=12, creationflags=0x08000000).stdout.strip()
+        d = json.loads(raw) if raw else None
+    except Exception:
+        d = None
+    groups = None
+    if d and d.get("s"):
+        names = {h["Identifier"]: h["Name"] for h in d.get("hw", [])}
+        g: Dict[str, dict] = {}
+        for s in d["s"]:
+            if s.get("Value") is None or JUNK.search(_clean(s.get("Name", ""))):
+                continue
+            parent = s.get("Parent") or ""
+            kind = KIND_BY_PREFIX.get(parent.strip("/").split("/")[0], "other")
+            hname = _clean(names.get(parent, parent))
+            grp = g.setdefault(hname, {"name": hname, "kind": kind, "sensors": []})
+            stype = s.get("SensorType") or "Other"
+            grp["sensors"].append({"id": s.get("Identifier"), "name": _clean(s.get("Name")), "type": stype, "value": float(s["Value"]),
+                                   "min": s.get("Min"), "max": s.get("Max"), "unit": UNIT_BY_TYPE.get(stype, "")})
+        groups = sorted(g.values(), key=lambda x: KIND_ORDER.index(x["kind"]) if x["kind"] in KIND_ORDER else 99)
+    _wmi_cache.update(at=time.time(), groups=groups or [])
+    return groups
+
+
+async def collect_hardware_telemetry() -> Dict:
+    import asyncio
+    from . import native_sensors as ns, storage_health as sh
+    glist, source, level, err = None, None, "full", None
+    try:
+        async with httpx.AsyncClient(timeout=1.5) as client:
             resp = await client.get(LHM_REMOTE_URL)
             resp.raise_for_status()
             tree = resp.json()
         groups: Dict[str, dict] = {}
         _walk(tree, [], groups)
-        glist = sorted(groups.values(), key=lambda g: ["cpu", "gpu", "memory", "storage", "motherboard",
-                                                         "network", "battery", "psu", "other"].index(g["kind"]))
-        if not glist:
-            raise ValueError("LibreHardwareMonitor returned no sensors")
-        summary = summarize(glist)
-        return {"live": True, "source": "LibreHardwareMonitor", "groups": glist, "summary": summary,
-                "cooling": cooling_report(glist), "power": power_report(glist, summary),
-                "sensor_count": sum(len(g["sensors"]) for g in glist)}
+        glist = sorted(groups.values(), key=lambda g: KIND_ORDER.index(g["kind"]) if g["kind"] in KIND_ORDER else 99)
+        source = "LibreHardwareMonitor"
     except Exception as exc:
-        return {"live": False, "source": "LibreHardwareMonitor offline",
-                "error": f"{exc.__class__.__name__}: {exc}"[:200],
-                "help": "Start LibreHardwareMonitor and turn on Options > Remote Web Server (port 8085).",
-                "groups": [], "summary": {}, "sensor_count": 0}
+        err = exc.__class__.__name__
+    if not glist:
+        glist = await asyncio.to_thread(_wmi_groups)
+        if glist:
+            source = "LibreHardwareMonitor (WMI)"
+    if not glist:
+        nat = await asyncio.to_thread(ns.native_groups)
+        glist, source, level = nat["groups"], "Windows built-in sensors", "basic"
+    info = await asyncio.to_thread(ns.device_info)
+    if _mon_cache["data"] is None or time.time() - _mon_cache["at"] > 15:
+        _mon_cache.update(at=time.time(), data=await asyncio.to_thread(ns.detect_monitors))
+    drives = sh.merge_lhm([dict(x) for x in await asyncio.to_thread(sh.drives)], glist)
+    summary = summarize(glist)
+    summary.setdefault("cpu_name", info.get("cpu"))
+    out = {"live": True, "source": source, "level": level, "groups": glist, "summary": summary,
+           "cooling": cooling_report(glist), "power": power_report(glist, summary), "drives": drives,
+           "device": info, "monitors": _mon_cache["data"], "sensor_count": sum(len(g["sensors"]) for g in glist)}
+    if level == "basic":
+        m = _mon_cache["data"] or {}
+        out["help"] = ("LibreHardwareMonitor is installed but not running. Start it to add temperatures, fans and power."
+                       if m.get("lhm_installed") else
+                       "Showing what Windows provides. Install the free LibreHardwareMonitor to add temperatures, fans and power.")
+        out["can_install_lhm"] = not m.get("lhm_installed")
+    return out

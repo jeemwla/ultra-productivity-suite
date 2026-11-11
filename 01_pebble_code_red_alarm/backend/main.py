@@ -452,3 +452,12 @@ try:
     _afr(app, "alarm")
 except Exception as _exc:  # feedback is optional
     print(f"[feedback] disabled: {_exc}")
+
+# Shared Ultra Suite routes: themes, live reload, update check, about
+try:
+    import sys as _s2, os as _o2
+    _s2.path.insert(0, _o2.path.join(_o2.path.dirname(_o2.path.abspath(__file__)), "..", "..", "core"))
+    from devtools import add_shared_routes as _asr
+    _asr(app, _o2.path.join(_o2.path.dirname(_o2.path.abspath(__file__)), "..", "frontend"))
+except Exception as _exc2:
+    print(f"[devtools] disabled: {_exc2}")
