@@ -243,22 +243,98 @@ def cooling_report(groups: List[dict]) -> dict:
 
 
 def power_report(groups: List[dict], summary: dict) -> dict:
-    """Measured CPU + GPU package power plus a clearly-labelled estimate for everything else."""
-    cpu = summary.get("cpu_power") or 0.0
-    gpus = [g for g in groups if g["kind"] == "gpu"]
-    gpu = 0.0
-    for g in gpus:
-        p = _pick(g["sensors"], "Power", "GPU Package", "Board", "Package", "GPU Power")
-        gpu += p["value"] if p else 0.0
-    dimms = len([g for g in groups if g["kind"] == "memory" and "dimm" in " ".join(s["id"] for s in g["sensors"]).lower()])
-    drives = len([g for g in groups if g["kind"] == "storage"])
-    fans = len([s for g in groups for s in g["sensors"] if s["type"] == "Fan" and s["value"] > 50])
-    est = {"Motherboard and chipset": 18.0, "Memory": 4.0 * max(dimms, 2), "Drives": 4.5 * drives,
-           "Fans": 1.8 * fans, "USB devices and other": 10.0}
-    measured = {"CPU package": round(cpu, 1), "Graphics card": round(gpu, 1)}
-    dc_total = sum(measured.values()) + sum(est.values())
-    return {"measured": measured, "estimated": {k: round(v, 1) for k, v in est.items()},
-            "dc_total_w": round(dc_total, 1), "wall_w": round(dc_total / 0.9, 1)}
+    """Component measurements and disclosed models, never measured whole-system or wall watts."""
+    import math
+
+    def watts(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        try:
+            value = float(value)
+        except (OverflowError, ValueError):
+            return None
+        return value if math.isfinite(value) and value >= 0 else None
+
+    def aggregate(group, names):
+        # Choose one reported aggregate per device, never add its overlapping
+        # board/package/core readings. A core-only reading is not package power.
+        sensors = [s for s in group.get("sensors", []) if s.get("type") == "Power"
+                   and not re.search(r"limit|offset|maximum|minimum", str(s.get("name", "")), re.I)]
+        for name in names:
+            for sensor in sensors:
+                label = str(sensor.get("name", "")).strip().lower()
+                if label == name or (name != "total" and label.startswith(name + " ")):
+                    value = watts(sensor.get("value"))
+                    if value is not None:
+                        return value, sensor.get("name")
+        return None, None
+
+    cpus = [g for g in groups if g.get("kind") == "cpu"]
+    cpu_values = [aggregate(g, ("cpu package", "package")) for g in cpus]
+    if not cpus:
+        cpu_values = [(watts(summary.get("cpu_power")), "summary.cpu_power")]
+    cpu_complete = all(value is not None for value, _ in cpu_values)
+    cpu = watts(sum(value for value, _ in cpu_values)) if cpu_complete else None
+    cpu_complete = cpu_complete and cpu is not None
+    gpus = [g for g in groups if g.get("kind") == "gpu"]
+    gpu_values = [aggregate(g, ("total board", "gpu board", "board", "gpu package", "package", "gpu total", "total", "gpu power")) for g in gpus]
+    gpu_complete = bool(gpus) and all(value is not None for value, _ in gpu_values)
+    gpu = watts(sum(value for value, _ in gpu_values)) if gpu_complete else None
+    gpu_complete = gpu_complete and gpu is not None
+    readings = [value for value, _ in cpu_values + gpu_values if value is not None]
+    subtotal = watts(sum(readings)) if readings else None
+    measured_subtotal = round(subtotal, 1) if subtotal is not None else None
+    unknown = []
+    for index, (value, _) in enumerate(cpu_values):
+        if value is None:
+            unknown.append(f"CPU package {index + 1}")
+    for index, (value, _) in enumerate(gpu_values):
+        if value is None:
+            unknown.append(f"GPU {index + 1} aggregate power")
+    if not gpus:
+        unknown.append("GPU power (no adapter readings)")
+    if readings and subtotal is None:
+        unknown.append("Component subtotal outside numeric range")
+    dimms = sum(1 for g in groups if g.get("kind") == "memory"
+                and "dimm" in " ".join(str(s.get("id", "")) for s in g.get("sensors", [])).lower())
+    drives = sum(1 for g in groups if g.get("kind") == "storage")
+    fans = sum(1 for g in groups for s in g.get("sensors", []) if s.get("type") == "Fan"
+               and watts(s.get("value")) is not None and watts(s.get("value")) > 50)
+    estimated = {"Motherboard and chipset": 18.0, "Memory": 4.0 * max(dimms, 2),
+                 "Drives": 4.5 * drives, "Fans": 1.8 * fans, "USB devices and other": 10.0}
+    components_complete = cpu_complete and gpu_complete
+    dc = watts(sum(readings) + sum(estimated.values())) if components_complete else None
+    modeled_dc = round(dc, 1) if dc is not None else None
+    efficiency = 0.90
+    wall = watts(modeled_dc / efficiency) if modeled_dc is not None else None
+    return {
+        "measured": {"CPU package": round(cpu, 1) if cpu is not None else None,
+                     "Graphics card": round(gpu, 1) if gpu is not None else None},
+        "measured_subtotal_w": measured_subtotal,
+        "measured_total_w": None,
+        "estimated": {name: round(value, 1) for name, value in estimated.items()},
+        "estimated_subtotal_w": round(sum(estimated.values()), 1),
+        "estimate_assumptions": {"Motherboard and chipset": "Fixed 18 W allowance, not a reading.",
+                                 "Memory": "4 W per detected DIMM group, assuming at least two; not a reading.",
+                                 "Drives": "4.5 W per detected drive group, not a reading.",
+                                 "Fans": "1.8 W per reported fan above 50 RPM, not a reading.",
+                                 "USB devices and other": "Fixed 10 W allowance, not a device inventory or reading."},
+        "dc_total_w": modeled_dc,
+        "dc_total_is_estimate": True,
+        "modeled_dc_w": modeled_dc,
+        "wall_w": None,
+        "modeled_wall_w": round(wall, 1) if wall is not None else None,
+        "wall_model": {"efficiency": efficiency, "is_measured": False,
+                       "assumption": "Fixed 90% PSU efficiency assumption. Actual efficiency varies with PSU and load."},
+        "coverage": {"complete": False, "component_readings_complete": components_complete,
+                     "unknown_components": unknown, "unmeasured_components": list(estimated),
+                     "detected_gpus": len(gpus), "gpus_with_power": sum(value is not None for value, _ in gpu_values),
+                     "scope": "Reported CPU package and one aggregate per detected GPU; other system draw is modeled."},
+        "gpu_readings": [{"id": group.get("id"), "name": group.get("name"),
+                          "watts": value, "sensor": sensor}
+                         for group, (value, sensor) in zip(gpus, gpu_values)],
+        "advisory_eligible": False,
+    }
 
 
 KIND_ORDER = ["cpu", "gpu", "memory", "storage", "motherboard", "battery", "network", "psu", "other"]

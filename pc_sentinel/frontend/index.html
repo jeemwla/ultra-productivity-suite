@@ -341,11 +341,18 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
       <!-- POWER -->
       <section class="page" id="p-power">
         <div class="grid g2">
-          <section class="card"><div class="ch"><h2>System power</h2><span class="sub">CPU and GPU measured, the rest estimated</span></div><div class="cb">
+          <section class="card"><div class="ch"><h2>Power readings and estimates</h2><span class="sub" id="pw-quality">Reported components, with coverage explained below</span></div><div class="cb">
             <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span class="num" id="pw-total" style="font:600 44px/1 var(--font-display);letter-spacing:-.02em">–</span><span class="muted" style="font-size:14px;font-weight:600">W</span><span class="muted" id="pw-wall"></span></div>
             <div class="stack" id="pw-stack"></div><div class="leg2" id="pw-legend"></div>
-            <div class="field mt"><label for="psu-w">Your power supply (W)</label><input id="psu-w" type="number" min="200" max="3000" step="50" placeholder="850"></div>
-            <div class="meter" id="psu-meter"><i style="width:0"></i></div><div style="display:flex;justify-content:space-between;margin-top:8px;gap:10px"><span class="status good" id="psu-st">Enter your PSU wattage</span><span class="muted num" id="psu-peak"></span></div></div></section>
+            <p class="muted mt" id="pw-coverage"></p>
+            <details class="mt"><summary>How the estimate is calculated</summary><div class="muted mt" id="pw-assumptions"></div></details>
+            <div class="mt" id="desktop-psu"><h3>Desktop power supply (optional)</h3><p class="muted">Enter the rated output and size from the PSU label or receipt. These details stay on this PC.</p>
+            <div class="field mt"><label for="psu-w">Rated output (W)</label><input id="psu-w" type="number" min="50" max="5000" step="1" placeholder="e.g. 1000"></div>
+            <div class="field mt"><label for="psu-model">Model</label><input id="psu-model" maxlength="120" placeholder="Optional model name"></div>
+            <div class="field mt"><label for="psu-size">Size / form factor</label><input id="psu-size" maxlength="40" placeholder="e.g. ATX, SFX, SFX-L"></div>
+            <div class="mt"><button type="button" id="psu-save">Save PSU details</button> <button type="button" id="psu-clear">Clear</button></div><p class="muted mt" id="psu-save-status" role="status"></p></div>
+            <p class="muted mt" id="laptop-power-note" hidden>Laptop power depends on the battery, charger and manufacturer limits. Desktop PSU ratings do not apply. Battery details are available in the Battery section when reported.</p>
+            <div class="meter" id="psu-meter" hidden><i style="width:0"></i></div><div style="margin-top:12px"><span class="status idle" id="psu-st">Whole-system power is not measured</span><p class="muted" id="psu-peak"></p></div></div></section>
           <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">How Windows balances speed and power</span></div><div class="cb">
             <div id="pmode-wrap" hidden><div class="muted" style="margin-bottom:6px">Power mode (the slider in Windows Settings)</div><div class="seg" id="pmode" style="margin-bottom:16px"><button data-pm="efficiency">Best efficiency</button><button data-pm="balanced">Balanced</button><button data-pm="performance">Best performance</button></div></div>
             <div class="plans" id="plans"><div class="empty">Loading…</div></div></div></section>
@@ -533,10 +540,9 @@ function renderOverview(){
   else { $("t-gpu-u").textContent = "%"; tween($("t-gpu"), s.gpu_load, n0); $("t-gpu-m").textContent = s.gpu_name ? "busy · temperature needs full sensors" : "No graphics card found"; setSt("t-gpu-st", "good", "Load normal"); }
   tween($("t-ram"), s.ram_load, n0); $("t-ram-sub").textContent = s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : ""; $("t-ram-m").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : "";
   const rl = lvl(s.ram_load, 80, 92); setSt("t-ram-st", rl, { good: "Plenty free", warning: "Getting full", critical: "Almost full" }[rl]);
-  const pw = hw.power || {}; const measured = pw.measured && (pw.measured["CPU package"] || pw.measured["Graphics card"]);
-  if (measured) { tween($("t-pw"), pw.dc_total_w, n0); $("t-pw-u").textContent = "W"; $("t-pw-sub").textContent = "estimated"; $("t-pw-m").textContent = `≈ ${n0(pw.wall_w)} W from the wall`;
-    const psu = +store.get("psuW", 0), load = psu ? pw.dc_total_w / psu * 100 : null; setSt("t-pw-st", load == null ? "idle" : lvl(load, 70, 85), load == null ? "Add your PSU on Power" : `${n0(load)}% of your PSU`); }
-  else { $("t-pw").textContent = "–"; $("t-pw-m").textContent = "needs full sensors"; setSt("t-pw-st", "idle", "Not measured"); }
+  const pv = powerView(hw.power); $("t-pw-u").textContent = "W"; $("t-pw-sub").textContent = pv.label;
+  tween($("t-pw"), pv.value, n0);
+  $("t-pw-m").textContent = pv.wall; setSt("t-pw-st", "idle", pv.value == null ? "No power readings" : pv.kind === "modeled" ? "Estimate, not a PSU assessment" : "Component readings only");
   ["cpu", "gpu", "ram", "pw"].forEach(k => drawTrend(k, k === "cpu" && cpuT != null ? H.cput : k === "gpu" && gT != null ? H.gput : H[k]));
   const dr = hw.drives || []; $("ov-drives").innerHTML = dr.length ? dr.map(d => `<div class="mini"><span>${esc(d.name)}</span><span class="pill ${d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical"}">${esc(d.health)}${d.life_left != null ? ` · ${d.life_left}% life` : ""}</span></div>`).join("") : `<div class="muted">No drives reported</div>`;
   const net = snap.network || {}; $("ov-net").innerHTML = `<div class="big num">${net.primary_ping_ms == null ? "–" : n0(net.primary_ping_ms)}<small>ms ping</small></div><div class="muted">${net.online ? "Online" : "Offline"} · jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}${snap.vpn && snap.vpn.vpn_enabled ? " · VPN on" : ""}</div>`;
@@ -579,21 +585,49 @@ document.addEventListener("click", async (e) => {
   if (g && g.getAttribute("aria-pressed") !== "true") { try { plans = await api("/api/power/plans", { method: "POST", body: JSON.stringify({ guid: g.dataset.g }) }); renderPowerCtl(); toast(`Power plan: ${plans.plans.find(p => p.active).name}`); } catch (err) { toast(err.message, true); } }
   if (hz && hz.getAttribute("aria-pressed") !== "true") { const dev = hz.closest("[data-dev]").dataset.dev; try { disps = await api("/api/display", { method: "POST", body: JSON.stringify({ device: dev, hz: +hz.dataset.hz }) }); renderPowerCtl(); toast(`Refresh rate set to ${hz.dataset.hz} Hz`); } catch (err) { toast(err.message, true); } }
 });
-let pwPeak = 0;
-function renderPower(){
-  const p = snap.hardware.power; if (!p || !p.measured) { $("pw-total").textContent = "–"; $("pw-wall").textContent = "Power readings need full sensors"; return; }
-  tween($("pw-total"), p.dc_total_w, n0); $("pw-wall").textContent = `≈ ${n0(p.wall_w)} W from the wall`; pwPeak = Math.max(pwPeak, p.dc_total_w || 0);
-  const parts = [["CPU package", p.measured["CPU package"], "var(--series)"], ["Graphics card", p.measured["Graphics card"], "var(--series-2)"], ...Object.entries(p.estimated || {}).map(([k, v], i) => [k + " (est.)", v, ["#1baf7a", "#eda100", "#e87ba4", "#6250d6", "#8f8e86"][i % 5]])].filter(x => x[1] != null);
-  const total = parts.reduce((a, x) => a + (x[1] || 0), 0) || 1, st = $("pw-stack");
-  if (st.children.length !== parts.length) st.innerHTML = parts.map(x => `<i style="background:${x[2]};width:0"></i>`).join("");
-  parts.forEach((x, i) => { st.children[i].style.width = `${(x[1] || 0) / total * 100}%`; st.children[i].title = `${x[0]}: ${n1(x[1])} W`; });
-  $("pw-legend").innerHTML = parts.map(x => `<div><span><i style="background:${x[2]}"></i>${esc(x[0])}</span><span class="num">${n1(x[1])} W</span></div>`).join("");
-  const psu = +store.get("psuW", 0); if (document.activeElement !== $("psu-w")) $("psu-w").value = psu || "";
-  if (psu) { const load = p.dc_total_w / psu * 100, l = lvl(load, 70, 85); $("psu-meter").className = "meter " + (l === "good" ? "" : l); $("psu-meter").firstElementChild.style.width = Math.min(100, load) + "%";
-    setSt("psu-st", l, l === "good" ? `Plenty of headroom: ${n0(load)}% load` : l === "warning" ? `Working hard: ${n0(load)}% load` : `Near its limit: ${n0(load)}% load`); $("psu-peak").textContent = `peak ${n0(pwPeak)} W · ${n0(psu - p.dc_total_w)} W spare`; }
-  else { setSt("psu-st", "idle", "Enter your PSU wattage to see headroom"); $("psu-peak").textContent = `peak ${n0(pwPeak)} W`; }
+const validWatts = v => typeof v === "number" && Number.isFinite(v) && v >= 0;
+function powerView(p){
+  p=p||{}; const measured=Object.values(p.measured||{}).filter(validWatts), subtotal=validWatts(p.measured_subtotal_w)?p.measured_subtotal_w:measured.length?measured.reduce((a,b)=>a+b,0):null;
+  const modeled=p.coverage?.component_readings_complete===true&&validWatts(p.modeled_dc_w)?p.modeled_dc_w:null;
+  const wall=modeled!=null&&validWatts(p.modeled_wall_w)?`Wall model: ≈ ${n0(p.modeled_wall_w)} W, assuming ${n0((p.wall_model?.efficiency??.9)*100)}% efficiency. Not metered.`:"Wall consumption is not measured.";
+  return {value:modeled??subtotal,kind:modeled!=null?"modeled":subtotal!=null?"partial":"unknown",label:modeled!=null?"Estimated system draw":subtotal!=null?"Measured component subtotal":"Unavailable",wall};
 }
-$("psu-w").addEventListener("change", () => { const v = Math.round(+$("psu-w").value); store.set("psuW", v >= 100 && v <= 5000 ? v : 0); renderPower(); });
+let powerContext=null, powerContextError="", powerSaving=false, powerContextGeneration=0;
+async function loadPowerContext(){const generation=++powerContextGeneration;try{const value=await api("/api/power/context");if(generation!==powerContextGeneration)return;powerContext=value;powerContextError="";}catch{if(generation!==powerContextGeneration)return;powerContextError="PSU details could not be loaded. Retry Save when the local service is ready.";}if(snap)renderPower();}
+function renderPower(){
+  if(!snap)return;const p=snap.hardware.power||{},v=powerView(p),laptop=snap.hardware.device?.type==="laptop";
+  tween($("pw-total"),v.value,n0);
+  $("pw-quality").textContent=v.label;$("pw-wall").textContent=v.wall;
+  const unknown=p.coverage?.unknown_components||[];
+  $("pw-coverage").textContent=v.kind==="unknown"?"No usable component power readings. Missing sensors remain unknown, never zero.":(v.kind==="modeled"?"CPU/GPU readings plus fixed allowances. This is not a measured whole-PC total.":"Only available component readings are added. Missing components prevent a system estimate.")+(unknown.length?" Missing: "+unknown.join(", ")+".":"");
+  const colors=["var(--series)","var(--series-2)","#1baf7a","#eda100","#e87ba4","#6250d6","#8f8e86"];
+  const measuredParts=Object.entries(p.measured||{}).filter(x=>validWatts(x[1]));
+  if(!validWatts(p.measured?.["Graphics card"]))for(const [i,gpu] of (p.gpu_readings||[]).entries())if(validWatts(gpu.watts))measuredParts.push([gpu.name||`GPU ${i+1}`,gpu.watts]);
+  const remainder=validWatts(p.measured_subtotal_w)?Math.round((p.measured_subtotal_w-measuredParts.reduce((a,x)=>a+x[1],0))*10)/10:0;
+  if(remainder>0)measuredParts.push(["Other reported component readings",remainder]);
+  const parts=[...measuredParts,...(v.kind==="modeled"?Object.entries(p.estimated||{}).map(([k,w])=>[k+" (estimate)",w]):[])].filter(x=>validWatts(x[1]));
+  const total=parts.reduce((a,x)=>a+x[1],0)||1;
+  $("pw-stack").innerHTML=parts.map((x,i)=>`<i style="background:${colors[i%colors.length]};width:${x[1]/total*100}%" title="${esc(x[0])}: ${n1(x[1])} W"></i>`).join("");
+  $("pw-legend").innerHTML=parts.map((x,i)=>`<div><span><i style="background:${colors[i%colors.length]}"></i>${esc(x[0])}</span><span class="num">${n1(x[1])} W</span></div>`).join("");
+  $("pw-assumptions").textContent=Object.entries(p.estimate_assumptions||{}).map(([k,a])=>k+": "+a).join(" ")||"No disclosed system model is available from this sensor source.";
+  $("desktop-psu").hidden=laptop;$("laptop-power-note").hidden=!laptop;$("psu-meter").hidden=true;
+  for(const [id,key] of [["psu-w","rated_watts"],["psu-model","model"],["psu-size","form_factor"]])if(!powerSaving&&document.activeElement!==$(id)&&!$(id).dataset.dirty)$(id).value=powerContext?.[key]??"";
+  $("psu-save-status").textContent=powerContextError||(powerContext?.storage_status==="ok"?"Saved locally. User-supplied PSU details.":powerContext?.storage_status==="invalid"?"Saved details are invalid. Enter them again to replace the invalid record.":"Optional. No PSU capacity has been assumed.");
+  setSt("psu-st","idle",laptop?"Laptop battery and charger context": "PSU adequacy cannot be assessed from component estimates");
+  $("psu-peak").textContent=!laptop&&validWatts(powerContext?.rated_watts)?`Rated output: ${n0(powerContext.rated_watts)} W. A capacity rating is not current consumption. A quiet load advisory requires sustained, complete measured system power; these sensors do not provide that coverage.`:"A PSU upgrade notice requires reliable complete power measurements. No upgrade diagnosis is made from this estimate.";
+  $("psu-save").disabled=powerSaving;$("psu-clear").disabled=powerSaving;
+}
+for(const id of ["psu-w","psu-model","psu-size"])$(id).addEventListener("input",()=>{$(id).dataset.dirty="true";$(id).dataset.editVersion=String(Number($(id).dataset.editVersion||0)+1);});
+async function savePowerContext(clear){
+  if(powerSaving)return;const raw=$("psu-w").value.trim(),rating=raw===""?null:Number(raw);
+  if(!clear&&rating!==null&&(!validWatts(rating)||rating<50||rating>5000)){powerContextError="Rated output must be between 50 and 5000 W, or blank.";renderPower();return;}
+  const fields=["psu-w","psu-model","psu-size"],submitted=fields.map(id=>({id,version:$(id).dataset.editVersion||"0",value:$(id).value}));
+  const payload=clear?{rated_watts:null,model:null,form_factor:null}:{rated_watts:rating,model:$("psu-model").value.trim()||null,form_factor:$("psu-size").value.trim()||null};
+  ++powerContextGeneration;powerSaving=true;powerContextError="";renderPower();
+  try{powerContext=await api("/api/power/context",{method:"POST",body:JSON.stringify(payload)});for(const field of submitted)if(($(field.id).dataset.editVersion||"0")===field.version&&$(field.id).value===field.value)delete $(field.id).dataset.dirty;}
+  catch(e){powerContextError="Not saved: "+e.message;}finally{powerSaving=false;renderPower();}
+}
+$("psu-save").addEventListener("click",()=>savePowerContext(false));$("psu-clear").addEventListener("click",()=>savePowerContext(true));
 
 /* ---------- performance ---------- */
 function renderPerformance(){
@@ -855,7 +889,7 @@ function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ?
   ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
 setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && snap.hardware.level !== "basic"; $("live").innerHTML = `<span class="dot ${fresh ? (full ? "good" : "warning") : "critical"}"></span>${fresh ? (snap ? `Live · ${snap.hardware.sensor_count} sensors` : "Live") : "Reconnecting…"}`; }, 1000);
 setInterval(() => { if (page === "overview" && !document.hidden) loadApps(); }, 2500);
-go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); checkUpdate(false); connect();
+go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); checkUpdate(false); connect();
 </script>
 </body>
 </html>

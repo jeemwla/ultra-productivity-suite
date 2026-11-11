@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Hardware & Network Sentinel", lifespan=lifespan)
 
+from . import power_context  # noqa: E402  optional local desktop PSU context, no hardware writes
+power_context.register(app)
+
 from . import system_tools  # noqa: E402  power plans, refresh rate, top apps, LibreHardwareMonitor setup
 system_tools.register(app)
 
