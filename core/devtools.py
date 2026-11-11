@@ -33,7 +33,8 @@ _upd = {"at": 0.0, "data": None}
 def version() -> str:
     for p in (os.path.join(ROOT, "VERSION"), os.path.join(getattr(sys, "_MEIPASS", ROOT), "VERSION")):
         try:
-            return open(p, encoding="utf-8").read().strip()
+            with open(p, encoding="utf-8") as f:
+                return f.read().strip()
         except Exception:
             pass
     return "0.0.0"
