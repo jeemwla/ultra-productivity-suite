@@ -21,15 +21,17 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:default;outlin
 
 .strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap}
 .group{display:flex;align-items:center;height:100%}
-.grp{position:relative;height:40px;min-width:40px;padding:0 6px;border-radius:4px;display:flex;align-items:center;gap:6px;transition:background .12s}
+.grp{position:relative;height:40px;min-width:44px;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .12s}
 .grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
 .grp[aria-expanded=true]{background:var(--open)}
-.stack{position:relative;width:28px;height:24px}
-.stack img,.stack .ph{position:absolute;top:50%;width:20px;height:20px;border-radius:5px;transform:translateY(-50%);box-shadow:0 0 0 1.5px rgba(0,0,0,.25)}
-.stack img:nth-child(1),.stack .ph:nth-child(1){left:0;z-index:3}
-.stack img:nth-child(2),.stack .ph:nth-child(2){left:5px;z-index:2;opacity:.85;transform:translateY(-50%) scale(.9)}
-.stack img:nth-child(3),.stack .ph:nth-child(3){left:10px;z-index:1;opacity:.6;transform:translateY(-50%) scale(.8)}
-.stack.single{width:22px}
+/* Phone-style folder tile: up to 4 real app icons in a 2x2 grid, fully opaque, no overlap */
+.folder{position:relative;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+  display:grid;grid-template-columns:13px 13px;grid-template-rows:13px 13px;gap:2px;padding:2px;place-content:center}
+.folder img,.folder .ph{width:13px;height:13px;border-radius:3px;display:block}
+.folder.n1{grid-template-columns:24px;grid-template-rows:24px}.folder.n1 img,.folder.n1 .ph{width:24px;height:24px;border-radius:6px}
+.folder .more-n{position:absolute;right:-5px;top:-4px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:#3a3a3a;color:#fff;
+  font:600 9.5px/15px var(--font);text-align:center;box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
+@media (prefers-color-scheme: light){.folder{background:rgba(0,0,0,.07);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}.folder .more-n{background:#e8e8e8;color:#000}}
 .ph{background:var(--line)}
 .cnt{font-size:11px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:8px}
 .grp .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease),background .2s}
@@ -133,7 +135,7 @@ function render(){
     const active = ws.some(w => w.active);
     return `<div class="group" data-cat="${esc(cat)}">
       <button class="grp ${active ? "has-active" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" title="${esc(cat)}: ${ws.map(w => w.title).slice(0, 6).map(esc).join(" · ")}">
-        <span class="stack ${uniq.length === 1 ? "single" : ""}">${uniq.slice(0, 3).map(w => img(w.exe)).join("")}</span>${ws.length > 1 ? `<span class="cnt">${ws.length}</span>` : ""}<span class="runbar"></span></button>
+        <span class="folder ${uniq.length === 1 ? "n1" : ""}">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="runbar"></span></button>
       <div class="tray ${open === cat ? "open" : ""}"><div class="inner">${ws.map(w => `<button class="win ${w.active ? "active" : ""}" data-h="${w.hwnd}" title="${esc(w.title)}">${img(w.exe)}<span class="runbar"></span></button>`).join("")}</div></div></div>`;
   }).join("");
   const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="Ultra Dock">${CHEV}</button>
