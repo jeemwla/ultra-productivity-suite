@@ -76,7 +76,7 @@ test('a stale initial GET failure cannot replace successful save feedback',async
  const get=deferred();const h=harness({}, {type:'desktop'}, {api:(_p,o)=>o?Promise.resolve({rated_watts:1000,storage_status:'ok'}):get.promise});
  const loading=h.ctx.loadPowerContext();h.edit('psu-w','1000');await h.ctx.savePowerContext(false);
  get.reject(new Error('initial read timed out'));await loading;h.ctx.renderPower();
- assert.equal(String(h.box('psu-w').value),'1000');assert.match(h.box('psu-save-status').textContent,/Saved locally/);
+ assert.equal(String(h.box('psu-w').value),'1000');assert.match(h.box('psu-save-status').textContent,/^Saved at .+ These details stay on this PC\.$/,'a successful save is confirmed visibly');
 });
 
 test('new PSU drafts entered during a save survive its response and later telemetry',async()=>{

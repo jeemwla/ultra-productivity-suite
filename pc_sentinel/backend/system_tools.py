@@ -479,6 +479,19 @@ def register(app):
             raise HTTPException(404, "This process group is no longer present.")
         return {"group": result["all_apps"][0], "observed_at": result["observed_at"]}
 
+    @app.get("/api/processes/{group_id}/icon")
+    async def _process_icon(group_id: str):
+        """The app's own icon. Only groups already listed by Top apps are served; no path comes from the request."""
+        import asyncio
+        from fastapi.responses import Response
+        from .process_icons import icon_png
+        result = await asyncio.to_thread(top_apps, 1, group_id=group_id)
+        exe = result["all_apps"][0].get("canonical_exe") if result["all_apps"] else None
+        png = await asyncio.to_thread(icon_png, exe) if exe else None
+        if not png:
+            raise HTTPException(404, "No icon is available for this process group.")
+        return Response(png, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
+
     @app.get("/api/power/plans")
     async def _plans():
         return power_plans()

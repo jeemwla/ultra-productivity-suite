@@ -98,6 +98,21 @@ def _pick(sensors: List[dict], stype: str, *names: str) -> Optional[dict]:
     return pool[0] if pool else None
 
 
+def _cpu_clock(sensors: List[dict]):
+    """Average core clock in MHz: the sensor's own average, else the mean of per-core clocks (not 'Effective')."""
+    clocks = [x for x in sensors if x["type"] == "Clock"]
+    avg = next((x["value"] for x in clocks if x["name"].lower() == "cores (average)"), None)
+    if avg is not None:
+        return avg
+    cores = [x["value"] for x in clocks if x["name"].lower().startswith("core #") and "effective" not in x["name"].lower()]
+    return round(sum(cores) / len(cores)) if cores else None
+
+
+def _gpu_clock(sensors: List[dict]):
+    """GPU core clock in MHz, only from a sensor named for the core (never the memory clock)."""
+    return next((x["value"] for x in sensors if x["type"] == "Clock" and x["name"].lower() in ("gpu core", "core")), None)
+
+
 def summarize(groups: List[dict]) -> dict:
     by_kind = lambda k: [g for g in groups if g["kind"] == k]
     out: Dict[str, object] = {}
@@ -109,7 +124,8 @@ def summarize(groups: List[dict]) -> dict:
                   if x["type"] == "Temperature" and want.lower() in x["name"].lower() and "acpi" not in x["name"].lower()), None)
         out.update(cpu_name=cpu["name"], cpu_temp=t and t["value"],
                    cpu_load=(_pick(s, "Load", "CPU Total", "Total") or {}).get("value"),
-                   cpu_power=(_pick(s, "Power", "Package", "CPU Package") or {}).get("value"))
+                   cpu_power=(_pick(s, "Power", "Package", "CPU Package") or {}).get("value"),
+                   cpu_clock=_cpu_clock(s))
     gpus = by_kind("gpu")
     gpu = max(gpus, key=lambda g: len(g["sensors"])) if gpus else None
     if gpu:
@@ -118,7 +134,8 @@ def summarize(groups: List[dict]) -> dict:
                    gpu_temp=(_pick(s, "Temperature", "GPU Core", "Core") or {}).get("value"),
                    gpu_hotspot=(_pick(s, "Temperature", "Hot Spot", "Hotspot", "Junction") or {}).get("value"),
                    gpu_load=(_pick(s, "Load", "GPU Core", "D3D 3D", "Core") or {}).get("value"),
-                   gpu_power=(_pick(s, "Power", "GPU Package", "Package", "Board") or {}).get("value"))
+                   gpu_power=(_pick(s, "Power", "GPU Package", "Package", "Board") or {}).get("value"),
+                   gpu_clock=_gpu_clock(s))
     ram = next((g for g in groups if g["kind"] == "memory" and "virtual" not in g["name"].lower()), None)
     if ram:
         s = ram["sensors"]

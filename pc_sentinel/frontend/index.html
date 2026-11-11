@@ -76,6 +76,7 @@ a{color:var(--accent);text-decoration:none}
 .g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .g21{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
 .mt{margin-top:16px}
+.just-saved{color:var(--good)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13px;transition:background .15s,transform .1s;white-space:nowrap}
 .btn:hover{background:var(--surface-2)}.btn:active{transform:translateY(1px)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -108,7 +109,7 @@ a{color:var(--accent);text-decoration:none}
 .tile .l span:last-child{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%}
 .tile .v{font:600 34px/1.1 var(--font-display);letter-spacing:-.02em;margin-top:8px}
 .tile .v small{font-size:14px;color:var(--ink-3);font-weight:600;margin-left:3px}
-.tile .m{font-size:12.5px;color:var(--ink-3);min-height:19px}
+.tile .m{font-size:14px;color:var(--ink-2);min-height:21px;font-weight:500}
 .tile svg.trend{display:block;width:100%;height:42px;margin:8px 0 6px}
 
 /* charts */
@@ -132,6 +133,7 @@ a{color:var(--accent);text-decoration:none}
 .row{display:grid;grid-template-columns:28px minmax(0,1fr) 120px 70px;gap:12px;align-items:center;padding:7px 6px;border-radius:10px;transition:background .15s}
 .row:hover{background:var(--surface-2)}
 .row .av{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font:700 11px var(--font);color:#fff}
+.av{position:relative;overflow:hidden}.av .app-ic{position:absolute;inset:2px;width:24px;height:24px;opacity:0;transition:opacity .2s}.av.has-icon{background:transparent!important;color:transparent}.av.has-icon .app-ic{opacity:1}
 .row .nm{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .nm small{font-weight:500;color:var(--ink-3);margin-left:6px}
 .row .vv{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
@@ -290,7 +292,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 }
 @media(max-width:480px){.leg2{grid-template-columns:minmax(0,1fr)}.gauge-wrap{width:min(310px,100%);height:auto;aspect-ratio:310/330}.gauge-wrap svg{width:100%;height:auto}.g-center{top:53.3%}}
 
-.process-list.expanded{max-height:540px;overflow:auto;overscroll-behavior:contain;padding:2px}.process-group{margin:0;border-bottom:1px solid var(--line)}.process-summary{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(40px,80px) 75px;gap:10px;align-items:center;list-style:none;cursor:pointer;padding:10px 0}.process-summary::-webkit-details-marker{display:none}.process-summary .nm{min-width:0;overflow-wrap:anywhere}.process-summary small{display:block;color:var(--ink-3);font-size:11px;line-height:1.4;margin-top:3px}.process-summary .vv{text-align:right;font-variant-numeric:tabular-nums}.process-details{padding:4px 8px 14px 40px;font-size:12px}.process-details p{margin:8px 0;overflow-wrap:anywhere}.process-details code{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.process-detail-table{max-height:250px;overflow:auto}.process-detail-table table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}.process-detail-table th,.process-detail-table td{padding:5px 8px;border-bottom:1px solid var(--line)}.process-detail-table th{position:sticky;top:0;background:var(--surface)}@media(max-width:650px){.process-summary{grid-template-columns:28px minmax(0,1fr) 72px}.process-summary .bar{display:none}.process-details{padding-left:6px}#apps-search{width:100%}}*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border:2px solid transparent;background-clip:padding-box;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
+.process-list.expanded{max-height:540px;overflow:auto;overscroll-behavior:contain;padding:2px}.process-group{margin:0;border-bottom:1px solid var(--line)}.process-summary{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(40px,80px) 75px;gap:12px;align-items:center;list-style:none;cursor:pointer;padding:9px 0}.process-summary::-webkit-details-marker{display:none}.process-summary .nm{min-width:0;overflow-wrap:anywhere}.process-summary small{display:block;color:var(--ink-3);font-size:11px;line-height:1.4;margin-top:3px}.process-summary .vv{text-align:right;font-variant-numeric:tabular-nums}.process-details{padding:4px 8px 14px 40px;font-size:12px}.process-details p{margin:8px 0;overflow-wrap:anywhere}.process-details code{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.process-detail-table{max-height:250px;overflow:auto}.process-detail-table table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}.process-detail-table th,.process-detail-table td{padding:5px 8px;border-bottom:1px solid var(--line)}.process-detail-table th{position:sticky;top:0;background:var(--surface)}@media(max-width:650px){.process-summary{grid-template-columns:28px minmax(0,1fr) 72px}.process-summary .bar{display:none}.process-details{padding-left:6px}#apps-search{width:100%}}*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border:2px solid transparent;background-clip:padding-box;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
 
 </style>
 </head>
@@ -314,7 +316,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
         <div class="banner good" id="health" hidden><div class="ic" id="health-ic">✓</div><div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div></div>
         <div class="grid g4" id="tiles"></div>
         <div class="grid g21 mt">
-          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><button type="button" id="apps-more" aria-pressed="false">Show all apps</button><input id="apps-search" type="search" aria-label="Find an app or process" placeholder="Find app, filename or path" hidden></div><p class="muted" id="apps-note" style="margin-bottom:10px"></p><div class="rows process-list" id="apps"></div><button type="button" id="apps-page-more" style="margin-top:12px" hidden>Show 40 more groups</button></div></section>
+          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><button class="btn" type="button" id="apps-more" aria-pressed="false">Show all apps</button><input id="apps-search" type="search" aria-label="Find an app or process" placeholder="Find app, filename or path" hidden></div><p class="muted" id="apps-note" style="margin-bottom:10px"></p><div class="rows process-list" id="apps"></div><button class="btn" type="button" id="apps-page-more" style="margin-top:12px" hidden>Show 40 more groups</button></div></section>
           <section class="card"><div class="ch"><h2>Quick controls</h2><span class="sub">Changes apply instantly</span></div><div class="cb">
             <div class="muted" style="margin-bottom:6px">Power plan</div><div class="seg" id="qc-plan" style="margin-bottom:16px"></div>
             <div id="qc-disp"></div></div></section>
@@ -542,11 +544,11 @@ function renderOverview(){
   const h = s.health || { score: 100, label: "All good", notes: [] }, hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
   $("health").hidden = false; $("health").className = `banner ${hl}`; $("health-ic").textContent = hl === "good" ? "✓" : "!"; $("health-t").textContent = h.label; $("health-s").textContent = (h.notes || []).join(" · ");
   const cpuT = s.cpu_temp; $("t-cpu-sub").textContent = s.cpu_name || "";
-  if (cpuT != null) { $("t-cpu-u").textContent = "°C"; tween($("t-cpu"), cpuT, n0); $("t-cpu-m").textContent = `${n0(s.cpu_load)}% busy${s.cpu_power != null ? ` · ${n0(s.cpu_power)} W` : ""}`; const l = lvl(cpuT, 80, 90); setSt("t-cpu-st", l, HOT[l]); }
-  else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "busy · temperature needs full sensors"; const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
+  if (cpuT != null) { $("t-cpu-u").textContent = "°C"; tween($("t-cpu"), cpuT, n0); $("t-cpu-m").textContent = [s.cpu_load != null && `${n0(s.cpu_load)}% load`, s.cpu_power != null && `${n0(s.cpu_power)} W`, s.cpu_clock != null && `${n0(s.cpu_clock)} MHz`].filter(Boolean).join(" · "); const l = lvl(cpuT, 80, 90); setSt("t-cpu-st", l, HOT[l]); }
+  else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "load · temperature needs full sensors"; const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
   const gT = s.gpu_hotspot ?? s.gpu_temp; $("t-gpu-sub").textContent = s.gpu_name || "";
-  if (gT != null) { $("t-gpu-u").textContent = "°C"; tween($("t-gpu"), s.gpu_temp ?? gT, n0); $("t-gpu-m").textContent = `${n0(s.gpu_load)}% busy${s.gpu_hotspot != null ? ` · hot spot ${n0(s.gpu_hotspot)}°C` : ""}`; const l = lvl(gT, 85, 100); setSt("t-gpu-st", l, HOT[l]); }
-  else { $("t-gpu-u").textContent = "%"; tween($("t-gpu"), s.gpu_load, n0); $("t-gpu-m").textContent = s.gpu_name ? "busy · temperature needs full sensors" : "No graphics card found"; setSt("t-gpu-st", "good", "Load normal"); }
+  if (gT != null) { $("t-gpu-u").textContent = "°C"; tween($("t-gpu"), s.gpu_temp ?? gT, n0); $("t-gpu-m").textContent = [s.gpu_load != null && `${n0(s.gpu_load)}% load`, s.gpu_power != null && `${n0(s.gpu_power)} W`, s.gpu_clock != null && `${n0(s.gpu_clock)} MHz`].filter(Boolean).join(" · "); $("t-gpu-m").title = s.gpu_hotspot != null ? `Hot spot ${n0(s.gpu_hotspot)}°C` : ""; const l = lvl(gT, 85, 100); setSt("t-gpu-st", l, HOT[l]); }
+  else { $("t-gpu-u").textContent = "%"; tween($("t-gpu"), s.gpu_load, n0); $("t-gpu-m").textContent = s.gpu_name ? "load · temperature needs full sensors" : "No graphics card found"; setSt("t-gpu-st", "good", "Load normal"); }
   tween($("t-ram"), s.ram_load, n0); $("t-ram-sub").textContent = s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : ""; $("t-ram-m").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : "";
   const rl = lvl(s.ram_load, 80, 92); setSt("t-ram-st", rl, { good: "Plenty free", warning: "Getting full", critical: "Almost full" }[rl]);
   const pv = powerView(hw.power); $("t-pw-u").textContent = "W"; $("t-pw-sub").textContent = pv.label;
@@ -588,7 +590,8 @@ function renderApps(){
   const scrollTop=box.scrollTop;
   const open=new Set([...box.querySelectorAll("details[open]")].map(x=>x.dataset.group)),focus=document.activeElement?.closest?.(".process-group")?.dataset.group;
   box.dataset.sig=signature;box.innerHTML=list.map(a=>{const id=a.group_id,name=a.display_name||a.name||"Unknown process",explanation=a.explanation||"Role not identified. The executable filename is shown.";
-   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}</span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}<br>${esc(explanation)}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button class="btn" type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
+   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}<img class="app-ic" alt="" loading="lazy" src="/api/processes/${encodeURIComponent(id)}/icon"></span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}${a.explanation?`<br>${esc(a.explanation)}`:""}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button class="btn" type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
+  box.querySelectorAll("img.app-ic").forEach(img=>{img.addEventListener("load",()=>img.parentNode.classList.add("has-icon"),{once:true});img.addEventListener("error",()=>img.remove(),{once:true});});
   if(focus)[...box.querySelectorAll(".process-group")].find(n=>n.dataset.group===focus)?.querySelector("summary")?.focus({preventScroll:true});
   box.scrollTop=scrollTop;
  }
@@ -640,7 +643,7 @@ function powerView(p){
 }
 let powerHistoryKind=null;
 function recordPowerHistory(p){const view=powerView(p);if(powerHistoryKind!==view.kind){H.pw.length=0;powerHistoryKind=view.kind;}push("pw",view.value);}
-let powerContext=null, powerContextError="", powerSaving=false, powerContextGeneration=0;
+let powerContext=null, powerContextError="", powerSaving=false, powerContextGeneration=0, powerSavedAt=0, powerSavedClear=false;
 async function loadPowerContext(){const generation=++powerContextGeneration;try{const value=await api("/api/power/context");if(generation!==powerContextGeneration)return;powerContext=value;powerContextError="";}catch{if(generation!==powerContextGeneration)return;powerContextError="PSU details could not be loaded. Retry Save when the local service is ready.";}if(snap)renderPower();}
 function renderPower(){
   if(!snap)return;const p=snap.hardware.power||{},v=powerView(p),laptop=snap.hardware.device?.type==="laptop";
@@ -660,10 +663,13 @@ function renderPower(){
   $("pw-assumptions").textContent=Object.entries(p.estimate_assumptions||{}).map(([k,a])=>k+": "+a).join(" ")||"No disclosed system model is available from this sensor source.";
   $("desktop-psu").hidden=laptop;$("laptop-power-note").hidden=!laptop;$("psu-meter").hidden=true;
   for(const [id,key] of [["psu-w","rated_watts"],["psu-model","model"],["psu-size","form_factor"]])if(!powerSaving&&document.activeElement!==$(id)&&!$(id).dataset.dirty)$(id).value=powerContext?.[key]??"";
-  $("psu-save-status").textContent=powerContextError||(powerContext?.storage_status==="ok"?"Saved locally. User-supplied PSU details.":powerContext?.storage_status==="invalid"?"Saved details are invalid. Enter them again to replace the invalid record.":"Optional. No PSU capacity has been assumed.");
+  const justSaved=!powerContextError&&Date.now()-powerSavedAt<5000;
+  $("psu-save-status").classList?.toggle("just-saved",justSaved);
+  $("psu-save-status").textContent=powerContextError||(justSaved?(powerSavedClear?"Cleared. No PSU details are stored.":"Saved at "+new Date(powerSavedAt).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})+". These details stay on this PC."):powerContext?.storage_status==="ok"?"Saved locally. User-supplied PSU details.":powerContext?.storage_status==="invalid"?"Saved details are invalid. Enter them again to replace the invalid record.":"Optional. No PSU capacity has been assumed.");
   setSt("psu-st","idle",laptop?"Laptop battery and charger context": "PSU adequacy cannot be assessed from component estimates");
   $("psu-peak").textContent=!laptop&&validWatts(powerContext?.rated_watts)?`Rated output: ${n0(powerContext.rated_watts)} W. A capacity rating is not current consumption. A quiet load advisory requires sustained, complete measured system power; these sensors do not provide that coverage.`:"A PSU upgrade notice requires reliable complete power measurements. No upgrade diagnosis is made from this estimate.";
   $("psu-save").disabled=powerSaving;$("psu-clear").disabled=powerSaving;
+  $("psu-save").textContent=powerSaving?"Saving…":justSaved&&!powerSavedClear?"Saved":"Save PSU details";
 }
 for(const id of ["psu-w","psu-model","psu-size"])$(id).addEventListener("input",()=>{$(id).dataset.dirty="true";$(id).dataset.editVersion=String(Number($(id).dataset.editVersion||0)+1);});
 async function savePowerContext(clear){
@@ -672,7 +678,8 @@ async function savePowerContext(clear){
   const fields=["psu-w","psu-model","psu-size"],submitted=fields.map(id=>({id,version:$(id).dataset.editVersion||"0",value:$(id).value}));
   const payload=clear?{rated_watts:null,model:null,form_factor:null}:{rated_watts:rating,model:$("psu-model").value.trim()||null,form_factor:$("psu-size").value.trim()||null};
   ++powerContextGeneration;powerSaving=true;powerContextError="";renderPower();
-  try{powerContext=await api("/api/power/context",{method:"POST",body:JSON.stringify(payload)});for(const field of submitted)if(($(field.id).dataset.editVersion||"0")===field.version&&$(field.id).value===field.value)delete $(field.id).dataset.dirty;}
+  try{powerContext=await api("/api/power/context",{method:"POST",body:JSON.stringify(payload)});for(const field of submitted)if(($(field.id).dataset.editVersion||"0")===field.version&&$(field.id).value===field.value)delete $(field.id).dataset.dirty;
+    powerSavedAt=Date.now();powerSavedClear=clear;if(typeof setTimeout==="function")setTimeout(()=>{if(Date.now()-powerSavedAt>=4900)renderPower();},5000);}
   catch(e){powerContextError="Not saved: "+e.message;}finally{powerSaving=false;renderPower();}
 }
 $("psu-save").addEventListener("click",()=>savePowerContext(false));$("psu-clear").addEventListener("click",()=>savePowerContext(true));
@@ -682,8 +689,8 @@ function renderPerformance(){
   const hw = snap.hardware, s = hw.summary || {}, cpu = (hw.groups || []).find(g => g.kind === "cpu"), dev = hw.device || {};
   $("pf-cpu-name").textContent = s.cpu_name || "Processor";
   const clk = cpu && cpu.sensors.filter(x => x.type === "Clock" && /core #\d+$|effective|average/i.test(x.name)).map(x => x.value).filter(v => v > 0);
-  $("pf-cpu-sub").textContent = [dev.cores && `${dev.cores} cores`, dev.threads && `${dev.threads} threads`, clk && clk.length && `${n0(Math.max(...clk))} MHz now`, s.cpu_load != null && `${n0(s.cpu_load)}% busy`].filter(Boolean).join(" · ");
-  $("pf-gpu-name").textContent = s.gpu_name || "Graphics"; $("pf-gpu-sub").textContent = [s.gpu_load != null && `${n0(s.gpu_load)}% busy`, s.gpu_power != null && `${n0(s.gpu_power)} W`].filter(Boolean).join(" · ");
+  $("pf-cpu-sub").textContent = [dev.cores && `${dev.cores} cores`, dev.threads && `${dev.threads} threads`, clk && clk.length && `${n0(Math.max(...clk))} MHz now`, s.cpu_load != null && `${n0(s.cpu_load)}% load`].filter(Boolean).join(" · ");
+  $("pf-gpu-name").textContent = s.gpu_name || "Graphics"; $("pf-gpu-sub").textContent = [s.gpu_load != null && `${n0(s.gpu_load)}% load`, s.gpu_power != null && `${n0(s.gpu_power)} W`].filter(Boolean).join(" · ");
   $("pf-mem-sub").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB` : "";
   lineChart("cpu", H.cpu, css("--series"), 100); lineChart("gpu", H.gpu, css("--series-2"), 100); lineChart("ram", H.ram, css("--good"), 100);
   const hasT = H.cput.some(v => v != null) || H.gput.some(v => v != null); $("pf-temps-empty").hidden = hasT; $("pf-temps").hidden = !hasT;
@@ -918,7 +925,7 @@ function drawSpeedChart(){ const W = 800, Hh = 150, n = 50, max = Math.max(10, .
   const ln = (a, c) => { if (a.length < 2) return ""; const p = a.map((v, i) => [x(i), y(v)]), d = smooth(p); return `<path d="${d} L${p[p.length - 1][0]},${Hh - 4} L${p[0][0]},${Hh - 4} Z" fill="${c}" opacity=".12"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`; };
   $("st-chart").innerHTML = `<line x1="0" x2="${W}" y1="${Hh - 4}" y2="${Hh - 4}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>` + ln(sp.down, "var(--series)") + ln(sp.up, "var(--series-2)"); }
 function extras(m){ if (!m || !m.grade) { $("extras").innerHTML = ""; return; }
-  $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is busy"><span class="grade g-${m.grade[0].toLowerCase()}">${esc(m.grade)}</span>Bufferbloat · busy ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` + Object.entries(m.quality || {}).map(([k, v]) => `<span class="q ${esc(v)}">${esc(k)} <b>${esc(v)}</b></span>`).join(""); }
+  $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is under load"><span class="grade g-${m.grade[0].toLowerCase()}">${esc(m.grade)}</span>Bufferbloat · loaded ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` + Object.entries(m.quality || {}).map(([k, v]) => `<span class="q ${esc(v)}">${esc(k)} <b>${esc(v)}</b></span>`).join(""); }
 function hist(){ const h = store.get("speedHistory", []); $("history").hidden = !h.length; if (!h.length) return; const mx = Math.max(...h.map(x => x.download_mbps), 1);
   $("history").innerHTML = `<div class="muted" style="margin-bottom:4px">Recent tests (download, upload, ping, grade)</div>` + h.slice(0, 6).map(x => `<div class="hrow"><span>${when(x.at)}</span>
     <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.download_mbps)}<span class="hb" style="flex:1"><i style="width:${x.download_mbps / mx * 100}%;background:var(--series)"></i></span></span>
@@ -930,7 +937,7 @@ $("st-go").onclick = () => { if (sp.running) { sp.ws && sp.ws.close(); return; }
   ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === "phase") { sp.phase = m.phase; sp.target = 0; setPh({ ping: "Measuring ping", download: "Downloading", upload: "Uploading" }[m.phase], m.phase === "upload" ? "up" : "on"); $(({ ping: "r-ping", download: "r-down", upload: "r-up" })[m.phase]).classList.add("active"); }
     else if (m.type === "progress") { if (m.phase === "ping") { sp.target = m.ping_ms; setR("r-ping", m.ping_ms, true, n0); setProg(.09 * m.progress, "Measuring ping"); }
-      else { sp.target = m.mbps; (m.phase === "download" ? sp.down : sp.up).push(m.mbps); drawSpeedChart(); setR(m.phase === "download" ? "r-down" : "r-up", m.mbps, true); if (m.loaded_ms != null) $(m.phase === "download" ? "x-down" : "x-up").textContent = `busy ping ${n0(m.loaded_ms)} ms`;
+      else { sp.target = m.mbps; (m.phase === "download" ? sp.down : sp.up).push(m.mbps); drawSpeedChart(); setR(m.phase === "download" ? "r-down" : "r-up", m.mbps, true); if (m.loaded_ms != null) $(m.phase === "download" ? "x-down" : "x-up").textContent = `loaded ping ${n0(m.loaded_ms)} ms`;
         setProg(m.phase === "download" ? .09 + .455 * m.progress : .545 + .455 * m.progress, m.phase === "download" ? "Download in progress" : "Upload in progress"); } }
     else if (m.type === "phase_done") { if (m.phase === "ping") { setR("r-ping", m.ping_ms, false, n0); setR("r-jitter", m.jitter_ms, false, n1); $("st-sub").textContent = `Server: ${m.server}`; } if (m.phase === "download") { setR("r-down", m.mbps); if (m.server) $("st-sub").textContent = `Download server: ${m.server}`; } if (m.phase === "upload") setR("r-up", m.mbps); }
     else if (m.type === "note") $("st-meta").textContent = m.note;
