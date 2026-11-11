@@ -12,6 +12,7 @@ Layer 3 (if LibreHardwareMonitor is running): NVMe SMART from its sensors: life 
 Cached for 60 seconds (drive health changes slowly; the query takes ~1 s).
 """
 import json
+import math
 import os
 import re
 import subprocess
@@ -59,6 +60,7 @@ def drives(max_age=60):
         wear = d.get("wear")
         out.append({
             "name": (d.get("name") or "Drive").strip(), "kind": kind, "bus": d.get("bus"), "size_gb": round((d.get("size") or 0) / 1e9),
+            "id": str(d.get("id", "")), "serial": d.get("serial") or None,
             "health": health, "status": d.get("status"), "firmware": d.get("firmware"),
             "temp": d.get("temp") or None, "temp_max": d.get("temp_max") or None,
             "life_left": (100 - wear) if isinstance(wear, (int, float)) and 0 <= wear <= 100 else None,
@@ -69,25 +71,61 @@ def drives(max_age=60):
     return out
 
 
+def _serial(value):
+    return re.sub(r"\s+", "", str(value or "")).casefold()
+
+
+def _model_words(value):
+    words = re.findall(r"[a-z0-9]+", str(value or "").casefold())
+    return {w for w in words if w not in {"nvme", "ssd", "hdd", "sata", "usb", "scsi", "disk", "drive"}
+            and not re.fullmatch(r"\d+(?:gb|tb)", w)}
+
+
+def _match_score(drive, group):
+    ds, gs = _serial(drive.get("serial")), _serial(group.get("serial"))
+    if ds and gs:
+        return 1000 if ds == gs else 0  # a known conflict must never fall back to model words
+    left, right = _model_words(drive.get("name")), _model_words(group.get("name"))
+    common = left & right
+    if len(common) < 2 or not any(any(c.isdigit() for c in w) for w in common):
+        return 0  # a manufacturer plus generic words is not a model identity
+    if left == right:
+        return 100
+    if left <= right or right <= left:
+        return 80
+    # Both have extra model terms: they could be different variants (EVO/PRO).
+    # Refuse a guess even when they share a manufacturer and model number.
+    return 0
+
+
+def _drive_matches(drives, groups):
+    """Conservative, one-to-one mutual unique best matches.
+
+    No numeric LHM hardware index is assumed to be a Windows disk number.
+    Compute ties against the complete candidate set, so iteration order cannot
+    turn an ambiguous drive into an apparently unique leftover.
+    """
+    scores = [[_match_score(d, g) for g in groups] for d in drives]
+    matches = []
+    for i, row in enumerate(scores):
+        best = max(row, default=0)
+        if not best or row.count(best) != 1:
+            continue
+        j = row.index(best)
+        column = [r[j] for r in scores]
+        if max(column) == best and column.count(best) == 1:
+            matches.append((i, j))
+    return matches
+
+
 def merge_lhm(drv: list, groups: list) -> list:
-    """Fill temperature / life / data written from LibreHardwareMonitor's storage sensors when available."""
-    for g in groups:
-        if g.get("kind") != "storage":
-            continue
-        gname = g["name"].lower()
-        # Windows and LibreHardwareMonitor spell models differently ("NVMe Samsung SSD 970" vs "Samsung SSD 970 EVO Plus 1TB"),
-        # so match on shared model words, ignoring bus and size words
-        noise = {"nvme", "ssd", "hdd", "sata", "usb", "1tb", "2tb", "4tb", "500gb", "250gb", "512gb", "256gb", "1", "-", "_"}
-        words = lambda s: {w for w in re.split(r"[\s_\-]+", s.lower()) if w and w not in noise}
-        def score(x):
-            if x["name"].lower() in gname or gname in x["name"].lower():
-                return 99
-            return len(words(x["name"]) & words(gname))
-        best = max(drv, key=score, default=None)
-        d = best if best is not None and score(best) >= 2 else None
-        if not d:
-            continue
+    """Fill readings only for an unambiguous one-to-one device match."""
+    storage = [g for g in groups if g.get("kind") == "storage"]
+    for i, j in _drive_matches(drv, storage):
+        d, g = drv[i], storage[j]
         for s in g["sensors"]:
+            if not isinstance(s.get("value"), (int, float)) or not math.isfinite(s["value"]):
+                continue
             n = s["name"].lower()
             if s["type"] == "Temperature" and ("composite" in n or "temperature" == n or d.get("temp") is None) and d.get("temp") is None:
                 d["temp"] = round(s["value"])

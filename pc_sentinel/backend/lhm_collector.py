@@ -60,7 +60,8 @@ def _type_from_value(v: str) -> str:
     return "Other"
 
 
-def _walk(node: dict, path: List[str], groups: Dict[str, dict]):
+def _walk(node: dict, path: List[str], groups: Dict[str, dict], hardware_id=None):
+    hardware_id = node.get("HardwareId") or hardware_id
     text = node.get("Text", "")
     sid = node.get("SensorId")
     if sid:
@@ -74,7 +75,8 @@ def _walk(node: dict, path: List[str], groups: Dict[str, dict]):
         value = _to_float(node.get("Value"))
         if value is None:
             return
-        g = groups.setdefault(hw_name, {"name": hw_name, "kind": kind, "sensors": []})
+        key = hardware_id or "/" + "/".join(parts[:-2])
+        g = groups.setdefault(key, {"id": key, "name": hw_name, "kind": kind, "sensors": []})
         g["sensors"].append({
             "id": sid, "name": name, "type": stype,
             "value": value, "min": _to_float(node.get("Min")), "max": _to_float(node.get("Max")),
@@ -84,7 +86,7 @@ def _walk(node: dict, path: List[str], groups: Dict[str, dict]):
     # Hardware nodes sit two levels down (root "Sensor" > machine > hardware)
     new_path = path + [text] if len(path) < 1 and node.get("HardwareId") else path
     for child in node.get("Children", []):
-        _walk(child, new_path, groups)
+        _walk(child, new_path, groups, hardware_id)
 
 
 def _pick(sensors: List[dict], stype: str, *names: str) -> Optional[dict]:
@@ -293,7 +295,7 @@ def _wmi_groups() -> Optional[List[dict]]:
             parent = s.get("Parent") or ""
             kind = KIND_BY_PREFIX.get(parent.strip("/").split("/")[0], "other")
             hname = _clean(names.get(parent, parent))
-            grp = g.setdefault(hname, {"name": hname, "kind": kind, "sensors": []})
+            grp = g.setdefault(parent, {"id": parent, "name": hname, "kind": kind, "sensors": []})
             stype = s.get("SensorType") or "Other"
             grp["sensors"].append({"id": s.get("Identifier"), "name": _clean(s.get("Name")), "type": stype, "value": float(s["Value"]),
                                    "min": s.get("Min"), "max": s.get("Max"), "unit": UNIT_BY_TYPE.get(stype, "")})
