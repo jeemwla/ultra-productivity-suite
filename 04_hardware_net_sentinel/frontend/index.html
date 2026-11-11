@@ -346,7 +346,9 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <div class="stack" id="pw-stack"></div><div class="leg2" id="pw-legend"></div>
             <div class="field mt"><label for="psu-w">Your power supply (W)</label><input id="psu-w" type="number" min="200" max="3000" step="50" placeholder="850"></div>
             <div class="meter" id="psu-meter"><i style="width:0"></i></div><div style="display:flex;justify-content:space-between;margin-top:8px;gap:10px"><span class="status good" id="psu-st">Enter your PSU wattage</span><span class="muted num" id="psu-peak"></span></div></div></section>
-          <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">Windows performance mode</span></div><div class="cb"><div class="plans" id="plans"><div class="empty">Loading…</div></div></div></section>
+          <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">How Windows balances speed and power</span></div><div class="cb">
+            <div id="pmode-wrap" hidden><div class="muted" style="margin-bottom:6px">Power mode (the slider in Windows Settings)</div><div class="seg" id="pmode" style="margin-bottom:16px"><button data-pm="efficiency">Best efficiency</button><button data-pm="balanced">Balanced</button><button data-pm="performance">Best performance</button></div></div>
+            <div class="plans" id="plans"><div class="empty">Loading…</div></div></div></section>
         </div>
         <section class="card mt"><div class="ch"><h2>Displays</h2><span class="sub">Lower refresh rates save power; higher feel smoother</span></div><div class="cb"><div class="grid g2" id="disps"></div></div></section>
       </section>
@@ -557,9 +559,14 @@ function renderApps(){ if (!apps) return; const list = (appsKey === "cpu" ? apps
 
 /* ---------- power ---------- */
 let plans = null, disps = null;
-async function loadPower(){ try { [plans, disps] = await Promise.all([api("/api/power/plans"), api("/api/display")]); renderPowerCtl(); } catch {} }
+let pmode = null;
+async function loadPower(){ try { [plans, disps, pmode] = await Promise.all([api("/api/power/plans"), api("/api/display"), api("/api/power/mode").catch(() => null)]); renderPowerCtl(); } catch {} }
+function renderPMode(){ $("pmode-wrap").hidden = !(pmode && pmode.available); if (pmode) $("pmode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.pm === pmode.mode)); }
+$("pmode").addEventListener("click", async (e) => { const b = e.target.closest("[data-pm]"); if (!b || b.getAttribute("aria-pressed") === "true") return;
+  try { pmode = await api("/api/power/mode", { method: "POST", body: JSON.stringify({ mode: b.dataset.pm }) }); renderPMode(); toast(`Power mode: ${b.textContent}`); } catch (err) { toast(err.message, true); } });
 const PLAN_DESC = { "power saver": "Longest battery, lowest heat", "balanced": "Windows default, adjusts to what you do", "high performance": "Faster response, more power", "ultimate performance": "Maximum speed, most power" };
 function renderPowerCtl(){
+  renderPMode();
   if (plans) {
     $("plans").innerHTML = plans.plans.map(p => `<button class="plan" data-g="${p.guid}" aria-pressed="${p.active}"><span class="r"></span><span><b>${esc(p.name)}</b><small>${esc(PLAN_DESC[p.name.toLowerCase()] || "Custom plan")}</small></span></button>`).join("") || `<div class="empty">No power plans reported</div>`;
     $("qc-plan").innerHTML = plans.plans.slice(0, 5).map(p => `<button data-g="${p.guid}" aria-pressed="${p.active}">${esc(p.name.replace(/ performance$/i, ""))}</button>`).join(""); }
@@ -717,15 +724,37 @@ async function setupLhm(){ const b = $("lhm-go"); b.disabled = true; b.textConte
 $("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (e.target.closest("[data-lhm]")) setupLhm(); });
 
 /* ---------- battery (laptops) ---------- */
-let pack = undefined;
-async function loadBattery(){ try { pack = await api("/api/laptop/battery"); } catch { pack = null; } renderBattery(); }
+let pack = undefined, bhist = null, bright = null, batTimer = 0;
+async function loadBattery(){
+  try { pack = await api("/api/laptop/battery"); } catch { pack = null; }
+  if (pack && pack.has_battery) { if (!bhist) api("/api/laptop/battery/history").then(h => { bhist = h; renderBattery(); }).catch(() => {}); try { bright = await api("/api/laptop/brightness"); } catch {} }
+  renderBattery(); clearTimeout(batTimer); if (page === "battery") batTimer = setTimeout(loadBattery, 5000);
+}
+const hm = (m) => m == null ? "–" : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 function renderBattery(){
+  if (document.activeElement && document.activeElement.id === "bt-br") return;
   const bg = (snap && snap.hardware.groups || []).find(g => g.kind === "battery"), lv = bg && bg.sensors.find(s => /level|charge/i.test(s.name) && s.type !== "Voltage");
-  $("bt-sub").textContent = pack ? "Laptop Pack" : "Basic";
+  const has = pack && pack.has_battery; $("bt-sub").textContent = pack ? `Laptop Pack ${esc(pack.pack || "")}` : "Basic";
+  const pct = has && pack.charge_pct != null ? pack.charge_pct : lv ? lv.value : null, R = 54, C = 2 * Math.PI * R;
+  const ring = `<svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true"><circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--series-track)" stroke-width="12"/>
+    <circle cx="70" cy="70" r="${R}" fill="none" stroke="${pct != null && pct < 20 ? "var(--critical)" : "var(--good)"}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - (pct || 0) / 100)}" transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .9s var(--ease)"/></svg>`;
   const stat = (k, v, sub) => `<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px"><div class="muted">${k}</div><div class="big num">${v}</div>${sub ? `<div class="muted">${sub}</div>` : ""}</div>`;
-  $("bt-body").innerHTML = `<div style="display:flex;align-items:baseline;gap:8px"><span class="num" style="font:600 44px var(--font-display)">${pack && pack.charge_pct != null ? n0(pack.charge_pct) : lv ? n0(lv.value) : "–"}</span><span class="muted">% charged${pack && pack.state ? " · " + esc(pack.state) : ""}</span></div>
-    ${pack ? `<div class="grid g4 mt">${stat("Health", pack.health_pct != null ? n0(pack.health_pct) + "%" : "–", pack.full_mwh ? `${n1(pack.full_mwh / 1000)} of ${n1(pack.design_mwh / 1000)} Wh` : "")}${stat("Charge cycles", pack.cycles ?? "–")}${stat(pack.rate_w > 0 ? "Charging at" : "Using", pack.rate_w != null ? n1(Math.abs(pack.rate_w)) + " W" : "–")}${stat("Time left", pack.minutes_left ? `${Math.floor(pack.minutes_left / 60)}h ${pack.minutes_left % 60}m` : "–")}</div>`
-      : `<div class="banner info mt"><div class="ic">+</div><div><div class="t">Get the Laptop Pack</div><div class="s">Battery health and wear, charge cycles, charge and discharge rate, and time left. A free add-on from the Ultra Suite releases page.</div></div><div class="act"><a class="btn primary" href="https://github.com/jeemwla/ultra-productivity-suite/releases/latest" target="_blank" rel="noopener">Get it</a></div></div>`}`;
+  const hero = `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap"><div style="position:relative;width:140px;height:140px">${ring}<div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div class="num" style="font:600 34px/1 var(--font-display)">${pct == null ? "–" : n0(pct)}<small style="font-size:14px">%</small></div><div class="muted">${has && pack.state ? esc(pack.state) : "charged"}</div></div></div></div>
+    <div><div style="font:600 18px var(--font-display)">${has ? esc(pack.verdict || "") : "Battery"}</div><div class="muted">${has ? [pack.maker, pack.model, pack.chemistry].filter(Boolean).map(esc).join(" · ") : ""}</div>
+    ${has && pack.minutes_to_full ? `<div class="muted mt">Full in about ${hm(pack.minutes_to_full)}</div>` : has && pack.minutes_left ? `<div class="muted mt">About ${hm(pack.minutes_left)} left at this pace</div>` : ""}</div></div>`;
+  if (!has) { $("bt-body").innerHTML = hero + `<div class="banner info mt"><div class="ic">+</div><div><div class="t">Get the Laptop Pack</div><div class="s">Battery health and wear, charge cycles, charge and discharge rate in watts, time left, health history and screen brightness. A free add-on from the Ultra Suite releases page.</div></div><div class="act"><a class="btn primary" href="https://github.com/jeemwla/ultra-productivity-suite/releases/latest" target="_blank" rel="noopener">Get it</a></div></div>`; return; }
+  const h = (bhist && bhist.history) || [];
+  const histSvg = h.length > 1 ? (() => { const W = 800, Hh = 140, mn = Math.min(...h.map(x => x.health_pct)) - 3, mx = Math.max(100, ...h.map(x => x.health_pct)), x = (i) => 6 + i / (h.length - 1) * (W - 12), y = (v) => Hh - 6 - (v - mn) / (mx - mn) * (Hh - 16);
+    const pts = h.map((r, i) => [x(i), y(r.health_pct)]), d = smooth(pts); return `<svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" style="width:100%;height:140px;display:block"><path d="${d} L${pts[pts.length - 1][0]},${Hh} L${pts[0][0]},${Hh} Z" fill="var(--good)" opacity=".1"/><path d="${d}" fill="none" stroke="var(--good)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div style="display:flex;justify-content:space-between" class="muted"><span>${esc((h[0].start || "").slice(0, 10))} · ${n1(h[0].health_pct)}%</span><span>${esc((h[h.length - 1].end || "").slice(0, 10))} · ${n1(h[h.length - 1].health_pct)}%</span></div>`; })() : `<div class="muted">Windows hasn't recorded enough history yet.</div>`;
+  $("bt-body").innerHTML = hero + `<div class="grid g4 mt">
+    ${stat("Health", pack.health_pct != null ? n1(pack.health_pct) + "%" : "–", pack.full_mwh && pack.design_mwh ? `${n1(pack.full_mwh / 1000)} of ${n1(pack.design_mwh / 1000)} Wh when new` : "")}
+    ${stat("Charge cycles", pack.cycles ?? "–", "full charges so far")}
+    ${stat(pack.rate_w > 0 ? "Charging at" : pack.rate_w < 0 ? "Using" : "Power", pack.rate_w ? n1(Math.abs(pack.rate_w)) + " W" : "0 W", pack.voltage_v ? `${n1(pack.voltage_v)} V` : "")}
+    ${stat("Wear", pack.wear_pct != null ? n1(pack.wear_pct) + "%" : "–", "capacity lost since new")}</div>
+    <div class="grid g2 mt"><div><div class="muted" style="margin-bottom:6px">Battery health over time</div>${histSvg}</div>
+    <div>${bright && bright.available ? `<div class="muted" style="margin-bottom:6px">Screen brightness</div><div style="display:flex;align-items:center;gap:12px"><input type="range" id="bt-br" min="0" max="100" value="${bright.percent}" style="flex:1;accent-color:var(--accent)" aria-label="Screen brightness"><b class="num" id="bt-brv">${bright.percent}%</b></div>` : ""}</div></div>`;
+  const br = $("bt-br"); if (br) { br.oninput = () => { $("bt-brv").textContent = br.value + "%"; }; br.onchange = async () => { try { bright = await api("/api/laptop/brightness", { method: "POST", body: JSON.stringify({ percent: +br.value }) }); } catch (e) { toast(e.message, true); } }; }
 }
 
 /* ---------- alerts ---------- */
@@ -806,7 +835,7 @@ function render(){
   $("lhm-go").hidden = hw.can_install_lhm === false; $("nav-battery").hidden = !dev.has_battery;
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
   const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
-  ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: renderBattery, speed: () => {} })[page]?.();
+  ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
 }
 function onSnap(d){ snap = d; lastMsg = Date.now(); const s = d.hardware.summary || {};
   push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); push("pw", d.hardware.power && d.hardware.power.dc_total_w); push("cput", s.cpu_temp); push("gput", s.gpu_temp);

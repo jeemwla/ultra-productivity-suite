@@ -46,6 +46,35 @@ from . import system_tools  # noqa: E402  power plans, refresh rate, top apps, L
 system_tools.register(app)
 
 
+def _load_addons():
+    """Loads add-ons installed on top of Ultra Suite (for now the Laptop Pack) from the per-user add-on folder,
+    or from the repo folder when running from source."""
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    places = [os.path.join(os.environ.get("APPDATA", ""), "UltraSuite", "addons", "laptop_pack", "laptop_pack.py"),
+              os.path.join(here, "..", "..", "06_laptop_pack", "laptop_pack.py")]
+    for p in places:
+        if os.path.isfile(p):
+            try:
+                spec = importlib.util.spec_from_file_location("ultrasuite_laptop_pack", p)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                mod.register(app)
+                print(f"[sentinel] Laptop Pack {getattr(mod, 'PACK_VERSION', '?')} loaded from {p}")
+                return getattr(mod, "PACK_VERSION", "1")
+            except Exception as exc:
+                print(f"[sentinel] Laptop Pack failed to load: {exc}")
+    return None
+
+
+ADDONS = {"laptop_pack": _load_addons()}
+
+
+@app.get("/api/addons")
+async def addons():
+    return ADDONS
+
+
 class VPNTogglePayload(BaseModel):
     enable: Optional[bool] = None
 

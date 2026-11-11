@@ -192,6 +192,53 @@ def set_refresh(device: str, hz: int):
     return displays()
 
 
+# ----------------------------------------------------------------------------- Windows power mode slider (laptops and desktops)
+OVERLAYS = {
+    "efficiency": "961cc777-2547-4f9d-8174-7d86181b8a7a",
+    "balanced": "00000000-0000-0000-0000-000000000000",
+    "performance": "ded574b5-45a0-4f42-8737-46345c09c238",
+}
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16), ("Data3", ctypes.c_uint16), ("Data4", ctypes.c_ubyte * 8)]
+
+    @classmethod
+    def parse(cls, s):
+        h = s.replace("-", "")
+        g = cls(int(h[:8], 16), int(h[8:12], 16), int(h[12:16], 16))
+        for i in range(8):
+            g.Data4[i] = int(h[16 + i * 2:18 + i * 2], 16)
+        return g
+
+    def text(self):
+        return f"{self.Data1:08x}-{self.Data2:04x}-{self.Data3:04x}-" + "".join(f"{b:02x}" for b in self.Data4[:2]) + "-" + "".join(f"{b:02x}" for b in self.Data4[2:])
+
+
+def power_mode() -> dict:
+    if not IS_WIN:
+        return {"mode": None, "available": False}
+    try:
+        fn = ctypes.windll.powrprof.PowerGetEffectiveOverlayScheme
+    except AttributeError:
+        return {"mode": None, "available": False}
+    g = _GUID()
+    if fn(ctypes.byref(g)) != 0:
+        return {"mode": None, "available": False}
+    cur = g.text()
+    mode = next((k for k, v in OVERLAYS.items() if v == cur), "balanced")
+    return {"mode": mode, "available": True}
+
+
+def set_power_mode(mode: str) -> dict:
+    if mode not in OVERLAYS:
+        raise ValueError("Unknown power mode")
+    fn = ctypes.windll.powrprof.PowerSetActiveOverlayScheme
+    if fn(ctypes.byref(_GUID.parse(OVERLAYS[mode]))) != 0:
+        raise RuntimeError("Windows didn't accept that power mode")
+    return power_mode()
+
+
 # ----------------------------------------------------------------------------- LibreHardwareMonitor one-click setup
 LHM_CFG = """<?xml version="1.0" encoding="utf-8"?>
 <configuration><appSettings><add key="runWebServerMenuItem" value="true" /><add key="listenerPort" value="8085" />
@@ -246,6 +293,17 @@ def register(app):
     @app.post("/api/display")
     async def _set_disp(body: dict):
         return set_refresh(body.get("device", ""), int(body.get("hz", 0)))
+
+    @app.get("/api/power/mode")
+    async def _pmode():
+        return power_mode()
+
+    @app.post("/api/power/mode")
+    async def _set_pmode(body: dict):
+        try:
+            return set_power_mode(str(body.get("mode", "")))
+        except (ValueError, RuntimeError, OSError) as e:
+            raise HTTPException(400, str(e))
 
     @app.post("/api/setup/lhm")
     async def _lhm():
