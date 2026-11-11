@@ -2,7 +2,7 @@
 
 Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
 
-[Download the Windows installer, v2.2.5 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.5/UltraSuite-Setup-2.2.5-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
+[Download the Windows installer, v2.2.4 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.4/UltraSuite-Setup-2.2.4-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
 This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
 
@@ -41,7 +41,7 @@ Ultra Dock keeps pinned/selected apps on the native taskbar and groups other ope
 
 Main now includes tested source changes for WebSocket origin checks, conservative drive matching, write-ahead Dock recovery, far-future alarm occurrences, absolute UTC wake deadlines, clearer storage capacity, and stricter Dock visibility gating.
 
-The v2.2.5 installer is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
+These source changes are not a claim that the v2.2.4 installer contains them. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
 
 The [roadmap](ROADMAP.md) contains 24 public phases and 288 detailed engineering and acceptance tasks. Candidate features remain proposals. Stress-test parity, universal hardware support and best-in-category claims have not been established.
 
