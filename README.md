@@ -2,7 +2,7 @@
 
 Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
 
-[Download the Windows installer, v2.2.9 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.9/UltraSuite-Setup-2.2.9-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
+[Download the Windows installer, v2.2.10 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.10/UltraSuite-Setup-2.2.10-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
 This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
 
@@ -21,7 +21,7 @@ The apps have separate windows and Start menu entries. Their background services
 1. Download and run the x64 installer above.
 2. Open PC Sentinel, Code Red Alarm, or Ultra Dock from Start.
 3. For temperatures, fans and additional power sensors, use Sentinel's full-sensor setup or install the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). Windows counters provide a smaller set of readings when it is absent.
-4. Choose the features you need. Dock grouping can be switched off in the Ultra Suite tray menu.
+4. Open Sentinel’s Settings / Extras gear to choose pages and optional router controls. Router extras are off by default. Dock grouping can be switched off in the Ultra Suite tray menu.
 
 Python, Rust and Docker are not end-user prerequisites for the bundled desktop installer. Windows' WebView2 runtime is needed for the windows; initial [runtime setup](https://v2.tauri.app/distribute/windows-installer/#webview2-installation-options) can require a download.
 
@@ -41,7 +41,7 @@ Ultra Dock keeps pinned/selected apps on the native taskbar and groups other ope
 
 Main now includes tested source changes for WebSocket origin checks, conservative drive matching, write-ahead Dock recovery, far-future alarm occurrences, absolute UTC wake deadlines, clearer storage capacity, and stricter Dock visibility gating.
 
-The v2.2.9 installer includes launch recovery, keyboard-accessible Appearance dismissal and the optional offline PSU picker. It is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
+The v2.2.10 installer includes launch recovery, keyboard-accessible Appearance dismissal the optional offline PSU picker, and persistent [Settings / Extras](docs/SETTINGS.md). It is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
 
 The [roadmap](ROADMAP.md) contains 24 public phases and 288 detailed engineering and acceptance tasks. Candidate features remain proposals. Stress-test parity, universal hardware support and best-in-category claims have not been established.
 
