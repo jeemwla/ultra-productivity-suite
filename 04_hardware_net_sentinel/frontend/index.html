@@ -3,28 +3,29 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#0f1012" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
 <title>PC Sentinel</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='3' width='26' height='26' rx='7' fill='%232a78d6'/><path d='M8 18h4l2-6 4 10 2-4h4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
 <style>
 :root{
-  --bg:#f5f6f8; --surface:#fcfcfb; --surface-2:#f0f1f3; --line:#e4e6ea; --line-strong:#d2d6dc;
+  --bg:#f4f5f7; --surface:#fcfcfb; --surface-2:#eff0f2; --line:#e3e5e9; --line-strong:#d0d4da;
   --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7d7c78;
-  --series:#2a78d6; --series-track:#dbe8f9; --grid:#e9eaec; --series-2:#eb6834;
+  --series:#2a78d6; --series-2:#eb6834; --series-track:#dbe8f9; --grid:#e8e9ec;
   --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
   --good-soft:#e5f5e5; --warning-soft:#fff4dc; --critical-soft:#fbe9e9;
   --accent:#2a78d6; --accent-soft:#e3eefb;
   --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
   --font:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
   --font-display:"Segoe UI Variable Display","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#111110; --surface:#1a1a19; --surface-2:#222220; --line:#2a2a28; --line-strong:#383835;
+  --bg:#0f1012; --surface:#17181b; --surface-2:#1f2024; --line:#26282d; --line-strong:#34363c;
   --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86;
-  --series:#3987e5; --series-track:#1d3557; --grid:#2a2a28; --series-2:#d95926;
-  --good-soft:#15291a; --warning-soft:#33280f; --critical-soft:#371919;
-  --accent:#3987e5; --accent-soft:#1b2c45; --shadow:0 1px 2px rgba(0,0,0,.4);
+  --series:#3987e5; --series-2:#d95926; --series-track:#1b3150; --grid:#26282d;
+  --good-soft:#132a17; --warning-soft:#33280f; --critical-soft:#371919;
+  --accent:#3987e5; --accent-soft:#1a2b44; --shadow:0 1px 2px rgba(0,0,0,.45);
 }}
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
@@ -32,155 +33,223 @@ body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--font);min-height:
 button,input{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
-.wrap{max-width:1520px;margin:0 auto;padding:28px 32px 48px}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1560px;margin:0 auto;padding:26px 32px 48px}
 
-header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .brand{display:flex;align-items:center;gap:12px}
-.logo{width:36px;height:36px;border-radius:10px;background:var(--series);display:grid;place-items:center}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--series),#5b9bf0);display:grid;place-items:center;box-shadow:0 6px 16px -6px rgba(42,120,214,.6)}
 .brand h1{font:600 19px/1.2 var(--font-display);letter-spacing:-.01em}
 .brand p{font-size:13px;color:var(--ink-3)}
 .right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.chip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);white-space:nowrap}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.chip{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);position:relative}
 .dot.good{background:var(--good)} .dot.critical{background:var(--critical)} .dot.warning{background:var(--warning)}
-.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px}
-.seg button{border:0;background:transparent;height:30px;padding:0 14px;border-radius:7px;font-size:13px;font-weight:600;color:var(--ink-2)}
-.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.dot.good::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--good);opacity:0;animation:ping 2s var(--ease) infinite}
+@keyframes ping{0%{transform:scale(.5);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;position:relative}
+.seg button{border:0;background:transparent;height:30px;padding:0 14px;border-radius:7px;font-size:13px;font-weight:600;color:var(--ink-2);position:relative;z-index:1;transition:color .2s}
+.seg button[aria-pressed=true]{color:var(--ink)}
+.seg .pill-bg{position:absolute;top:3px;bottom:3px;border-radius:7px;background:var(--surface);box-shadow:var(--shadow);transition:left .35s var(--ease),width .35s var(--ease)}
 
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);animation:rise .5s var(--ease) both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
 .card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 0}
 .card-h h2{font:600 15px/1.3 var(--font-display)}
 .card-h .sub{font-size:12.5px;color:var(--ink-3)}
 .card-b{padding:14px 18px 18px}
+.muted{font-size:12.5px;color:var(--ink-3)}
+.mt{margin-top:16px}
 
 .health{display:flex;align-items:center;gap:14px;padding:14px 18px;margin-bottom:16px}
-.health .icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:700;color:#fff}
+.health .icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:700;color:#fff;transition:background .4s}
 .health.good .icon{background:var(--good)} .health.warning .icon{background:var(--warning);color:#000} .health.critical .icon{background:var(--critical)}
 .health .t{font-weight:600}
 .health .s{font-size:13px;color:var(--ink-2)}
 .offline{padding:16px 18px;margin-bottom:16px;border-color:color-mix(in srgb,var(--warning) 60%,var(--line));background:var(--warning-soft)}
-.offline b{display:block;margin-bottom:2px}
-.offline code{font:12px ui-monospace,Consolas,monospace}
 
-.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:16px}
-.tile{padding:16px 18px}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.tile{padding:16px 18px 12px;position:relative;overflow:hidden}
 .tile .label{font-size:13px;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
-.tile .label span:last-child{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
-.tile .value{font:600 34px/1.1 var(--font-display);letter-spacing:-.02em;margin-top:8px;font-variant-numeric:tabular-nums}
+.tile .label span:last-child{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%}
+.tile .value{font:600 36px/1.1 var(--font-display);letter-spacing:-.02em;margin-top:8px}
 .tile .value small{font-size:15px;color:var(--ink-3);font-weight:600;margin-left:3px}
-.tile .meta{font-size:12.5px;color:var(--ink-3);margin-top:4px;font-variant-numeric:tabular-nums;min-height:19px}
-.meter{height:6px;border-radius:999px;background:var(--series-track);margin-top:12px;overflow:hidden}
-.meter i{display:block;height:100%;border-radius:999px;background:var(--series);transition:width .5s ease}
+.tile .meta{font-size:12.5px;color:var(--ink-3);margin-top:2px;min-height:19px}
+.tile svg.trend{display:block;width:100%;height:44px;margin-top:8px}
+.trend path{transition:d .95s linear}
+.meter{height:6px;border-radius:999px;background:var(--series-track);margin-top:10px;overflow:hidden}
+.meter i{display:block;height:100%;border-radius:999px;background:var(--series);transition:width .9s var(--ease),background .4s}
 .meter.warning i{background:var(--warning)} .meter.critical i{background:var(--critical)}
-.status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;margin-top:10px}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;margin-top:8px}
 .status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
 .status.good{color:var(--good)} .status.warning{color:#b37c00} .status.critical{color:var(--critical)}
 @media (prefers-color-scheme: dark){.status.warning{color:var(--warning)}}
 
-.grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
-.stack{display:grid;gap:16px}
+/* Cooling */
+.grid2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+.fans{display:grid;gap:8px}
+.fan{display:grid;grid-template-columns:44px minmax(0,1fr) 120px 92px;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px;transition:border-color .2s}
+.fan:hover{border-color:var(--line-strong)}
+.fan .blade{width:40px;height:40px;border-radius:12px;background:var(--surface-2);display:grid;place-items:center}
+.fan .blade svg{width:28px;height:28px;color:var(--series)}
+.fan.off .blade svg{color:var(--ink-3)}
+.fan .nm{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+.fan .nm button{border:0;background:none;color:var(--ink-3);font-size:12px;padding:2px 6px;border-radius:6px;opacity:0;transition:opacity .15s}
+.fan:hover .nm button{opacity:1}
+.fan .nm button:hover{background:var(--surface-2);color:var(--ink)}
+.fan .sub{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fan .bars{display:grid;gap:5px}
+.fan .bar{height:5px;border-radius:99px;background:var(--series-track);overflow:hidden}
+.fan .bar i{display:block;height:100%;border-radius:99px;background:var(--series);transition:width .9s var(--ease)}
+.fan .bar.duty i{background:color-mix(in srgb,var(--series) 55%,var(--ink-3))}
+.fan .bl{font-size:11px;color:var(--ink-3);display:flex;justify-content:space-between}
+.fan .rpm{text-align:right;font:600 22px/1 var(--font-display)}
+.fan .rpm small{display:block;font-size:11px;color:var(--ink-3);font-weight:600;margin-top:3px}
 
-.pings{display:grid;gap:10px}
-.ping{display:grid;grid-template-columns:minmax(0,1fr) 140px 80px;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
-.ping .n{font-weight:600;font-size:13.5px}
-.ping .h{font-size:12px;color:var(--ink-3)}
-.ping .v{text-align:right;font:600 18px/1 var(--font-display);font-variant-numeric:tabular-nums}
-.ping .v small{font-size:12px;color:var(--ink-3);font-weight:600}
-.spark{width:140px;height:34px;display:block;overflow:visible}
-.spark-wrap{position:relative}
-.tip{position:absolute;bottom:100%;transform:translate(-50%,-6px);background:var(--ink);color:var(--surface);font-size:11.5px;padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
-.netstats{display:flex;gap:18px;margin-top:12px;font-size:12.5px;color:var(--ink-3)}
-.netstats b{color:var(--ink);font-variant-numeric:tabular-nums}
-
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13.5px;transition:background .12s;white-space:nowrap}
-.btn:hover{background:var(--surface-2)}
-.btn:disabled{opacity:.55;cursor:not-allowed}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.block{width:100%}
-.speed{display:flex;align-items:baseline;gap:6px;margin:4px 0 14px}
-.speed .num{font:600 40px/1 var(--font-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.speed .u{color:var(--ink-3);font-weight:600}
-.muted{font-size:12.5px;color:var(--ink-3)}
-.vpn-state{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
-.pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
-.pill.on{background:var(--good-soft);color:var(--good)}
-.pill.err{background:var(--critical-soft);color:var(--critical)}
-.msg{font-size:12.5px;color:var(--ink-2);margin-bottom:12px;overflow-wrap:anywhere;min-height:19px}
-
-/* Detailed */
-.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-.search{flex:1;min-width:200px;height:38px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);padding:0 12px}
-.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.filters{display:flex;gap:6px;flex-wrap:wrap}
-.f{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2)}
-.f[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
-details.grp{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface)}
-details.grp summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600}
-details.grp summary::-webkit-details-marker{display:none}
-details.grp summary .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-right:8px}
-details.grp summary .c{font-size:12.5px;color:var(--ink-3);font-weight:500}
-details.grp summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);margin-left:6px;transition:transform .15s}
-details.grp[open] summary::after{transform:rotate(-135deg)}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;font-size:11.5px;font-weight:600;color:var(--ink-3);padding:6px 14px;border-top:1px solid var(--line)}
-td{padding:7px 14px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
-td.num,th.num{text-align:right;white-space:nowrap}
-tr.hid td{opacity:.4}
-td.cb{width:36px}
-td.type{color:var(--ink-3);white-space:nowrap}
-.empty{padding:28px;text-align:center;color:var(--ink-3)}
+/* Power */
+.pw-total{display:flex;align-items:baseline;gap:8px}
+.pw-total .v{font:600 44px/1 var(--font-display);letter-spacing:-.02em}
+.pw-total .u{color:var(--ink-3);font-weight:600}
+.stack{display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--surface-2);margin:14px 0 8px;gap:2px}
+.stack i{display:block;height:100%;transition:width .9s var(--ease)}
+.pw-legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12.5px}
+.pw-legend div{display:flex;justify-content:space-between;gap:8px;color:var(--ink-2)}
+.pw-legend span:first-child{display:inline-flex;align-items:center;gap:7px}
+.pw-legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.psu{margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.psu-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:13px}
+.psu input{width:96px;height:34px;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;background:var(--surface);text-align:right}
+.psu input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 
 /* Speed test */
-.st{display:grid;grid-template-columns:300px minmax(0,1fr);gap:28px;align-items:center}
-.gauge-wrap{position:relative;width:280px;height:250px;margin:0 auto}
-.gauge-wrap svg{width:280px;height:230px;display:block;overflow:visible}
-.g-center{position:absolute;left:0;right:0;top:78px;text-align:center;pointer-events:none}
-.g-val{font:600 52px/1 var(--font-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
-.g-unit{font-size:13px;color:var(--ink-3);font-weight:600;margin-top:2px}
-.g-phase{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface-2);padding:4px 10px;border-radius:999px}
+.st{display:grid;grid-template-columns:330px minmax(0,1fr);gap:30px;align-items:center}
+.gauge-wrap{position:relative;width:310px;height:330px;margin:0 auto}
+.gauge-wrap svg{width:310px;height:262px;display:block;overflow:visible}
+.g-center{position:absolute;left:0;right:0;top:176px;text-align:center;pointer-events:none}
+.g-val{font:600 40px/1 var(--font-display);letter-spacing:-.03em}
+.g-unit{font-size:12.5px;color:var(--ink-3);font-weight:600;margin-top:2px}
+.g-tick{font-size:10.5px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.g-phase{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--surface-2);padding:4px 10px;border-radius:999px}
 .g-phase .pd{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
 .g-phase.on .pd{background:var(--series);animation:blink 1s ease-in-out infinite}
 .g-phase.up .pd{background:var(--series-2)}
 @keyframes blink{50%{opacity:.25}}
-.go{position:absolute;left:50%;bottom:0;transform:translateX(-50%);min-width:150px;height:44px;border-radius:999px;font-size:15px}
-.g-tick{font-size:10.5px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
-.results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
-.res{border:1px solid var(--line);border-radius:12px;padding:12px 14px;transition:border-color .2s,background .2s}
+#g-needle{transition:transform .25s linear;transform-origin:155px 150px}
+.go{position:absolute;left:50%;bottom:0;transform:translateX(-50%);min-width:160px;height:46px;border-radius:999px;font-size:15px;border:0;color:#fff;font-weight:700;letter-spacing:.02em;
+  background:linear-gradient(135deg,var(--series),#5b9bf0);box-shadow:0 10px 24px -10px rgba(42,120,214,.8);transition:transform .15s,box-shadow .2s}
+.go:hover{transform:translateX(-50%) translateY(-1px);box-shadow:0 14px 28px -10px rgba(42,120,214,.9)}
+.go:active{transform:translateX(-50%) translateY(1px)}
+.go.stop{background:linear-gradient(135deg,#5a5b60,#7a7b80);box-shadow:none}
+
+.prog{margin-bottom:16px}
+.prog-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.prog-top b{font:600 13px var(--font)}
+.prog-top .pct{font:700 22px/1 var(--font-display);letter-spacing:-.02em}
+.track{position:relative;height:16px;border-radius:99px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.track .fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:99px;
+  background:linear-gradient(90deg,#4f8ff0,var(--series) 45%,var(--series-2));background-size:200% 100%;
+  box-shadow:0 0 18px -2px color-mix(in srgb,var(--series) 70%,transparent);transition:width .25s linear}
+.track .fill::after{content:"";position:absolute;inset:0;border-radius:99px;
+  background:repeating-linear-gradient(-45deg,rgba(255,255,255,.22) 0 10px,transparent 10px 20px);animation:stripes 1s linear infinite;opacity:0;transition:opacity .3s}
+.track.running .fill::after{opacity:1}
+@keyframes stripes{to{background-position:28px 0}}
+.track .mark{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--surface)}
+.steps{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);margin-top:6px}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.done{color:var(--good);font-weight:600}
+
+.results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.res{border:1px solid var(--line);border-radius:12px;padding:11px 14px;transition:border-color .25s,background .25s,transform .25s var(--ease)}
 .res .l{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
 .res .l i{width:10px;height:3px;border-radius:2px;display:inline-block}
-.res .v{font:600 26px/1.15 var(--font-display);font-variant-numeric:tabular-nums;margin-top:4px}
+.res .v{font:600 26px/1.15 var(--font-display);margin-top:4px}
 .res .v small{font-size:12.5px;color:var(--ink-3);font-weight:600;margin-left:3px}
-.res.active{border-color:var(--accent);background:var(--accent-soft)}
+.res .x{font-size:11.5px;color:var(--ink-3);min-height:17px}
+.res.active{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-2px)}
+.extras{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;min-height:34px}
+.gradebox{display:inline-flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;border:1px solid var(--line);border-radius:12px;font-size:12.5px;color:var(--ink-2)}
+.grade{width:34px;height:24px;border-radius:7px;display:grid;place-items:center;font:700 13px var(--font-display);color:#fff;background:var(--ink-3)}
+.grade.g-a{background:var(--good)} .grade.g-b{background:#6aa84f} .grade.g-c{background:var(--warning);color:#000} .grade.g-d,.grade.g-f{background:var(--critical)}
+.q{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:var(--surface-2);font-size:12px;color:var(--ink-2);animation:rise .4s var(--ease) both}
+.q b{font-weight:700}
+.q.Great b{color:var(--good)} .q.Good b{color:#6aa84f} .q.Poor b{color:var(--critical)}
 .chart-wrap{position:relative}
 .chart-wrap svg{width:100%;height:150px;display:block}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin:2px 0 6px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:14px;height:2px;border-radius:2px;display:inline-block}
-.xtip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
+.xtip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
 .st-meta{font-size:12.5px;color:var(--ink-3);margin-top:8px;min-height:19px}
+.history{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;display:grid;gap:4px}
+.hrow{display:grid;grid-template-columns:120px 1fr 1fr 60px 40px;gap:10px;font-size:12.5px;align-items:center;color:var(--ink-2)}
+.hrow .hb{height:6px;border-radius:99px;background:var(--series-track);overflow:hidden}
+.hrow .hb i{display:block;height:100%;border-radius:99px}
 
-/* Detailed: organized sub-sections */
+/* Connection + VPN */
+.pings{display:grid;gap:10px}
+.ping{display:grid;grid-template-columns:minmax(0,1fr) 160px 84px;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.ping .n{font-weight:600;font-size:13.5px}
+.ping .h{font-size:12px;color:var(--ink-3)}
+.ping .v{text-align:right;font:600 20px/1 var(--font-display)}
+.ping .v small{font-size:12px;color:var(--ink-3);font-weight:600}
+.spark{width:160px;height:36px;display:block;overflow:visible}
+.spark path{transition:d .95s linear}
+.spark-wrap{position:relative}
+.tip{position:absolute;bottom:100%;transform:translate(-50%,-6px);background:var(--ink);color:var(--surface);font-size:11.5px;padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none}
+.netstats{display:flex;gap:18px;margin-top:12px;font-size:12.5px;color:var(--ink-3)}
+.netstats b{color:var(--ink)}
+.vpn-row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.vpn-row .t{font-weight:600}
+.big-switch{position:relative;width:56px;height:32px;flex:none}
+.big-switch input{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1}
+.big-switch span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .25s}
+.big-switch span::after{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .3s var(--ease)}
+.big-switch input:checked+span{background:var(--good)}
+.big-switch input:checked+span::after{transform:translateX(24px)}
+.big-switch.busy span{background:var(--warning)}
+.msg{font-size:12.5px;color:var(--ink-2);margin-top:10px;overflow-wrap:anywhere;min-height:19px}
+
+/* Detailed */
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.search{flex:1;min-width:200px;height:38px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);padding:0 12px}
+.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.f{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2);transition:all .15s}
+.f[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13px}
+.btn:hover{background:var(--surface-2)}
+details.grp{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface)}
+details.grp summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-right:8px}
+details.grp summary .c{font-size:12.5px;color:var(--ink-3);font-weight:500}
+details.grp summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);margin-left:6px;transition:transform .2s}
+details.grp[open] summary::after{transform:rotate(-135deg)}
 .subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;padding:4px 14px 14px}
 .subsec{border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.subsec h4{display:flex;justify-content:space-between;align-items:center;font:600 12.5px var(--font);padding:9px 12px;background:var(--surface-2);color:var(--ink)}
+.subsec h4{display:flex;justify-content:space-between;align-items:center;font:600 12.5px var(--font);padding:9px 12px;background:var(--surface-2)}
 .subsec h4 span{font-weight:500;color:var(--ink-3)}
-.subsec table td,.subsec table th{padding:6px 12px}
-.subsec table tr:first-child td{border-top:0}
-.hint{font-size:12.5px;color:var(--ink-3);margin:-6px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;font-weight:600;color:var(--ink-3);padding:6px 12px;border-top:1px solid var(--line)}
+td{padding:6px 12px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+td.n,th.n{text-align:right;white-space:nowrap}
+tr.hid td{opacity:.4}
+td.cb{width:34px}
+.hint{font-size:12.5px;color:var(--ink-3);margin:-4px 0 12px}
+.empty{padding:28px;text-align:center;color:var(--ink-3)}
 
-@media (max-width:1200px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.st{grid-template-columns:1fr}}
-@media (max-width:640px){.results{grid-template-columns:1fr 1fr}.subgrid{grid-template-columns:1fr;padding:4px 8px 10px}}
+@media (max-width:1250px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.st{grid-template-columns:1fr}}
 @media (max-width:640px){
   .wrap{padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
-  .tiles{grid-template-columns:1fr 1fr;gap:10px}
-  .tile{padding:14px}
-  .tile .value{font-size:28px}
-  .ping{grid-template-columns:minmax(0,1fr) 70px}
-  .ping .spark-wrap{display:none}
-  .btn{min-height:48px} .seg button{height:40px}
-  td.type{display:none}
+  .tiles{grid-template-columns:1fr 1fr;gap:10px} .tile{padding:14px} .tile .value{font-size:28px}
+  .results{grid-template-columns:1fr 1fr}
+  .fan{grid-template-columns:40px minmax(0,1fr) 80px} .fan .bars{display:none}
+  .ping{grid-template-columns:minmax(0,1fr) 70px} .ping .spark-wrap{display:none}
+  .hrow{grid-template-columns:90px 1fr 1fr}.hrow span:nth-child(n+4){display:none}
+  .subgrid{grid-template-columns:1fr;padding:4px 8px 10px}
+  .seg button{height:40px}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -192,17 +261,14 @@ td.type{color:var(--ink-3);white-space:nowrap}
     </div>
     <div class="right">
       <span class="chip" id="live" role="status"><span class="dot"></span>Connecting…</span>
-      <div class="seg" role="group" aria-label="View">
+      <div class="seg" role="group" aria-label="View"><span class="pill-bg" id="seg-bg"></span>
         <button type="button" id="m-simple" aria-pressed="true">Simple</button>
         <button type="button" id="m-detail" aria-pressed="false">Detailed</button>
       </div>
     </div>
   </header>
 
-  <div class="card offline" id="offline" hidden>
-    <b>Hardware sensors are offline</b>
-    <span id="offline-msg">Start LibreHardwareMonitor and turn on Options &gt; Remote Web Server (port 8085). Running <code>start_all_windows.ps1</code> does this for you.</span>
-  </div>
+  <div class="card offline" id="offline" hidden><b>Hardware sensors are offline</b><div id="offline-msg" class="muted">Start LibreHardwareMonitor with Options &gt; Remote Web Server on (port 8085).</div></div>
 
   <section id="simple">
     <div class="card health good" id="health" hidden>
@@ -210,6 +276,26 @@ td.type{color:var(--ink-3);white-space:nowrap}
       <div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div>
     </div>
     <div class="tiles" id="tiles"></div>
+
+    <div class="grid2 mt">
+      <section class="card">
+        <div class="card-h"><h2>Cooling</h2><span class="sub" id="cool-sub"></span></div>
+        <div class="card-b"><div class="fans" id="fans"></div></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>System power</h2><span class="sub">CPU and GPU measured, the rest estimated</span></div>
+        <div class="card-b">
+          <div class="pw-total"><span class="v num" id="pw-total">–</span><span class="u">W</span><span class="muted" id="pw-wall"></span></div>
+          <div class="stack" id="pw-stack" role="img" aria-label="Power by component"></div>
+          <div class="pw-legend" id="pw-legend"></div>
+          <div class="psu">
+            <div class="psu-row"><label for="psu-w">Your power supply</label><span><input id="psu-w" type="number" min="200" max="3000" step="50" inputmode="numeric" placeholder="e.g. 850" /> W</span></div>
+            <div class="meter" id="psu-meter"><i style="width:0"></i></div>
+            <div class="psu-row" style="margin:8px 0 0"><span class="status good" id="psu-status">Enter your PSU wattage</span><span class="muted num" id="psu-peak"></span></div>
+          </div>
+        </div>
+      </section>
+    </div>
   </section>
 
   <section id="detail" hidden>
@@ -219,51 +305,55 @@ td.type{color:var(--ink-3);white-space:nowrap}
         <div class="filters" id="filters" role="group" aria-label="Sensor types"></div>
         <button type="button" class="btn" id="show-all">Show hidden</button>
       </div>
-      <p class="hint">Each part of your PC is split into sections (temperatures, power, clocks, usage, fans, voltages). Untick a sensor to hide it; "Show hidden" brings it back.</p>
+      <p class="hint">Each part of your PC is split into sections (temperatures, power, clocks, usage, fans, voltages). Untick a sensor to hide it.</p>
       <div id="groups"></div>
     </div></div>
   </section>
 
-  <section class="card" style="margin-top:16px" aria-labelledby="h-st">
+  <section class="card mt" aria-labelledby="h-st">
     <div class="card-h"><h2 id="h-st">Speed test</h2><span class="sub" id="st-sub">About 25 seconds · ping, download, upload</span></div>
     <div class="card-b st">
       <div class="gauge-wrap">
-        <svg id="gauge" viewBox="0 0 280 230" role="img" aria-label="Speed gauge"></svg>
-        <div class="g-center"><div class="g-val" id="g-val">0</div><div class="g-unit">Mbps</div><div class="g-phase" id="g-phase"><span class="pd"></span><span id="g-phase-t">Ready</span></div></div>
-        <button type="button" class="btn primary go" id="st-go">Start</button>
+        <svg id="gauge" viewBox="0 0 310 262" role="img" aria-label="Speed gauge"></svg>
+        <div class="g-center"><div class="g-val num" id="g-val">0</div><div class="g-unit">Mbps</div><div class="g-phase" id="g-phase"><span class="pd"></span><span id="g-phase-t">Ready</span></div></div>
+        <button type="button" class="go" id="st-go">START</button>
       </div>
       <div>
-        <div class="results">
-          <div class="res" id="r-ping"><div class="l">Ping</div><div class="v"><span>–</span><small>ms</small></div></div>
-          <div class="res" id="r-jitter"><div class="l">Jitter</div><div class="v"><span>–</span><small>ms</small></div></div>
-          <div class="res" id="r-down"><div class="l"><i style="background:var(--series)"></i>Download</div><div class="v"><span>–</span><small>Mbps</small></div></div>
-          <div class="res" id="r-up"><div class="l"><i style="background:var(--series-2)"></i>Upload</div><div class="v"><span>–</span><small>Mbps</small></div></div>
+        <div class="prog">
+          <div class="prog-top"><b id="prog-label">Ready when you are</b><span class="pct num" id="prog-pct">0%</span></div>
+          <div class="track" id="track"><div class="fill" id="prog-fill"></div><span class="mark" style="left:9%"></span><span class="mark" style="left:54.5%"></span></div>
+          <div class="steps"><span id="s-ping">Ping</span><span id="s-down">Download</span><span id="s-up">Upload</span><span id="s-done">Results</span></div>
         </div>
-        <div class="legend"><span><i style="background:var(--series)"></i>Download</span><span><i style="background:var(--series-2)"></i>Upload</span><span style="color:var(--ink-3)">Mbps over each 10-second phase</span></div>
+        <div class="results">
+          <div class="res" id="r-ping"><div class="l">Ping</div><div class="v"><span class="num">–</span><small>ms</small></div><div class="x" id="x-ping">idle</div></div>
+          <div class="res" id="r-jitter"><div class="l">Jitter</div><div class="v"><span class="num">–</span><small>ms</small></div><div class="x">variation</div></div>
+          <div class="res" id="r-down"><div class="l"><i style="background:var(--series)"></i>Download</div><div class="v"><span class="num">–</span><small>Mbps</small></div><div class="x" id="x-down"></div></div>
+          <div class="res" id="r-up"><div class="l"><i style="background:var(--series-2)"></i>Upload</div><div class="v"><span class="num">–</span><small>Mbps</small></div><div class="x" id="x-up"></div></div>
+        </div>
+        <div class="extras" id="extras"></div>
+        <div class="legend"><span><i style="background:var(--series)"></i>Download</span><span><i style="background:var(--series-2)"></i>Upload</span><span style="color:var(--ink-3)">Mbps over each 10-second phase · hover for values</span></div>
         <div class="chart-wrap" id="chart-wrap"><svg id="st-chart" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Throughput during the test"></svg></div>
         <div class="st-meta" id="st-meta"></div>
+        <div class="history" id="history" hidden></div>
       </div>
     </div>
   </section>
 
-  <div class="grid2" style="margin-top:16px">
+  <div class="grid2 mt">
     <section class="card">
-      <div class="card-h"><h2>Connection</h2><span class="sub" id="net-sub">Checks every 2 s, uses almost no data</span></div>
+      <div class="card-h"><h2>Connection</h2><span class="sub">Live latency every second</span></div>
+      <div class="card-b"><div class="pings" id="pings"></div><div class="netstats" id="netstats"></div></div>
+    </section>
+    <section class="card">
+      <div class="card-h"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div>
       <div class="card-b">
-        <div class="pings" id="pings"></div>
-        <div class="netstats" id="netstats"></div>
+        <div class="vpn-row">
+          <div><div class="t" id="vpn-title">Router VPN</div><div class="muted" id="vpn-sub">Checking…</div></div>
+          <label class="big-switch" id="vpn-switch"><input type="checkbox" id="vpn-cb" aria-label="VPN on or off" /><span></span></label>
+        </div>
+        <div class="msg" id="vpn-msg"></div>
       </div>
     </section>
-    <div class="stack">
-      <section class="card">
-        <div class="card-h"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div>
-        <div class="card-b">
-          <div class="vpn-state"><span class="muted">Router VPN via your OneScript</span><span class="pill" id="vpn-pill">Unknown</span></div>
-          <div class="msg" id="vpn-msg"></div>
-          <button type="button" class="btn block" id="vpn-btn">Toggle VPN</button>
-        </div>
-      </section>
-    </div>
   </div>
 </div>
 
@@ -271,91 +361,214 @@ td.type{color:var(--ink-3);white-space:nowrap}
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store = { get(k,d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
-const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
-const n1 = (v) => v == null ? "–" : (Math.round(v*10)/10).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1});
+const n0 = (v) => v == null || isNaN(v) ? "–" : Math.round(v).toLocaleString();
+const n1 = (v) => v == null || isNaN(v) ? "–" : (Math.round(v*10)/10).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1});
 const fmtRate = (b) => b == null ? "–" : b >= 1e6 ? `${n1(b/1e6)} MB/s` : b >= 1e3 ? `${n0(b/1e3)} KB/s` : `${n0(b)} B/s`;
+const auto = (v) => v == null ? "–" : (Math.abs(v) >= 100 ? n0(v) : n1(v));
+
+/* ---------- Smooth number tweening (every number glides, never jumps) ---------- */
+const T = new Map(); let rafT = 0;
+function tween(el, to, fmt = auto, dur = 800){
+  if (!el) return;
+  if (to == null || isNaN(to)) { T.delete(el); el._cur = null; el.textContent = "–"; return; }
+  const from = el._cur == null ? to : el._cur;
+  T.set(el, {from, to, start: performance.now(), dur, fmt});
+  if (!rafT) rafT = requestAnimationFrame(stepT);
+}
+function stepT(now){
+  rafT = 0;
+  for (const [el, s] of T) {
+    const k = Math.min(1, (now - s.start) / s.dur), e = 1 - Math.pow(1 - k, 3);
+    el._cur = s.from + (s.to - s.from) * e; el.textContent = s.fmt(el._cur);
+    if (k >= 1) T.delete(el);
+  }
+  if (T.size) rafT = requestAnimationFrame(stepT);
+}
+
+/* ---------- Smooth curve through points (Catmull-Rom -> Bezier) ---------- */
+function smoothPath(pts){
+  if (pts.length < 2) return "";
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+    const c1 = [p1[0] + (p2[0]-p0[0])/6, p1[1] + (p2[1]-p0[1])/6], c2 = [p2[0] - (p3[0]-p1[0])/6, p2[1] - (p3[1]-p1[1])/6];
+    d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
 let snap = null, mode = store.get("mode","simple");
 let hidden = new Set(store.get("hiddenSensors", []));
 let types = new Set(store.get("types", ["Temperature","Load","Fan","Power","Clock","Voltage"]));
-const ALL_TYPES = ["Temperature","Load","Fan","Power","Clock","Voltage","Data","Throughput","Control","Level","Other"];
+const ALL_TYPES = ["Temperature","Power","Load","Clock","Fan","Control","Voltage","Current","Data","SmallData","Throughput","Level","Timing","Factor","Energy","Other"];
+const TYPE_LABEL = {Temperature:"Temps",SmallData:"Memory MB",Throughput:"Network"};
 const KIND_LABEL = {cpu:"CPU",gpu:"GPU",memory:"Memory",storage:"Drive",motherboard:"Motherboard",network:"Network",battery:"Battery",psu:"Power supply",other:"Other"};
+const hist = { cpu:[], gpu:[], ram:[], pw:[] }; const HMAX = 60;
 
 function setMode(m){
   mode = m; store.set("mode", m);
   $("m-simple").setAttribute("aria-pressed", m === "simple"); $("m-detail").setAttribute("aria-pressed", m === "detail");
   $("simple").hidden = m !== "simple"; $("detail").hidden = m !== "detail";
+  const b = m === "simple" ? $("m-simple") : $("m-detail"); $("seg-bg").style.left = b.offsetLeft + "px"; $("seg-bg").style.width = b.offsetWidth + "px";
   render();
 }
 $("m-simple").onclick = () => setMode("simple"); $("m-detail").onclick = () => setMode("detail");
 
 function level(v, warn, crit){ return v == null ? "good" : v >= crit ? "critical" : v >= warn ? "warning" : "good"; }
-const STATUS_TEXT = {good:"Normal", warning:"Warm", critical:"Hot"};
-function tile({label, sub, value, unit, meta, pct, lvl, statusText}){
-  return `<div class="card tile">
-    <div class="label"><span>${esc(label)}</span><span title="${esc(sub||"")}">${esc(sub||"")}</span></div>
-    <div class="value">${value}<small>${esc(unit||"")}</small></div>
-    <div class="meta">${meta || ""}</div>
-    ${pct == null ? "" : `<div class="meter ${lvl}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}" aria-label="${esc(label)}"><i style="width:${Math.max(2,Math.min(100,pct))}%"></i></div>`}
-    ${lvl ? `<div class="status ${lvl}">${esc(statusText || STATUS_TEXT[lvl])}</div>` : ""}
-  </div>`;
+function trendSVG(id, color){ return `<svg class="trend" viewBox="0 0 300 44" preserveAspectRatio="none" aria-hidden="true">
+  <defs><linearGradient id="g-${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+  <path id="ta-${id}" fill="url(#g-${id})" d=""/><path id="tl-${id}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke" d=""/></svg>`; }
+function drawTrend(id, arr){
+  if (arr.length < 2) return;
+  const pad = HMAX - arr.length, max = Math.max(...arr) * 1.08, min = Math.min(...arr) * 0.92, span = Math.max(1, max - min);
+  const pts = arr.map((v, i) => [((i + pad) / (HMAX - 1)) * 300, 42 - ((v - min) / span) * 38]);
+  const line = smoothPath(pts);
+  $("tl-" + id).setAttribute("d", line);
+  $("ta-" + id).setAttribute("d", line + ` L${pts[pts.length-1][0].toFixed(1)},44 L${pts[0][0].toFixed(1)},44 Z`);
 }
+function buildTiles(){
+  if ($("t-cpu")) return;
+  const tile = (id, label, unit, color) => `<div class="card tile"><div class="label"><span>${label}</span><span id="t-${id}-sub"></span></div>
+    <div class="value"><span class="num" id="t-${id}">–</span><small>${unit}</small></div><div class="meta num" id="t-${id}-meta"></div>
+    ${trendSVG(id, color)}<div class="status good" id="t-${id}-st">Normal</div></div>`;
+  $("tiles").innerHTML = tile("cpu","CPU","°C","var(--series)") + tile("gpu","Graphics","°C","var(--series)") + tile("ram","Memory","%","var(--series)") + tile("pw","System power","W","var(--series-2)");
+}
+function setStatus(id, lvl, text){ const el = $(id); el.className = "status " + lvl; el.textContent = text; }
 
 function renderSimple(){
   const hw = snap.hardware, s = hw.summary || {};
-  if (!hw.live) { $("tiles").innerHTML = ""; $("health").hidden = true; return; }
-  const h = s.health || {score:100,label:"All good",notes:[]};
-  const hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
-  $("health").hidden = false; $("health").className = `card health ${hl}`;
-  $("health-icon").textContent = hl === "good" ? "✓" : "!";
+  if (!hw.live) { $("health").hidden = true; return; }
+  buildTiles();
+  const h = s.health || {score:100,label:"All good",notes:[]}, hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
+  $("health").hidden = false; $("health").className = `card health ${hl}`; $("health-icon").textContent = hl === "good" ? "✓" : "!";
   $("health-t").textContent = h.label; $("health-s").textContent = h.notes.join(" · ");
-  const cpuL = level(s.cpu_temp, 80, 90), gpuT = s.gpu_hotspot ?? s.gpu_temp, gpuL = level(gpuT, 85, 100), ramL = level(s.ram_load, 80, 92);
-  const fans = s.fans || [];
-  $("tiles").innerHTML = [
-    tile({label:"CPU", sub:s.cpu_name, value:n0(s.cpu_temp), unit:"°C", lvl:cpuL, pct:s.cpu_load,
-          meta:`${n0(s.cpu_load)}% busy${s.cpu_power != null ? ` · ${n0(s.cpu_power)} W` : ""}`}),
-    tile({label:"Graphics", sub:s.gpu_name, value:n0(s.gpu_temp), unit:"°C", lvl:s.gpu_name ? gpuL : null, pct:s.gpu_load,
-          meta:s.gpu_name ? `${n0(s.gpu_load)}% busy${s.gpu_hotspot != null ? ` · hot spot ${n0(s.gpu_hotspot)}°C` : ""}` : "No GPU sensors"}),
-    tile({label:"Memory", sub:s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : "", value:n0(s.ram_load), unit:"%", pct:s.ram_load, lvl:ramL,
-          statusText:{good:"Plenty free",warning:"Getting full",critical:"Almost full"}[ramL],
-          meta:s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : ""}),
-    tile({label:"Cooling", sub:`${fans.length} fan${fans.length === 1 ? "" : "s"}`, value:n0(s.fan_max_rpm), unit:"RPM",
-          meta:fans.length ? `Fastest fan${s.storage_max_temp != null ? ` · drives ${n0(s.storage_max_temp)}°C` : ""}` : "No fan sensors reported"}),
-  ].join("");
+  const push = (k, v) => { if (v == null) return; hist[k].push(v); if (hist[k].length > HMAX) hist[k].shift(); };
+  push("cpu", s.cpu_temp); push("gpu", s.gpu_temp); push("ram", s.ram_load); push("pw", hw.power && hw.power.dc_total_w);
+  tween($("t-cpu"), s.cpu_temp, n0); $("t-cpu-sub").textContent = s.cpu_name || "";
+  $("t-cpu-meta").textContent = `${n0(s.cpu_load)}% busy${s.cpu_power != null ? ` · ${n0(s.cpu_power)} W` : ""}`;
+  const cl = level(s.cpu_temp, 80, 90); setStatus("t-cpu-st", cl, {good:"Normal",warning:"Warm",critical:"Hot"}[cl]);
+  tween($("t-gpu"), s.gpu_temp, n0); $("t-gpu-sub").textContent = s.gpu_name || "";
+  $("t-gpu-meta").textContent = s.gpu_name ? `${n0(s.gpu_load)}% busy${s.gpu_hotspot != null ? ` · hot spot ${n0(s.gpu_hotspot)}°C` : ""}` : "No GPU sensors";
+  const gl = level(s.gpu_hotspot ?? s.gpu_temp, 85, 100); setStatus("t-gpu-st", gl, {good:"Normal",warning:"Warm",critical:"Hot"}[gl]);
+  tween($("t-ram"), s.ram_load, n0); $("t-ram-sub").textContent = s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : "";
+  $("t-ram-meta").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : "";
+  const rl = level(s.ram_load, 80, 92); setStatus("t-ram-st", rl, {good:"Plenty free",warning:"Getting full",critical:"Almost full"}[rl]);
+  const pw = hw.power || {}; tween($("t-pw"), pw.dc_total_w, n0); $("t-pw-sub").textContent = "estimated";
+  $("t-pw-meta").textContent = pw.wall_w ? `≈ ${n0(pw.wall_w)} W from the wall` : "";
+  const psu = +store.get("psuW", 0); const load = psu && pw.dc_total_w ? pw.dc_total_w / psu * 100 : null;
+  const pl = load == null ? "good" : level(load, 70, 85); setStatus("t-pw-st", pl, load == null ? "Set PSU below" : `${n0(load)}% of your PSU`);
+  ["cpu","gpu","ram","pw"].forEach(k => drawTrend(k, hist[k]));
+  renderCooling(); renderPower();
 }
 
+/* ---------- Cooling ---------- */
+const FAN_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 10.6c.3-2.9 1.6-6.6 4.6-6.6 2.2 0 3 1.9 2.3 3.4-.9 1.9-3.6 3-6.9 3.2zm1.4 1.4c2.9.3 6.6 1.6 6.6 4.6 0 2.2-1.9 3-3.4 2.3-1.9-.9-3-3.6-3.2-6.9zM12 13.4c-.3 2.9-1.6 6.6-4.6 6.6-2.2 0-3-1.9-2.3-3.4.9-1.9 3.6-3 6.9-3.2zM10.6 12c-2.9-.3-6.6-1.6-6.6-4.6 0-2.2 1.9-3 3.4-2.3 1.9.9 3 3.6 3.2 6.9z"/><circle cx="12" cy="12" r="1.6"/></svg>`;
+const fanAngle = {}; let fanRaf = 0, fanLast = 0;
+function spinFans(t){
+  const dt = fanLast ? (t - fanLast) / 1000 : 0; fanLast = t;
+  document.querySelectorAll(".fan[data-rpm]").forEach(el => {
+    const k = el.dataset.key, rpm = +el.dataset.rpm || 0;
+    fanAngle[k] = ((fanAngle[k] || 0) + dt * rpm * 0.6) % 360; // 0.6 deg per rpm-second: visibly faster when it spins faster
+    el.querySelector(".blade svg").style.transform = `rotate(${fanAngle[k]}deg)`;
+  });
+  fanRaf = requestAnimationFrame(spinFans);
+}
+function renderCooling(){
+  const c = (snap.hardware.cooling || {}), fans = c.fans || [], names = store.get("fanNames", {});
+  $("cool-sub").textContent = `${fans.filter(f => f.spinning).length} of ${fans.length} spinning${c.fancontrol ? " · curves from FanControl" : ""}`;
+  const box = $("fans");
+  if (box.dataset.sig !== fans.map(f => f.key).join("|")) {
+    box.dataset.sig = fans.map(f => f.key).join("|");
+    box.innerHTML = fans.length ? fans.map(f => `<div class="fan" data-key="${esc(f.key)}">
+      <div class="blade">${FAN_SVG}</div>
+      <div style="min-width:0"><div class="nm"><span class="fn"></span><button type="button" data-rename="${esc(f.key)}">Rename</button></div><div class="sub fs"></div></div>
+      <div class="bars"><div class="bl"><span>Speed vs max</span><span class="num fo"></span></div><div class="bar"><i class="fo-b" style="width:0"></i></div>
+        <div class="bl"><span>Control</span><span class="num fd"></span></div><div class="bar duty"><i class="fd-b" style="width:0"></i></div></div>
+      <div class="rpm"><span class="num fr">–</span><small>RPM</small></div></div>`).join("")
+      : `<div class="empty">No fan sensors reported by LibreHardwareMonitor.</div>`;
+  }
+  fans.forEach(f => {
+    const el = box.querySelector(`.fan[data-key="${CSS.escape(f.key)}"]`); if (!el) return;
+    el.dataset.rpm = f.rpm; el.classList.toggle("off", !f.spinning);
+    el.querySelector(".fn").textContent = names[f.key] || f.name;
+    el.querySelector(".fs").textContent = [f.location, f.driven_by ? (f.driven_by.startsWith("Not") ? f.driven_by : `follows ${f.driven_by}`) : null, f.curve ? `curve "${f.curve}"` : null].filter(Boolean).join(" · ");
+    el.querySelector(".fs").title = el.querySelector(".fs").textContent;
+    tween(el.querySelector(".fr"), f.rpm, n0);
+    el.querySelector(".fo").textContent = f.output_pct == null ? "–" : `${n0(f.output_pct)}%`; el.querySelector(".fo-b").style.width = `${f.output_pct || 0}%`;
+    el.querySelector(".fd").textContent = f.duty_pct == null ? "fixed" : `${n0(f.duty_pct)}%`; el.querySelector(".fd-b").style.width = `${f.duty_pct == null ? 100 : f.duty_pct}%`;
+  });
+  if (!fanRaf) fanRaf = requestAnimationFrame(spinFans);
+}
+$("fans").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-rename]"); if (!b) return;
+  const names = store.get("fanNames", {}), cur = names[b.dataset.rename] || b.closest(".fan").querySelector(".fn").textContent;
+  const v = prompt("Name this fan (for example: Front intake, CPU cooler, Rear exhaust). Leave empty to reset.", cur);
+  if (v === null) return; if (v.trim()) names[b.dataset.rename] = v.trim().slice(0, 40); else delete names[b.dataset.rename];
+  store.set("fanNames", names); renderCooling();
+});
+
+/* ---------- Power ---------- */
+let pwPeak = 0;
+function renderPower(){
+  const p = snap.hardware.power; if (!p) return;
+  tween($("pw-total"), p.dc_total_w, n0); $("pw-wall").textContent = `≈ ${n0(p.wall_w)} W from the wall`;
+  pwPeak = Math.max(pwPeak, p.dc_total_w || 0);
+  const parts = [["CPU package", p.measured["CPU package"], "var(--series)"], ["Graphics card", p.measured["Graphics card"], "var(--series-2)"],
+    ...Object.entries(p.estimated).map(([k, v], i) => [k + " (est.)", v, ["#1baf7a","#eda100","#e87ba4","#6250d6","#8f8e86"][i % 5]])];
+  const total = parts.reduce((a, x) => a + (x[1] || 0), 0) || 1;
+  const stack = $("pw-stack");
+  if (stack.children.length !== parts.length) stack.innerHTML = parts.map(x => `<i style="background:${x[2]};width:0" title="${esc(x[0])}"></i>`).join("");
+  parts.forEach((x, i) => { stack.children[i].style.width = `${(x[1] || 0) / total * 100}%`; stack.children[i].title = `${x[0]}: ${n1(x[1])} W`; });
+  $("pw-legend").innerHTML = parts.map(x => `<div><span><i style="background:${x[2]}"></i>${esc(x[0])}</span><span class="num">${n1(x[1])} W</span></div>`).join("");
+  const psu = +store.get("psuW", 0); if (document.activeElement !== $("psu-w")) $("psu-w").value = psu || "";
+  const m = $("psu-meter"), st = $("psu-status");
+  if (psu) {
+    const load = p.dc_total_w / psu * 100, lv = level(load, 70, 85);
+    m.className = "meter " + (lv === "good" ? "" : lv); m.firstElementChild.style.width = Math.min(100, load) + "%";
+    st.className = "status " + lv;
+    st.textContent = lv === "good" ? `Handling it like a champ: ${n0(load)}% load` : lv === "warning" ? `Working hard: ${n0(load)}% load` : `Near its limit: ${n0(load)}% load`;
+    $("psu-peak").textContent = `Peak since open ${n0(pwPeak)} W · headroom ${n0(psu - p.dc_total_w)} W`;
+  } else { st.className = "status good"; st.textContent = "Enter your PSU wattage to see how loaded it is"; $("psu-peak").textContent = `Peak since open ${n0(pwPeak)} W`; }
+}
+$("psu-w").addEventListener("change", () => { const v = Math.round(+$("psu-w").value); store.set("psuW", v >= 100 && v <= 5000 ? v : 0); if (snap) renderSimple(); });
+
+/* ---------- Detailed ---------- */
+const SECTION = [["Temperature","Temperatures","°C"],["Power","Power draw","W"],["Load","Usage","%"],["Clock","Clock speeds","MHz"],
+  ["Fan","Fan speeds","RPM"],["Control","Fan control","%"],["Voltage","Voltages","V"],["Current","Current","A"],["Level","Levels","%"],
+  ["Data","Data","GB"],["SmallData","Memory","MB"],["Throughput","Network throughput",""],["Timing","Timings","ns"],["Factor","Factors",""],["Energy","Energy","mWh"],["Other","Other",""]];
 function renderDetail(){
   const hw = snap.hardware;
-  $("filters").innerHTML = ALL_TYPES.filter(t => (hw.groups||[]).some(g => g.sensors.some(x => x.type === t)))
-    .map(t => `<button type="button" class="f" data-t="${t}" aria-pressed="${types.has(t)}">${t === "Temperature" ? "Temps" : t}</button>`).join("");
+  const present = ALL_TYPES.filter(t => (hw.groups||[]).some(g => g.sensors.some(x => x.type === t)));
+  const sig = present.join() + [...types].join();
+  if ($("filters").dataset.sig !== sig) { $("filters").dataset.sig = sig;
+    $("filters").innerHTML = present.map(t => `<button type="button" class="f" data-t="${t}" aria-pressed="${types.has(t)}">${TYPE_LABEL[t] || t}</button>`).join(""); }
   if (!hw.live) { $("groups").innerHTML = `<div class="empty">No sensor data. LibreHardwareMonitor is offline.</div>`; return; }
-  const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1";
-  const open = new Set(store.get("openGroups", ["cpu","gpu"]));
-  const SECTION = [["Temperature","Temperatures","°C"],["Power","Power draw","W"],["Load","Usage","%"],["Clock","Clock speeds","MHz"],
-    ["Fan","Fan speeds","RPM"],["Control","Fan control","%"],["Voltage","Voltages","V"],["Current","Current","A"],["Level","Levels","%"],
-    ["Data","Data","GB"],["SmallData","Memory","MB"],["Throughput","Throughput","B/s"],["Timing","Timings","ns"],["Factor","Factors",""],["Energy","Energy","mWh"],["Other","Other",""]];
-  const fmtV = (x) => x.type === "Throughput" ? fmtRate(x.value) : n1(x.value);
-  const html = hw.groups.map(g => {
+  const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1", open = new Set(store.get("openGroups", ["cpu","gpu"]));
+  const fv = (x, v) => x.type === "Throughput" ? fmtRate(v) : n1(v);
+  const keySet = new Set();
+  hw.groups.forEach(g => {
     const rows = g.sensors.filter(x => types.has(x.type) && (!q || (g.name + " " + x.name + " " + x.type).toLowerCase().includes(q)) && (showAll || !hidden.has(x.id)));
-    if (!rows.length) return "";
-    const key = g.kind + ":" + g.name;
-    const sections = SECTION.map(([t, title, unit]) => {
-      const list = rows.filter(x => x.type === t || (t === "Other" && !SECTION.some(s => s[0] === x.type)));
-      if (!list.length) return "";
-      const peak = list.reduce((m, x) => Math.max(m, x.value), -Infinity);
-      const summary = t === "Temperature" ? `hottest ${n0(peak)}°C` : t === "Power" ? `max ${n1(peak)} W` : t === "Fan" ? `fastest ${n0(peak)} RPM` : `${list.length}`;
-      return `<div class="subsec"><h4>${title}${unit && t !== "Throughput" ? ` <small style="font-weight:500;color:var(--ink-3)">(${unit})</small>` : ""}<span>${summary}</span></h4>
-        <table><thead><tr><th></th><th>Sensor</th><th class="num">Now</th><th class="num">Min</th><th class="num">Max</th></tr></thead><tbody>
-        ${list.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}">
-          <td class="cb"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td>
-          <td>${esc(x.name)}</td>
-          <td class="num"><b>${fmtV(x)}</b></td><td class="num">${x.type === "Throughput" ? fmtRate(x.min) : n1(x.min)}</td><td class="num">${x.type === "Throughput" ? fmtRate(x.max) : n1(x.max)}</td></tr>`).join("")}
-        </tbody></table></div>`;
-    }).join("");
-    return `<details class="grp" data-key="${esc(key)}" ${open.has(key) || open.has(g.kind) || q ? "open" : ""}>
-      <summary><span><span class="k">${KIND_LABEL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary>
-      <div class="subgrid">${sections}</div></details>`;
-  }).join("");
-  $("groups").innerHTML = html || `<div class="empty">No sensors match.</div>`;
+    const key = g.kind + ":" + g.name; keySet.add(key);
+    let d = $("groups").querySelector(`details[data-key="${CSS.escape(key)}"]`);
+    if (!rows.length) { if (d) d.remove(); return; }
+    const struct = SECTION.map(([t]) => t + ":" + rows.filter(x => x.type === t).map(x => x.id).join(",")).join("|") + hidden.size;
+    if (!d) { d = document.createElement("details"); d.className = "grp"; d.dataset.key = key; if (open.has(key) || open.has(g.kind) || q) d.open = true; $("groups").appendChild(d); }
+    if (d.dataset.struct !== struct) {
+      d.dataset.struct = struct;
+      d.innerHTML = `<summary><span><span class="k">${KIND_LABEL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary><div class="subgrid">` +
+        SECTION.map(([t, title, unit]) => { const list = rows.filter(x => x.type === t); if (!list.length) return "";
+          return `<div class="subsec"><h4>${title}${unit ? ` <small style="font-weight:500;color:var(--ink-3)">(${unit})</small>` : ""}<span class="peak" data-t="${t}"></span></h4>
+          <table><thead><tr><th></th><th>Sensor</th><th class="n">Now</th><th class="n">Min</th><th class="n">Max</th></tr></thead><tbody>
+          ${list.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}" data-sid="${esc(x.id)}"><td class="cb"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td>
+            <td>${esc(x.name)}</td><td class="n"><b class="nv"></b></td><td class="n mn"></td><td class="n mx"></td></tr>`).join("")}</tbody></table></div>`; }).join("") + `</div>`;
+    }
+    rows.forEach(x => { const tr = d.querySelector(`tr[data-sid="${CSS.escape(x.id)}"]`); if (!tr) return;
+      const nv = tr.querySelector(".nv"); if (x.type === "Throughput") nv.textContent = fmtRate(x.value); else tween(nv, x.value, n1, 700);
+      tr.querySelector(".mn").textContent = fv(x, x.min); tr.querySelector(".mx").textContent = fv(x, x.max); });
+    d.querySelectorAll(".peak").forEach(pk => { const list = rows.filter(x => x.type === pk.dataset.t), peak = Math.max(...list.map(x => x.value));
+      pk.textContent = pk.dataset.t === "Temperature" ? `hottest ${n0(peak)}°C` : pk.dataset.t === "Power" ? `max ${n1(peak)} W` : pk.dataset.t === "Fan" ? `fastest ${n0(peak)} RPM` : `${list.length}`; });
+  });
+  $("groups").querySelectorAll("details.grp").forEach(d => { if (!keySet.has(d.dataset.key)) d.remove(); });
 }
 $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; types.has(b.dataset.t) ? types.delete(b.dataset.t) : types.add(b.dataset.t); store.set("types", [...types]); renderDetail(); });
 $("groups").addEventListener("change", (e) => { const id = e.target.dataset.id; if (!id) return; e.target.checked ? hidden.delete(id) : hidden.add(id); store.set("hiddenSensors", [...hidden]); renderDetail(); });
@@ -363,54 +576,187 @@ $("groups").addEventListener("toggle", (e) => { const d = e.target; if (!d.datas
 $("q").addEventListener("input", () => renderDetail());
 $("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; renderDetail(); };
 
-/* Sparkline: single series, 2px line, endpoint marker, hover readout */
-function sparkSVG(hist){
-  const W = 140, H = 34, vals = hist.map(v => v == null ? null : v), ok = vals.filter(v => v != null);
-  if (ok.length < 2) return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" y1="${H-2}" x2="${W}" y2="${H-2}" stroke="var(--grid)" stroke-width="1"/></svg>`;
-  const max = Math.max(...ok) * 1.15, min = 0, n = vals.length;
-  const x = (i) => (i / Math.max(1, n - 1)) * (W - 6) + 3, y = (v) => H - 3 - ((v - min) / (max - min || 1)) * (H - 8);
-  let d = "", pen = false;
-  vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`; pen = true; });
-  const li = vals.length - 1 - [...vals].reverse().findIndex(v => v != null), lv = vals[li];
+/* ---------- Connection ---------- */
+function sparkPath(hist){
+  const W = 160, H = 36, vals = hist, ok = vals.filter(v => v != null);
+  if (ok.length < 2) return {line:"", drops:"", dot:null};
+  const max = Math.max(...ok) * 1.2, n = vals.length, x = (i) => (i / Math.max(1, n - 1)) * (W - 6) + 3, y = (v) => H - 3 - (v / (max || 1)) * (H - 8);
+  const pts = []; vals.forEach((v, i) => { if (v != null) pts.push([x(i), y(v)]); });
   const drops = vals.map((v, i) => v == null ? `<line x1="${x(i)}" y1="4" x2="${x(i)}" y2="${H-2}" stroke="var(--critical)" stroke-width="2" stroke-linecap="round"/>` : "").join("");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" data-vals='${JSON.stringify(vals)}' role="img" aria-label="Recent latency">
-    <line x1="0" y1="${H-2}" x2="${W}" y2="${H-2}" stroke="var(--grid)" stroke-width="1"/>${drops}
-    <path d="${d}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <circle cx="${x(li)}" cy="${y(lv)}" r="4" fill="var(--series)" stroke="var(--surface)" stroke-width="2"/></svg>`;
+  return {line: smoothPath(pts), drops, dot: pts[pts.length - 1]};
+}
+function renderNet(){
+  const net = snap.network || {}, t = net.targets || [];
+  const box = $("pings");
+  if (box.dataset.sig !== t.map(p => p.id).join()) {
+    box.dataset.sig = t.map(p => p.id).join();
+    box.innerHTML = t.map(p => `<div class="ping" data-id="${esc(p.id)}"><div><div class="n">${esc(p.name)}</div><div class="h">${esc(p.host)} · <span class="status good ps" style="margin:0">OK</span><span class="pl"></span></div></div>
+      <div class="spark-wrap"><svg class="spark" viewBox="0 0 160 36" aria-hidden="true"><line x1="0" y1="34" x2="160" y2="34" stroke="var(--grid)"/><g class="dr"></g>
+        <path class="sl" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d=""/><circle class="sd" r="3.5" fill="var(--series)" stroke="var(--surface)" stroke-width="2" cx="-10" cy="-10"/></svg></div>
+      <div class="v"><span class="num pv">–</span><small> ms</small></div></div>`).join("");
+  }
+  t.forEach(p => {
+    const el = box.querySelector(`.ping[data-id="${CSS.escape(p.id)}"]`); if (!el) return;
+    const lv = p.latency_ms == null ? "critical" : p.latency_ms > 120 ? "warning" : "good", ps = el.querySelector(".ps");
+    ps.className = "status ps " + lv; ps.textContent = p.latency_ms == null ? "No reply" : lv === "warning" ? "Slow" : "OK";
+    el.querySelector(".pl").textContent = p.loss_pct ? ` · ${p.loss_pct}% lost` : "";
+    tween(el.querySelector(".pv"), p.latency_ms, n0, 700);
+    const sp = sparkPath(p.history || []); el.querySelector(".sl").setAttribute("d", sp.line); el.querySelector(".dr").innerHTML = sp.drops;
+    if (sp.dot) { el.querySelector(".sd").setAttribute("cx", sp.dot[0]); el.querySelector(".sd").setAttribute("cy", sp.dot[1]); }
+    el.querySelector("svg").dataset.vals = JSON.stringify(p.history || []);
+  });
+  const avg = t[0] && t[0].avg_ms;
+  $("netstats").innerHTML = `<span>Jitter <b class="num">${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}</b></span><span>Average <b class="num">${avg == null ? "–" : n0(avg) + " ms"}</b></span><span>Internet <b>${net.online ? "Online" : "Offline"}</b></span>`;
 }
 $("pings").addEventListener("mousemove", (e) => {
   const svg = e.target.closest("svg.spark"); document.querySelectorAll(".tip").forEach(t => t.remove());
   if (!svg || !svg.dataset.vals) return;
   const vals = JSON.parse(svg.dataset.vals), r = svg.getBoundingClientRect(), i = Math.round(((e.clientX - r.left) / r.width) * (vals.length - 1));
-  const v = vals[Math.max(0, Math.min(vals.length - 1, i))], ago = (vals.length - 1 - i) * 2;
-  const tip = document.createElement("div"); tip.className = "tip";
-  tip.textContent = `${v == null ? "no reply" : n1(v) + " ms"} · ${ago ? ago + " s ago" : "now"}`;
+  const v = vals[Math.max(0, Math.min(vals.length - 1, i))], ago = (vals.length - 1 - i);
+  const tip = document.createElement("div"); tip.className = "tip"; tip.textContent = `${v == null ? "no reply" : n1(v) + " ms"} · ${ago ? ago + " s ago" : "now"}`;
   tip.style.left = `${e.clientX - r.left}px`; svg.parentElement.appendChild(tip);
 });
 $("pings").addEventListener("mouseleave", () => document.querySelectorAll(".tip").forEach(t => t.remove()));
 
-function renderNet(){
-  const net = snap.network || {};
-  const t = net.targets || [];
-  $("pings").innerHTML = t.length ? t.map(p => {
-    const lv = p.latency_ms == null ? "critical" : p.latency_ms > 120 ? "warning" : "good";
-    return `<div class="ping">
-      <div><div class="n">${esc(p.name)}</div><div class="h">${esc(p.host)} · <span class="status ${lv}" style="margin:0">${p.latency_ms == null ? "No reply" : lv === "warning" ? "Slow" : "OK"}</span>${p.loss_pct ? ` · ${p.loss_pct}% lost` : ""}</div></div>
-      <div class="spark-wrap">${sparkSVG(p.history || [])}</div>
-      <div class="v">${p.latency_ms == null ? "–" : n0(p.latency_ms)}<small> ms</small></div></div>`;
-  }).join("") : `<div class="empty">Measuring…</div>`;
-  const avg = t[0] && t[0].avg_ms;
-  $("netstats").innerHTML = `<span>Jitter <b>${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}</b></span><span>Average <b>${avg == null ? "–" : n0(avg) + " ms"}</b></span><span>Internet <b>${net.online ? "Online" : "Offline"}</b></span>`;
-}
+/* ---------- VPN ---------- */
+let vpnBusy = false;
 function renderVPN(){
   const v = snap.vpn || {};
   $("vpn-router").textContent = v.router_ip ? `Router ${v.router_ip}` : "";
-  const pill = $("vpn-pill");
-  pill.className = "pill" + (v.last_ok === false ? " err" : v.vpn_enabled ? " on" : "");
-  pill.textContent = v.last_ok === false ? "Failed" : v.last_ok == null ? "Not used yet" : v.vpn_enabled ? "On" : "Off";
-  $("vpn-msg").textContent = v.message || "";
+  $("vpn-title").textContent = v.tunnel ? `${v.tunnel}` : "Router VPN";
+  $("vpn-sub").textContent = v.mode === "none" ? "Not set up yet" : v.vpn_enabled == null ? "Checking the router…" :
+    v.vpn_enabled ? `Connected${v.server ? " · " + v.server : ""}` : `Off${v.server ? " · " + v.server + " ready" : ""}`;
+  if (!vpnBusy) $("vpn-cb").checked = !!v.vpn_enabled;
+  $("vpn-cb").disabled = v.mode === "none" || vpnBusy;
+  $("vpn-msg").textContent = v.message && v.message !== "Ready." ? v.message : "";
 }
+$("vpn-cb").addEventListener("change", async () => {
+  vpnBusy = true; $("vpn-switch").classList.add("busy"); $("vpn-msg").textContent = $("vpn-cb").checked ? "Turning VPN on…" : "Turning VPN off…";
+  try { snap.vpn = await fetch("/api/vpn/toggle", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({enable: $("vpn-cb").checked})}).then(r => r.json()); }
+  catch { $("vpn-msg").textContent = "Couldn't reach the Sentinel server"; }
+  vpnBusy = false; $("vpn-switch").classList.remove("busy"); renderVPN();
+});
 
+/* ---------- Speed test ---------- */
+const G = { cx:155, cy:150, r:118, start:-135, sweep:270 };
+let STOPS = [0, 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+const st = { running:false, phase:null, target:0, shown:0, down:[], up:[], ws:null, prog:0 };
+const polar = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [G.cx + r * Math.cos(a), G.cy + r * Math.sin(a)]; };
+function arcPath(f){ const end = G.start + G.sweep * Math.max(0.0001, Math.min(1, f)); const [x1,y1] = polar(G.start, G.r), [x2,y2] = polar(end, G.r);
+  return `M${x1.toFixed(1)},${y1.toFixed(1)} A${G.r},${G.r} 0 ${end - G.start > 180 ? 1 : 0} 1 ${x2.toFixed(1)},${y2.toFixed(1)}`; }
+function frac(v){ const n = STOPS.length - 1; if (v <= 0) return 0; for (let i = 0; i < n; i++) if (v <= STOPS[i+1]) return (i + (v - STOPS[i]) / (STOPS[i+1] - STOPS[i])) / n; return 1; }
+function drawGauge(){
+  const ticks = STOPS.map((s, i) => { const [x,y] = polar(G.start + G.sweep * i / (STOPS.length - 1), G.r - 26);
+    return `<text class="g-tick" x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${s >= 1000 ? s/1000 + "G" : s}</text>`; }).join("");
+  const minor = Array.from({length: (STOPS.length - 1) * 4 + 1}, (_, i) => { const deg = G.start + G.sweep * i / ((STOPS.length - 1) * 4);
+    const [a,b] = polar(deg, G.r + 11), [c,d] = polar(deg, G.r + (i % 4 ? 15 : 19)); return `<line x1="${a.toFixed(1)}" y1="${b.toFixed(1)}" x2="${c.toFixed(1)}" y2="${d.toFixed(1)}" stroke="var(--line-strong)" stroke-width="${i % 4 ? 1 : 2}"/>`; }).join("");
+  $("gauge").innerHTML = `<defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#7fb0f5"/><stop offset="1" stop-color="var(--series)"/></linearGradient>
+    <linearGradient id="gu" x1="0" x2="1"><stop offset="0" stop-color="#f3a27f"/><stop offset="1" stop-color="var(--series-2)"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    ${minor}<path d="${arcPath(1)}" fill="none" stroke="var(--series-track)" stroke-width="16" stroke-linecap="round"/>
+    <path id="g-arc" d="${arcPath(0)}" fill="none" stroke="url(#gg)" stroke-width="16" stroke-linecap="round" filter="url(#glow)"/>${ticks}
+    <g id="g-needle" style="transform:rotate(${G.start}deg)"><path d="M${G.cx - 4},${G.cy} L${G.cx},${G.cy - G.r + 18} L${G.cx + 4},${G.cy} Z" fill="var(--ink)"/><circle cx="${G.cx}" cy="${G.cy}" r="9" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/></g>`;
+}
+function animateGauge(){
+  st.shown += (st.target - st.shown) * 0.09;
+  if (Math.abs(st.target - st.shown) < 0.05) st.shown = st.target;
+  const f = st.phase === "ping" ? 0 : frac(st.shown);
+  const arc = $("g-arc"); if (arc) { arc.setAttribute("d", arcPath(f)); arc.setAttribute("stroke", st.phase === "upload" ? "url(#gu)" : "url(#gg)"); }
+  const nd = $("g-needle"); if (nd) nd.style.transform = `rotate(${G.start + G.sweep * f}deg)`;
+  $("g-val").textContent = st.phase === "ping" ? n0(st.target) : auto(st.shown);
+  if (st.running || st.shown !== st.target) requestAnimationFrame(animateGauge);
+}
+function setPhase(label, m){ const p = $("g-phase"); p.className = "g-phase" + (m ? " on" : "") + (m === "up" ? " up" : ""); $("g-phase-t").textContent = label; }
+function setRes(id, val, active, fmt){ const el = $(id); tween(el.querySelector(".v span"), val, fmt || auto, 600); el.classList.toggle("active", !!active); }
+function setProgress(p, label){
+  st.prog = Math.max(0, Math.min(1, p)); $("prog-fill").style.width = (st.prog * 100).toFixed(1) + "%";
+  tween($("prog-pct"), st.prog * 100, v => `${Math.round(v)}%`, 300); if (label) $("prog-label").textContent = label;
+  const sp = st.prog; [["s-ping",0,0.09],["s-down",0.09,0.545],["s-up",0.545,1],["s-done",1,1.01]].forEach(([id,a,b]) => { const el = $(id); el.className = sp >= b ? "done" : sp >= a && st.running ? "on" : ""; });
+}
+function drawChart(hover){
+  const W = 600, H = 150, n = 50, max = Math.max(10, ...st.down, ...st.up) * 1.12;
+  const x = (i) => 6 + (i / (n - 1)) * (W - 12), y = (v) => H - 4 - (v / max) * (H - 18);
+  const line = (arr, color, fill) => { if (arr.length < 2) return ""; const pts = arr.map((v, i) => [x(i), y(v)]); const d = smoothPath(pts);
+    return `<path d="${d} L${pts[pts.length-1][0]},${H-4} L${pts[0][0]},${H-4} Z" fill="${fill}" opacity=".14"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`; };
+  const grid = [0.33, 0.66, 1].map(f => `<line x1="0" x2="${W}" y1="${y(max/1.12*f)}" y2="${y(max/1.12*f)}" stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("");
+  const cross = hover != null ? `<line x1="${x(hover)}" x2="${x(hover)}" y1="0" y2="${H}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : "";
+  $("st-chart").innerHTML = grid + `<line x1="0" x2="${W}" y1="${H-4}" y2="${H-4}" stroke="var(--line-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>` + line(st.down, "var(--series)", "var(--series)") + line(st.up, "var(--series-2)", "var(--series-2)") + cross;
+}
+$("chart-wrap").addEventListener("mousemove", (e) => {
+  const r = $("chart-wrap").getBoundingClientRect(), i = Math.max(0, Math.min(49, Math.round(((e.clientX - r.left) / r.width) * 49)));
+  document.querySelectorAll(".xtip").forEach(t => t.remove()); if (!st.down.length && !st.up.length) return;
+  drawChart(i); const t = document.createElement("div"); t.className = "xtip"; t.style.left = `${e.clientX - r.left}px`;
+  t.textContent = `${(i * 0.2).toFixed(1)} s · down ${st.down[i] == null ? "–" : auto(st.down[i])} · up ${st.up[i] == null ? "–" : auto(st.up[i])} Mbps`;
+  $("chart-wrap").appendChild(t);
+});
+$("chart-wrap").addEventListener("mouseleave", () => { document.querySelectorAll(".xtip").forEach(t => t.remove()); drawChart(); });
+function renderExtras(m){
+  if (!m || !m.grade) { $("extras").innerHTML = ""; return; }
+  const gcls = "g-" + m.grade[0].toLowerCase();
+  $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is busy"><span class="grade ${gcls}">${esc(m.grade)}</span>Bufferbloat · busy ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` +
+    Object.entries(m.quality || {}).map(([k, v], i) => `<span class="q ${esc(v)}" style="animation-delay:${i * 80}ms">${esc(k)} <b>${esc(v)}</b></span>`).join("");
+}
+function renderHistory(){
+  const h = store.get("speedHistory", []); $("history").hidden = !h.length; if (!h.length) return;
+  const max = Math.max(...h.map(x => x.download_mbps), 1);
+  $("history").innerHTML = `<div class="muted" style="margin-bottom:4px">Recent tests</div>` + h.slice(0, 6).map(x => `<div class="hrow">
+    <span>${new Date(x.at * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})}</span>
+    <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.download_mbps)}<span class="hb" style="flex:1"><i style="width:${x.download_mbps / max * 100}%;background:var(--series)"></i></span></span>
+    <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.upload_mbps)}<span class="hb" style="flex:1"><i style="width:${Math.min(100, x.upload_mbps / max * 100)}%;background:var(--series-2)"></i></span></span>
+    <span class="num">${n0(x.ping_ms)} ms</span><span>${esc(x.grade || "")}</span></div>`).join("");
+}
+function showLast(){
+  const last = store.get("lastSpeed", null);
+  if (!last) { $("st-meta").textContent = "Press START to measure ping, download and upload."; return; }
+  setRes("r-ping", last.ping_ms, false, n0); setRes("r-jitter", last.jitter_ms, false, n1); setRes("r-down", last.download_mbps); setRes("r-up", last.upload_mbps);
+  renderExtras(last); renderHistory();
+  $("st-meta").textContent = `Last test ${new Date(last.at * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})} · ${last.server}`;
+}
+function startTest(){
+  if (st.running) { if (st.ws) st.ws.close(); return; }
+  st.running = true; st.down = []; st.up = []; st.target = 0; st.shown = 0; drawGauge(); drawChart(); renderExtras(null);
+  ["r-ping","r-jitter","r-down","r-up"].forEach(id => setRes(id, null)); ["x-down","x-up"].forEach(id => $(id).textContent = "");
+  $("st-go").textContent = "STOP"; $("st-go").classList.add("stop"); $("track").classList.add("running");
+  $("st-meta").textContent = "Testing… pause other downloads for the most accurate result."; setProgress(0, "Connecting…");
+  requestAnimationFrame(animateGauge);
+  const ws = st.ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/speedtest`);
+  let finished = false;
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === "phase") {
+      st.phase = m.phase; st.target = 0;
+      setPhase({ping:"Measuring ping", download:"Downloading", upload:"Uploading"}[m.phase], m.phase === "upload" ? "up" : "on");
+      $(({ping:"r-ping", download:"r-down", upload:"r-up"})[m.phase]).classList.add("active");
+    } else if (m.type === "progress") {
+      if (m.phase === "ping") { st.target = m.ping_ms; setRes("r-ping", m.ping_ms, true, n0); setProgress(0.09 * m.progress, "Measuring ping"); }
+      else {
+        st.target = m.mbps; (m.phase === "download" ? st.down : st.up).push(m.mbps); drawChart();
+        setRes(m.phase === "download" ? "r-down" : "r-up", m.mbps, true);
+        if (m.loaded_ms != null) $(m.phase === "download" ? "x-down" : "x-up").textContent = `busy ping ${n0(m.loaded_ms)} ms`;
+        setProgress(m.phase === "download" ? 0.09 + 0.455 * m.progress : 0.545 + 0.455 * m.progress, m.phase === "download" ? "Download in progress" : "Upload in progress");
+      }
+    } else if (m.type === "phase_done") {
+      if (m.phase === "ping") { setRes("r-ping", m.ping_ms, false, n0); setRes("r-jitter", m.jitter_ms, false, n1); $("st-sub").textContent = `Server: ${m.server}`; }
+      if (m.phase === "download") { setRes("r-down", m.mbps); if (m.server) $("st-sub").textContent = `Download server: ${m.server}`; }
+      if (m.phase === "upload") setRes("r-up", m.mbps);
+    } else if (m.type === "note") { $("st-meta").textContent = m.note; }
+    else if (m.type === "done") {
+      finished = true; store.set("lastSpeed", m); const h = store.get("speedHistory", []); h.unshift(m); store.set("speedHistory", h.slice(0, 20));
+      st.phase = null; st.target = m.download_mbps; setPhase("Done", null); setProgress(1, "Test complete");
+      renderExtras(m); renderHistory();
+      $("st-meta").textContent = `${auto(m.download_mbps)} down / ${auto(m.upload_mbps)} up Mbps · ping ${n0(m.ping_ms)} ms · ${m.server}`;
+    } else if (m.type === "error") { finished = true; setPhase("Failed", null); $("st-meta").textContent = m.error; }
+  };
+  ws.onclose = () => {
+    st.running = false; $("st-go").textContent = "TEST AGAIN"; $("st-go").classList.remove("stop"); $("track").classList.remove("running");
+    if (!finished) { setPhase("Stopped", null); st.target = 0; $("st-meta").textContent = "Test stopped."; setProgress(st.prog, "Stopped"); }
+    ["r-ping","r-jitter","r-down","r-up"].forEach(id => $(id).classList.remove("active")); requestAnimationFrame(animateGauge);
+  };
+  ws.onerror = () => { $("st-meta").textContent = "Couldn't reach the Sentinel server."; };
+}
+$("st-go").onclick = startTest;
+
+/* ---------- Main loop ---------- */
 function render(){
   if (!snap) return;
   const hw = snap.hardware;
@@ -418,124 +764,23 @@ function render(){
   if (hw.help) $("offline-msg").textContent = hw.help;
   const s = hw.summary || {};
   $("machine").textContent = s.cpu_name ? [s.cpu_name, s.gpu_name].filter(Boolean).join(" · ") : "Hardware health and network, live";
-  if (mode === "simple") renderSimple(); else if (!document.activeElement || !$("groups").contains(document.activeElement)) renderDetail();
+  if (mode === "simple") renderSimple(); else renderDetail();
   renderNet(); renderVPN();
 }
-
-/* ---------- Speed test ---------- */
-const SVGNS = "http://www.w3.org/2000/svg";
-const G = { cx:140, cy:132, r:104, start:135, sweep:270 };
-let STOPS = [0, 5, 10, 50, 100, 250, 500, 1000];
-const st = { running:false, phase:null, target:0, shown:0, down:[], up:[], ws:null };
-const polar = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [G.cx + r * Math.cos(a), G.cy + r * Math.sin(a)]; };
-function arcPath(f){ const end = G.start + G.sweep * Math.max(0.0001, Math.min(1, f)); const [x1,y1] = polar(G.start, G.r), [x2,y2] = polar(end, G.r);
-  return `M${x1.toFixed(1)},${y1.toFixed(1)} A${G.r},${G.r} 0 ${end - G.start > 180 ? 1 : 0} 1 ${x2.toFixed(1)},${y2.toFixed(1)}`; }
-function frac(v){ const n = STOPS.length - 1; if (v <= 0) return 0; for (let i = 0; i < n; i++) if (v <= STOPS[i+1]) return (i + (v - STOPS[i]) / (STOPS[i+1] - STOPS[i])) / n; return 1; }
-function drawGauge(){
-  const ticks = STOPS.map((s, i) => { const [x,y] = polar(G.start + G.sweep * i / (STOPS.length - 1), G.r - 24);
-    return `<text class="g-tick" x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${s >= 1000 ? s/1000 + "k" : s}</text>`; }).join("");
-  $("gauge").innerHTML = `<path d="${arcPath(1)}" fill="none" stroke="var(--series-track)" stroke-width="14" stroke-linecap="round"/>
-    <path id="g-arc" d="${arcPath(0)}" fill="none" stroke="var(--series)" stroke-width="14" stroke-linecap="round"/>${ticks}`;
-}
-function animate(){
-  st.shown += (st.target - st.shown) * 0.12;
-  if (Math.abs(st.target - st.shown) < 0.05) st.shown = st.target;
-  const arc = $("g-arc"); if (arc) { arc.setAttribute("d", arcPath(frac(st.shown))); arc.setAttribute("stroke", st.phase === "upload" ? "var(--series-2)" : "var(--series)"); }
-  $("g-val").textContent = st.phase === "ping" ? n0(st.target) : (st.shown >= 100 ? n0(st.shown) : n1(st.shown));
-  if (st.running || st.shown !== st.target) requestAnimationFrame(animate);
-}
-function setPhase(label, mode){ const p = $("g-phase"); p.className = "g-phase" + (mode ? " on" : "") + (mode === "up" ? " up" : ""); $("g-phase-t").textContent = label; }
-function setRes(id, val, active){ const el = $(id); el.querySelector(".v span").textContent = val == null ? "–" : (val >= 100 ? n0(val) : n1(val)); el.classList.toggle("active", !!active); }
-function drawChart(hover){
-  const W = 600, H = 150, pad = 6, n = 50; // 50 samples per 10-second phase
-  const max = Math.max(10, ...st.down, ...st.up) * 1.1;
-  const x = (i) => pad + (i / (n - 1)) * (W - pad * 2), y = (v) => H - 4 - (v / max) * (H - 18);
-  const line = (arr, color) => arr.length > 1 ? `<path d="${arr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : "";
-  const grid = [0.5, 1].map(f => `<line x1="0" x2="${W}" y1="${y(max/1.1*f)}" y2="${y(max/1.1*f)}" stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("");
-  let cross = "";
-  if (hover != null) cross = `<line x1="${x(hover)}" x2="${x(hover)}" y1="0" y2="${H}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`;
-  $("st-chart").innerHTML = grid + `<line x1="0" x2="${W}" y1="${H-4}" y2="${H-4}" stroke="var(--line-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>` + line(st.down, "var(--series)") + line(st.up, "var(--series-2)") + cross;
-}
-$("chart-wrap").addEventListener("mousemove", (e) => {
-  const r = $("chart-wrap").getBoundingClientRect(), i = Math.max(0, Math.min(49, Math.round(((e.clientX - r.left) / r.width) * 49)));
-  document.querySelectorAll(".xtip").forEach(t => t.remove());
-  if (!st.down.length && !st.up.length) return;
-  drawChart(i);
-  const t = document.createElement("div"); t.className = "xtip"; t.style.left = `${e.clientX - r.left}px`;
-  t.textContent = `${(i * 0.2).toFixed(1)} s · down ${st.down[i] == null ? "–" : n0(st.down[i])} · up ${st.up[i] == null ? "–" : n0(st.up[i])} Mbps`;
-  $("chart-wrap").appendChild(t);
-});
-$("chart-wrap").addEventListener("mouseleave", () => { document.querySelectorAll(".xtip").forEach(t => t.remove()); drawChart(); });
-
-function showLast(){
-  const last = store.get("lastSpeed", null);
-  if (!last) { $("st-meta").textContent = "Press Start to measure ping, download and upload through Cloudflare."; return; }
-  setRes("r-ping", last.ping_ms); setRes("r-jitter", last.jitter_ms); setRes("r-down", last.download_mbps); setRes("r-up", last.upload_mbps);
-  $("st-meta").textContent = `Last test ${new Date(last.at * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})} · server ${last.server}`;
-}
-function startTest(){
-  if (st.running) { if (st.ws) st.ws.close(); return; }
-  st.running = true; st.down = []; st.up = []; st.target = 0; st.shown = 0; STOPS = [0, 5, 10, 50, 100, 250, 500, 1000]; drawGauge(); drawChart();
-  ["r-ping","r-jitter","r-down","r-up"].forEach(id => setRes(id, null, false));
-  $("st-go").textContent = "Stop"; $("st-meta").textContent = "Testing… keep other downloads paused for the most accurate result.";
-  requestAnimationFrame(animate);
-  const ws = st.ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/speedtest`);
-  let finished = false;
-  ws.onmessage = (ev) => {
-    let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.type === "phase") {
-      st.phase = m.phase; st.target = 0;
-      setPhase({ping:"Measuring ping", download:"Download", upload:"Upload"}[m.phase], m.phase === "upload" ? "up" : "on");
-      setRes({ping:"r-ping", download:"r-down", upload:"r-up"}[m.phase], null, true);
-    } else if (m.type === "progress") {
-      if (m.phase === "ping") { st.target = m.ping_ms; setRes("r-ping", m.ping_ms, true); }
-      else {
-        if (m.mbps > STOPS[STOPS.length - 1] * 0.95 && STOPS[STOPS.length - 1] < 5000) { STOPS = [0, 10, 50, 100, 250, 500, 1000, 2500, 5000]; drawGauge(); }
-        st.target = m.mbps; (m.phase === "download" ? st.down : st.up).push(m.mbps); drawChart();
-        setRes(m.phase === "download" ? "r-down" : "r-up", m.mbps, true);
-      }
-    } else if (m.type === "phase_done") {
-      if (m.phase === "ping") { setRes("r-ping", m.ping_ms); setRes("r-jitter", m.jitter_ms); $("st-sub").textContent = `Server: ${m.server} (Cloudflare)`; }
-      if (m.phase === "download") setRes("r-down", m.mbps);
-      if (m.phase === "upload") setRes("r-up", m.mbps);
-    } else if (m.type === "done") {
-      finished = true; store.set("lastSpeed", m); st.phase = null; st.target = m.download_mbps;
-      setPhase("Done", null);
-      $("st-meta").textContent = `Finished · ${n0(m.download_mbps)} down / ${n1(m.upload_mbps)} up Mbps · ping ${n0(m.ping_ms)} ms · server ${m.server}`;
-    } else if (m.type === "error") {
-      finished = true; setPhase("Failed", null); $("st-meta").textContent = m.error;
-    }
-  };
-  ws.onclose = () => {
-    st.running = false; $("st-go").textContent = "Test again";
-    if (!finished) { setPhase("Stopped", null); st.target = 0; $("st-meta").textContent = "Test stopped."; }
-    ["r-ping","r-jitter","r-down","r-up"].forEach(id => $(id).classList.remove("active"));
-    requestAnimationFrame(animate);
-  };
-  ws.onerror = () => { $("st-meta").textContent = "Couldn't reach the Sentinel server."; };
-}
-$("st-go").onclick = startTest;
-drawGauge(); drawChart(); showLast();
-$("vpn-btn").onclick = async () => {
-  const b = $("vpn-btn"); b.disabled = true; b.textContent = "Working…";
-  try { snap.vpn = await fetch("/api/vpn/toggle", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}).then(r => r.json()); renderVPN(); }
-  catch { $("vpn-msg").textContent = "Couldn't reach the Sentinel server"; }
-  b.disabled = false; b.textContent = "Toggle VPN";
-};
-
 let retry = 0, lastMsg = 0;
 function connect(){
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`);
   ws.onopen = () => { retry = 0; };
   ws.onmessage = (ev) => { try { snap = JSON.parse(ev.data); lastMsg = Date.now(); render(); } catch {} };
-  ws.onclose = () => { setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); };
+  ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++));
   ws.onerror = () => ws.close();
 }
 setInterval(() => {
-  const fresh = Date.now() - lastMsg < 6000, live = snap && snap.hardware && snap.hardware.live;
-  $("live").innerHTML = `<span class="dot ${fresh ? (live ? "good" : "warning") : "critical"}"></span>${fresh ? (live ? `Live · ${snap.hardware.sensor_count} sensors` : "Live · sensors offline") : "Reconnecting…"}`;
+  const fresh = Date.now() - lastMsg < 5000, live = snap && snap.hardware && snap.hardware.live;
+  $("live").innerHTML = `<span class="dot ${fresh ? (live ? "good" : "warning") : "critical"}"></span>${fresh ? (live ? `Live · ${snap.hardware.sensor_count} sensors · 1 s` : "Live · sensors offline") : "Reconnecting…"}`;
 }, 1000);
-setMode(mode); connect();
+window.addEventListener("resize", () => setMode(mode));
+drawGauge(); drawChart(); showLast(); setProgress(0); setMode(mode); connect();
 </script>
 </body>
 </html>

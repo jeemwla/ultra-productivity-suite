@@ -30,7 +30,7 @@ async def poll_loop():
             latest.update(hardware=hw, network=net, vpn=vpn_controller.status(), ts=time.time())
         except Exception as exc:
             print(f"[sentinel] poll error: {exc}")
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(1.0)
 
 
 @asynccontextmanager
@@ -108,6 +108,6 @@ async def telemetry_ws(ws: WebSocket):
             if latest["ts"] != last:
                 last = latest["ts"]
                 await ws.send_json(latest)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.25)
     except (WebSocketDisconnect, RuntimeError):
         pass

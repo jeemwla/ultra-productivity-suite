@@ -95,10 +95,30 @@ async def _ping(client: httpx.AsyncClient, send: Send) -> Dict:
     return {"ping_ms": round(ping, 1), "jitter_ms": round(jitter, 1), "colo": colo}
 
 
-async def _throughput(phase: str, worker, streams: int, seconds: float, send: Send) -> float:
+async def _tcp_rtt(host="1.1.1.1", port=443, timeout=1.5):
+    t = time.perf_counter()
+    try:
+        _, w = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
+        ms = (time.perf_counter() - t) * 1000
+        w.close()
+        return ms
+    except Exception:
+        return None
+
+
+async def _throughput(phase: str, worker, streams: int, seconds: float, send: Send):
     counter = {"bytes": 0}
     stop = asyncio.Event()
-    tasks = [asyncio.create_task(worker(counter, stop)) for _ in range(streams)]
+    loaded: List[float] = []
+
+    async def pinger():  # latency while the line is busy ("bufferbloat")
+        while not stop.is_set():
+            ms = await _tcp_rtt()
+            if ms is not None:
+                loaded.append(ms)
+            await asyncio.sleep(0.3)
+
+    tasks = [asyncio.create_task(worker(counter, stop)) for _ in range(streams)] + [asyncio.create_task(pinger())]
     start = time.perf_counter()
     window: List[tuple] = [(start, 0)]
     series: List[float] = []
@@ -113,6 +133,7 @@ async def _throughput(phase: str, worker, streams: int, seconds: float, send: Se
             live = _mbps(window[-1][1] - window[0][1], window[-1][0] - window[0][0])
             series.append(live)
             await send({"type": "progress", "phase": phase, "mbps": live,
+                        "loaded_ms": round(statistics.median(loaded[-5:]), 1) if loaded else None,
                         "progress": min(1.0, (now - start) / seconds)})
     finally:
         stop.set()
@@ -124,7 +145,31 @@ async def _throughput(phase: str, worker, streams: int, seconds: float, send: Se
     # Result: average of the samples after the first 2 s ramp-up, ignoring the slowest 20%
     steady = sorted(series[int(2 / TICK):] or series)
     keep = steady[int(len(steady) * 0.2):] or steady
-    return round(sum(keep) / len(keep), 1) if keep else 0.0
+    mbps = round(sum(keep) / len(keep), 1) if keep else 0.0
+    loaded_ms = round(statistics.median(loaded[3:] or loaded), 1) if loaded else None
+    return mbps, loaded_ms
+
+
+def grade(idle: float, loaded_down, loaded_up) -> str:
+    """Bufferbloat grade from the extra latency under load (Waveform-style thresholds)."""
+    worst = max([x for x in (loaded_down, loaded_up) if x is not None] or [idle]) - idle
+    for g, limit in (("A+", 5), ("A", 30), ("B", 60), ("C", 200), ("D", 400)):
+        if worst < limit:
+            return g
+    return "F"
+
+
+def quality(down, up, ping, jitter, loaded) -> Dict:
+    """Plain-language ratings like Cloudflare's network quality score."""
+    def rate(ok, good):
+        return "Great" if good else "Good" if ok else "Poor"
+    lat = loaded if loaded is not None else ping
+    return {
+        "Gaming": rate(lat < 100 and jitter < 20, lat < 50 and jitter < 10 and down >= 15),
+        "4K streaming": rate(down >= 15, down >= 40),
+        "Video calls": rate(up >= 3 and lat < 150, up >= 10 and lat < 80 and jitter < 20),
+        "Big downloads": rate(down >= 100, down >= 500),
+    }
 
 
 async def run(send: Send) -> Dict:
@@ -173,8 +218,8 @@ async def run(send: Send) -> Dict:
                             await asyncio.sleep(0.2)
 
                 await send({"type": "phase", "phase": "download"})
-                down = await _throughput("download", down_worker, DOWN_STREAMS, DOWN_SECONDS, send)
-                await send({"type": "phase_done", "phase": "download", "mbps": down, "server": down_server})
+                down, down_lat = await _throughput("download", down_worker, DOWN_STREAMS, DOWN_SECONDS, send)
+                await send({"type": "phase_done", "phase": "download", "mbps": down, "loaded_ms": down_lat, "server": down_server})
 
                 block = os.urandom(256 * 1024)
 
@@ -196,11 +241,14 @@ async def run(send: Send) -> Dict:
                             await asyncio.sleep(0.2)
 
                 await send({"type": "phase", "phase": "upload"})
-                up = await _throughput("upload", up_worker, UP_STREAMS, UP_SECONDS, send)
-                await send({"type": "phase_done", "phase": "upload", "mbps": up})
+                up, up_lat = await _throughput("upload", up_worker, UP_STREAMS, UP_SECONDS, send)
+                await send({"type": "phase_done", "phase": "upload", "mbps": up, "loaded_ms": up_lat})
 
                 result = {"type": "done", "download_mbps": down, "upload_mbps": up, "ping_ms": p["ping_ms"],
-                          "jitter_ms": p["jitter_ms"], "server": COLO.get(p["colo"] or "", p["colo"] or "Cloudflare"),
+                          "jitter_ms": p["jitter_ms"], "server": down_server or COLO.get(p["colo"] or "", p["colo"] or "Cloudflare"),
+                          "loaded_down_ms": down_lat, "loaded_up_ms": up_lat,
+                          "grade": grade(p["ping_ms"], down_lat, up_lat),
+                          "quality": quality(down, up, p["ping_ms"], p["jitter_ms"], max([x for x in (down_lat, up_lat) if x] or [p["ping_ms"]])),
                           "at": time.time()}
                 await send(result)
                 return result

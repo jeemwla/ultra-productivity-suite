@@ -140,6 +140,103 @@ def summarize(groups: List[dict]) -> dict:
     return out
 
 
+_FC_CACHE = {"path": None, "mtime": 0, "data": None}
+_PEAK_RPM: Dict[str, float] = {}
+
+
+def _fancontrol_config():
+    """FanControl (Rem0o) user config, if installed: fan nicknames and which curve drives each fan."""
+    cands = [os.getenv("FANCONTROL_CONFIG", "")]
+    for base in (r"D:\FanControl", r"C:\FanControl", os.path.expandvars(r"%ProgramFiles(x86)%\FanControl"),
+                 os.path.expandvars(r"%ProgramFiles%\FanControl"), os.path.expandvars(r"%USERPROFILE%\Documents\FanControl")):
+        cands.append(os.path.join(base, "Configurations", "userConfig.json"))
+    path = next((p for p in cands if p and os.path.exists(p)), None)
+    if not path:
+        return None
+    mt = os.path.getmtime(path)
+    if _FC_CACHE["path"] != path or _FC_CACHE["mtime"] != mt:
+        try:
+            import json
+            d = json.load(open(path, encoding="utf-8-sig")).get("FanControl", {})
+            _FC_CACHE.update(path=path, mtime=mt, data=d)
+        except Exception:
+            _FC_CACHE.update(path=path, mtime=mt, data=None)
+    return _FC_CACHE["data"]
+
+
+def _norm_id(sid: str) -> str:
+    # LHM: /lpc/it8696e/0/fan/0   FanControl: /lpc/it8696e/fan/0
+    return re.sub(r"/(\d+)/(fan|control)/", r"/\2/", sid or "").lower()
+
+
+def cooling_report(groups: List[dict]) -> dict:
+    fc = _fancontrol_config() or {}
+    nick = {_norm_id(f.get("Identifier", "")): f.get("NickName") for f in fc.get("FanSensors", []) or []}
+    curve_for_fan, curve_info = {}, {}
+    for c in fc.get("FanCurves", []) or []:
+        src = (c.get("SelectedTempSource") or {}).get("Identifier", "") if isinstance(c.get("SelectedTempSource"), dict) else ""
+        curve_info[c.get("Name")] = {"name": c.get("Name"), "flat_percent": c.get("Percent") if c.get("Percent") is not None and not c.get("Points") else None,
+                                     "temp_source": src}
+    for ctl in fc.get("Controls", []) or []:
+        pair = ctl.get("PairedFanSensor") or {}
+        curve = ctl.get("SelectedFanCurve") or {}
+        if isinstance(pair, dict) and pair.get("Identifier"):
+            curve_for_fan[_norm_id(pair["Identifier"])] = {"curve": curve.get("Name") if isinstance(curve, dict) else None,
+                                                          "control": ctl.get("NickName"), "enabled": ctl.get("Enable")}
+    controls = {}
+    for g in groups:
+        for s in g["sensors"]:
+            if s["type"] == "Control":
+                controls[_norm_id(s["id"]).replace("/control/", "/fan/")] = s["value"]
+    fans = []
+    for g in groups:
+        for s in g["sensors"]:
+            if s["type"] != "Fan":
+                continue
+            key = _norm_id(s["id"])
+            _PEAK_RPM[key] = max(_PEAK_RPM.get(key, 0), s["value"], s.get("max") or 0)
+            link = curve_for_fan.get(key, {})
+            if not link and g["kind"] == "gpu":
+                # FanControl names GPU fans by the vendor driver (ADLX / NvAPI), not by the LHM id
+                link = next((v for k, v in curve_for_fan.items() if ("adlx" in k or "nvapi" in k or "gpu" in k)), {})
+            cinfo = curve_info.get(link.get("curve") or "", {})
+            src = cinfo.get("temp_source", "")
+            drives = ("CPU temperature" if "cpu" in src.lower() or "cpu" in (link.get("curve") or "").lower() else
+                      "GPU temperature" if "gpu" in src.lower() or "gpu" in (link.get("curve") or "").lower() else
+                      f"fixed {cinfo['flat_percent']}%" if cinfo.get("flat_percent") is not None else None)
+            where = "Graphics card" if g["kind"] == "gpu" else "Motherboard header" if g["kind"] == "motherboard" else g["name"]
+            if not drives and controls.get(key) is None and g["kind"] == "motherboard":
+                drives = "Not controlled: runs at a fixed speed (often an AIO pump or pump header)"
+            fans.append({
+                "id": s["id"], "key": key, "name": nick.get(key) or s["name"], "sensor_name": s["name"], "location": where,
+                "rpm": s["value"], "min_rpm": s.get("min"), "peak_rpm": _PEAK_RPM[key],
+                "output_pct": round(100 * s["value"] / _PEAK_RPM[key], 1) if _PEAK_RPM[key] else None,
+                "duty_pct": controls.get(key), "curve": link.get("curve"), "driven_by": drives,
+                "spinning": s["value"] > 50,
+            })
+    fans.sort(key=lambda f: (f["location"] != "Motherboard header", f["name"]))
+    return {"fans": fans, "fancontrol": bool(fc), "fancontrol_path": _FC_CACHE.get("path") if fc else None}
+
+
+def power_report(groups: List[dict], summary: dict) -> dict:
+    """Measured CPU + GPU package power plus a clearly-labelled estimate for everything else."""
+    cpu = summary.get("cpu_power") or 0.0
+    gpus = [g for g in groups if g["kind"] == "gpu"]
+    gpu = 0.0
+    for g in gpus:
+        p = _pick(g["sensors"], "Power", "GPU Package", "Board", "Package", "GPU Power")
+        gpu += p["value"] if p else 0.0
+    dimms = len([g for g in groups if g["kind"] == "memory" and "dimm" in " ".join(s["id"] for s in g["sensors"]).lower()])
+    drives = len([g for g in groups if g["kind"] == "storage"])
+    fans = len([s for g in groups for s in g["sensors"] if s["type"] == "Fan" and s["value"] > 50])
+    est = {"Motherboard and chipset": 18.0, "Memory": 4.0 * max(dimms, 2), "Drives": 4.5 * drives,
+           "Fans": 1.8 * fans, "USB devices and other": 10.0}
+    measured = {"CPU package": round(cpu, 1), "Graphics card": round(gpu, 1)}
+    dc_total = sum(measured.values()) + sum(est.values())
+    return {"measured": measured, "estimated": {k: round(v, 1) for k, v in est.items()},
+            "dc_total_w": round(dc_total, 1), "wall_w": round(dc_total / 0.9, 1)}
+
+
 async def collect_hardware_telemetry() -> Dict:
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
@@ -152,7 +249,9 @@ async def collect_hardware_telemetry() -> Dict:
                                                          "network", "battery", "psu", "other"].index(g["kind"]))
         if not glist:
             raise ValueError("LibreHardwareMonitor returned no sensors")
-        return {"live": True, "source": "LibreHardwareMonitor", "groups": glist, "summary": summarize(glist),
+        summary = summarize(glist)
+        return {"live": True, "source": "LibreHardwareMonitor", "groups": glist, "summary": summary,
+                "cooling": cooling_report(glist), "power": power_report(glist, summary),
                 "sensor_count": sum(len(g["sensors"]) for g in glist)}
     except Exception as exc:
         return {"live": False, "source": "LibreHardwareMonitor offline",
