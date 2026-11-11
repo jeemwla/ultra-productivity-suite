@@ -26,7 +26,7 @@ latest = {"hardware": {"live": False, "source": "starting", "groups": [], "summa
 async def poll_loop():
     while True:
         try:
-            hw, net = await asyncio.gather(collect_hardware_telemetry(), get_live_ping_snapshot())
+            hw, net, _ = await asyncio.gather(collect_hardware_telemetry(), get_live_ping_snapshot(), vpn_controller.refresh())
             latest.update(hardware=hw, network=net, vpn=vpn_controller.status(), ts=time.time())
         except Exception as exc:
             print(f"[sentinel] poll error: {exc}")
