@@ -18,7 +18,7 @@ Write-Host ""; Write-Host "  Ultra Suite dev mode" -ForegroundColor Cyan
 
 # 1. quit the installed app cleanly (restores taskbar buttons), then free the ports
 $installed = "$env:LOCALAPPDATA\Ultra Suite\Ultra Suite.exe"
-foreach ($exe in @($installed, "$R\02_translucent_taskbar_dock\src-tauri\target\release\ultra-suite.exe", "$R\02_translucent_taskbar_dock\src-tauri\target\debug\ultra-suite.exe")) {
+foreach ($exe in @($installed, "$R\ultra_dock\src-tauri\target\release\ultra-suite.exe", "$R\ultra_dock\src-tauri\target\debug\ultra-suite.exe")) {
     if ((Test-Path $exe) -and (Get-Process | Where-Object { $_.Path -eq $exe })) { Start-Process $exe -ArgumentList "--quit"; Start-Sleep 2 }
 }
 foreach ($port in 8081, 8084, 8091, 8093, 8300, 8301) {
@@ -28,7 +28,7 @@ foreach ($port in 8081, 8084, 8091, 8093, 8300, 8301) {
 # 2. services from source with auto-restart
 New-Item -ItemType Directory -Force "$R\.devdata", "$R\logs" | Out-Null
 $env:ULTRASUITE_DEV = "1"; $env:ULTRASUITE_OWNER = "1"; $env:ULTRASUITE_DATA = "$R\.devdata"
-$watch = @("$R\core", "$R\01_pebble_code_red_alarm\backend", "$R\04_hardware_net_sentinel\backend", "$R\05_insights", "$R\03_deck_deck_config\plugin", "$R\addons")
+$watch = @("$R\core", "$R\code_red_alarm\backend", "$R\pc_sentinel\backend", "$R\insights", "$R\addons")
 $watch = $watch | Where-Object { Test-Path $_ }
 Start-Process python -ArgumentList (@("-m", "watchfiles", "--filter", "python", "--target-type", "command", "`"python -I $R\core\suite_core.py`"") + ($watch | ForEach-Object { "`"$_`"" })) `
     -WorkingDirectory $R -WindowStyle Hidden -RedirectStandardOutput "$R\logs\dev_core.log" -RedirectStandardError "$R\logs\dev_core.err.log"
@@ -38,8 +38,8 @@ if ($ok) { Write-Host "  [OK] services running from source (auto-restart on save
 # 3. taskbar organizer from source
 if (-not $NoDock) {
     Write-Host "  building the taskbar organizer (first build takes about a minute)..." -ForegroundColor DarkCyan
-    Push-Location "$R\02_translucent_taskbar_dock\src-tauri"; cargo build *> "$R\logs\dev_dock_build.log"; Pop-Location
-    $dbg = "$R\02_translucent_taskbar_dock\src-tauri\target\debug\ultra-suite.exe"
+    Push-Location "$R\ultra_dock\src-tauri"; cargo build *> "$R\logs\dev_dock_build.log"; Pop-Location
+    $dbg = "$R\ultra_dock\src-tauri\target\debug\ultra-suite.exe"
     if (Test-Path $dbg) { Start-Process $dbg -ArgumentList "--background"; Write-Host "  [OK] organizer running (debug build)" -ForegroundColor Green }
     else { Write-Host "  [!] organizer build failed; see logs\dev_dock_build.log" -ForegroundColor Yellow }
 }

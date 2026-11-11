@@ -8,7 +8,7 @@ import sys
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "04_hardware_net_sentinel"))
+sys.path.insert(0, os.path.join(ROOT, "pc_sentinel"))
 sys.path.insert(0, os.path.join(ROOT, "core"))
 
 
@@ -59,7 +59,7 @@ class PowerModeGuids(unittest.TestCase):
 
 class LaptopPack(unittest.TestCase):
     def setUp(self):
-        self.m = load("06_laptop_pack/laptop_pack.py", "laptop_pack")
+        self.m = load("pc_sentinel/backend/laptop.py", "sentinel_laptop")
 
     def test_verdicts(self):
         self.assertEqual(self.m._verdict(95, 100), "Like new.")
@@ -77,7 +77,7 @@ class AlarmSchedule(unittest.TestCase):
     def setUp(self):
         import datetime
         self.dt = datetime.datetime
-        self.m = load("01_pebble_code_red_alarm/backend/clock.py", "alarm_clock")
+        self.m = load("code_red_alarm/backend/clock.py", "alarm_clock")
         self.one_time = {"time_hhmm": "02:20", "target_date": "2026-11-11", "weekdays": [], "last_triggered_date": None}
 
     def due(self, alarm, prev, now):
@@ -122,7 +122,7 @@ class AlarmApi(unittest.TestCase):
         import tempfile
         cls._data = os.environ.get("ULTRASUITE_DATA")
         os.environ["ULTRASUITE_DATA"] = tempfile.mkdtemp()
-        d = os.path.join(ROOT, "01_pebble_code_red_alarm", "backend")
+        d = os.path.join(ROOT, "code_red_alarm", "backend")
         spec = importlib.util.spec_from_file_location("alarm_pkg_test", os.path.join(d, "__init__.py"), submodule_search_locations=[d])
         pkg = importlib.util.module_from_spec(spec)
         sys.modules["alarm_pkg_test"] = pkg
@@ -167,7 +167,7 @@ class InsightsChart(unittest.TestCase):
         import tempfile
         self._data = os.environ.get("ULTRASUITE_DATA")
         os.environ["ULTRASUITE_DATA"] = tempfile.mkdtemp()
-        self.m = load("05_insights/insights.py", "insights_under_test")
+        self.m = load("insights/insights.py", "insights_under_test")
 
     def tearDown(self):
         if self._data is None:

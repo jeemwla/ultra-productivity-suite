@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1012" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
+<title>PC Sentinel</title>
+<script src="/__ui/theme.js"></script><script src="/__dev/reload.js"></script>
+<link rel="icon" type="image/png" href="/__ui/icons/sentinel.png" />
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#fcfcfb; --surface-2:#eff0f2; --line:#e3e5e9; --line-strong:#d0d4da;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7d7c78;
+  --series:#2a78d6; --series-2:#eb6834; --series-track:#dbe8f9; --grid:#e8e9ec;
+  --good:#0ca30c; --warning:#d99a00; --critical:#d03b3b;
+  --good-soft:#e5f5e5; --warning-soft:#fff4dc; --critical-soft:#fbe9e9;
+  --accent:#2a78d6; --accent-ink:#fff; --accent-soft:#e3eefb;
+  --font:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+  --font-display:"Segoe UI Variable Display","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1); --r:16px;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1012; --surface:#17181b; --surface-2:#1f2024; --line:#26282d; --line-strong:#34363c;
+  --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+  --series:#3987e5; --series-2:#d95926; --series-track:#1b3150; --grid:#26282d;
+  --good:#3dd68c; --warning:#fab219; --critical:#ec5d5e;
+  --good-soft:#132a17; --warning-soft:#33280f; --critical-soft:#371919; --accent:#3987e5; --accent-soft:#1a2b44;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:14.5px/1.5 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent);text-decoration:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-3);font-size:12.5px}
+
+/* ---------- Shell ---------- */
+.app{display:grid;grid-template-columns:240px minmax(0,1fr);height:100vh}
+.side{display:flex;flex-direction:column;gap:3px;padding:18px 12px;border-right:1px solid var(--line);background:var(--surface);overflow:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 16px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--accent);display:grid;place-items:center;flex:none}
+.brand b{font:600 16px var(--font-display);letter-spacing:-.01em}
+.brand small{display:block;font-size:11.5px;color:var(--ink-3);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.nav{display:flex;align-items:center;gap:11px;height:38px;padding:0 10px;border-radius:10px;border:0;background:transparent;color:var(--ink-2);font-weight:500;font-size:13.5px;text-align:left;position:relative;transition:background .15s,color .15s}
+.nav svg{width:18px;height:18px;flex:none;opacity:.8}
+.nav:hover{background:var(--surface-2);color:var(--ink)}
+.nav[aria-current=page]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav[aria-current=page] svg{opacity:1}
+.nav .badge{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--critical)}
+.side .spacer{flex:1}
+.side .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 6px 2px;border-top:1px solid var(--line);margin-top:8px}
+.chip{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:999px;background:var(--surface-2);font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3);flex:none}
+.dot.good{background:var(--good)}.dot.warning{background:var(--warning)}.dot.critical{background:var(--critical)}
+.main{overflow:auto}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 32px 14px;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px)}
+.top h1{font:600 22px/1.2 var(--font-display);letter-spacing:-.015em}
+.top p{color:var(--ink-3);font-size:13px;margin-top:2px}
+.content{padding:4px 32px 48px;max-width:1520px}
+.page{display:none}
+.page.active{display:block;animation:pagein .38s var(--ease) both}
+@keyframes pagein{from{opacity:0;transform:translateY(8px)}}
+
+/* ---------- Building blocks ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.ch h2{font:600 15px/1.3 var(--font-display)}
+.ch .sub{font-size:12.5px;color:var(--ink-3)}
+.cb{padding:14px 18px 18px}
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g21{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+.mt{margin-top:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13px;transition:background .15s,transform .1s;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;height:30px;padding:0 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--ink-2);transition:all .2s}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.14)}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.status.good{color:var(--good)}.status.warning{color:var(--warning)}.status.critical{color:var(--critical)}.status.idle{color:var(--ink-3)}
+.pill{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.pill.good{background:var(--good-soft);color:var(--good)}.pill.warning{background:var(--warning-soft);color:var(--warning)}.pill.critical{background:var(--critical-soft);color:var(--critical)}
+.meter{height:7px;border-radius:99px;background:var(--series-track);overflow:hidden}
+.meter i{display:block;height:100%;border-radius:99px;background:var(--series);transition:width .9s var(--ease),background .3s}
+.meter.warning i{background:var(--warning)}.meter.critical i{background:var(--critical)}
+.banner{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);margin-bottom:16px}
+.banner .ic{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:700;color:#fff;background:var(--good)}
+.banner.warning .ic{background:var(--warning);color:#000}.banner.critical .ic{background:var(--critical)}.banner.info .ic{background:var(--accent)}
+.banner .t{font-weight:600}.banner .s{font-size:13px;color:var(--ink-2)}
+.banner .act{margin-left:auto;display:flex;gap:8px}
+.empty{padding:22px;text-align:center;color:var(--ink-3);font-size:13px}
+.mini{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0}
+.mini span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.big{font:600 28px/1.15 var(--font-display);letter-spacing:-.01em}
+.big small{font-size:13px;color:var(--ink-3);font-weight:600;margin-left:4px}
+
+/* tiles */
+.tile{padding:16px 18px 12px}
+.tile .l{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--ink-2)}
+.tile .l span:last-child{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%}
+.tile .v{font:600 34px/1.1 var(--font-display);letter-spacing:-.02em;margin-top:8px}
+.tile .v small{font-size:14px;color:var(--ink-3);font-weight:600;margin-left:3px}
+.tile .m{font-size:12.5px;color:var(--ink-3);min-height:19px}
+.tile svg.trend{display:block;width:100%;height:42px;margin:8px 0 6px}
+
+/* charts */
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:170px}
+.chart .tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
+.chart .cursor{position:absolute;top:0;bottom:0;width:1px;background:var(--line-strong);pointer-events:none}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:2px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+/* cpu threads */
+.threads{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:6px}
+.th{display:flex;flex-direction:column;align-items:center;gap:4px}
+.th .col{width:100%;height:56px;border-radius:6px;background:var(--surface-2);position:relative;overflow:hidden}
+.th .col i{position:absolute;left:0;right:0;bottom:0;background:var(--series);border-radius:4px 4px 0 0;transition:height .7s var(--ease),background .3s}
+.th .col i.hot{background:var(--series-2)}
+.th span{font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+/* lists */
+.rows{display:grid;gap:4px}
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) 120px 70px;gap:12px;align-items:center;padding:7px 6px;border-radius:10px;transition:background .15s}
+.row:hover{background:var(--surface-2)}
+.row .av{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font:700 11px var(--font);color:#fff}
+.row .nm{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .nm small{font-weight:500;color:var(--ink-3);margin-left:6px}
+.row .vv{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* fans */
+.fan{display:grid;grid-template-columns:44px minmax(0,1fr) 150px 92px;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px;transition:border-color .2s,transform .2s var(--ease)}
+.fan:hover{border-color:var(--line-strong);transform:translateY(-1px)}
+.fan .blade{width:40px;height:40px;border-radius:12px;background:var(--surface-2);display:grid;place-items:center}
+.fan .blade svg{width:28px;height:28px;color:var(--series)}.fan.off .blade svg{color:var(--ink-3)}
+.fan .nm{font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center}
+.fan .nm button{border:0;background:none;color:var(--accent);font-size:12px;padding:2px 6px;border-radius:6px;opacity:0;transition:opacity .15s}
+.fan:hover .nm button,.fan .nm button:focus-visible{opacity:1}
+.fan .sb{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fan .bars{display:grid;gap:5px}.fan .bl{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3)}
+.fan .rpm{text-align:right;font:600 22px/1 var(--font-display)}.fan .rpm small{display:block;font-size:11px;color:var(--ink-3);font-weight:600;margin-top:3px}
+
+/* power */
+.stack{display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--surface-2);margin:14px 0 10px;gap:2px}
+.stack i{display:block;height:100%;transition:width .9s var(--ease)}
+.leg2{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12.5px}
+.leg2 div{display:flex;justify-content:space-between;gap:8px;color:var(--ink-2)}
+.leg2 span:first-child{display:inline-flex;align-items:center;gap:7px}.leg2 i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.plans{display:grid;gap:8px}
+.plan{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-align:left;transition:border-color .15s,background .15s}
+.plan:hover{border-color:var(--line-strong)}
+.plan[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.plan .r{width:18px;height:18px;border-radius:50%;border:2px solid var(--line-strong);flex:none;display:grid;place-items:center}
+.plan[aria-pressed=true] .r{border-color:var(--accent)}.plan[aria-pressed=true] .r::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.plan b{font-weight:600}.plan small{display:block;color:var(--ink-3);font-size:12px}
+.disp{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.disp .h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+
+/* drives */
+.drive{padding:16px 18px}
+.drive .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.drive .hd b{font:600 15px var(--font-display);display:block}
+.drive .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.drive .kv div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.drive .kv b{display:block;font:600 16px var(--font-display);font-variant-numeric:tabular-nums}
+.drive .kv span{font-size:11.5px;color:var(--ink-3)}
+
+/* speed test */
+.st{display:grid;grid-template-columns:330px minmax(0,1fr);gap:30px;align-items:center}
+.gauge-wrap{position:relative;width:310px;height:330px;margin:0 auto}
+.gauge-wrap svg{width:310px;height:262px;display:block;overflow:visible}
+.g-center{position:absolute;left:0;right:0;top:176px;text-align:center;pointer-events:none}
+.g-val{font:600 40px/1 var(--font-display);letter-spacing:-.03em}
+.g-unit{font-size:12.5px;color:var(--ink-3);font-weight:600;margin-top:2px}
+.g-tick{font-size:10.5px;fill:var(--ink-3)}
+.g-phase{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--surface-2);padding:4px 10px;border-radius:999px}
+.g-phase .pd{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+.g-phase.on .pd{background:var(--series);animation:blink 1s ease-in-out infinite}.g-phase.up .pd{background:var(--series-2)}
+@keyframes blink{50%{opacity:.25}}
+#g-needle{transition:transform .25s linear;transform-origin:155px 150px}
+.go{position:absolute;left:50%;bottom:0;transform:translateX(-50%);min-width:160px;height:46px;border-radius:999px;font-size:15px;border:0;color:var(--accent-ink);font-weight:700;letter-spacing:.02em;background:var(--accent);box-shadow:0 10px 24px -12px var(--accent);transition:transform .15s}
+.go:hover{transform:translateX(-50%) translateY(-1px)}.go.stop{background:var(--ink-3)}
+.prog-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.prog-top b{font:600 13px var(--font)}.prog-top .pct{font:700 22px/1 var(--font-display)}
+.track{position:relative;height:16px;border-radius:99px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.track .fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:99px;background:linear-gradient(90deg,var(--series),var(--series-2));transition:width .25s linear}
+.track .fill::after{content:"";position:absolute;inset:0;border-radius:99px;background:repeating-linear-gradient(-45deg,rgba(255,255,255,.22) 0 10px,transparent 10px 20px);background-size:28px 100%;animation:stripes 1s linear infinite;opacity:0;transition:opacity .3s}
+.track.running .fill::after{opacity:1}
+@keyframes stripes{to{background-position:28px 0}}
+.track .mark{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--surface)}
+.steps{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);margin-top:6px}
+.steps span.on{color:var(--ink);font-weight:600}.steps span.done{color:var(--good);font-weight:600}
+.results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0 12px}
+.res{border:1px solid var(--line);border-radius:12px;padding:11px 14px;transition:border-color .25s,background .25s,transform .25s var(--ease)}
+.res .l{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:6px}.res .l i{width:10px;height:3px;border-radius:2px;display:inline-block}
+.res .v{font:600 26px/1.15 var(--font-display);margin-top:4px}.res .v small{font-size:12.5px;color:var(--ink-3);font-weight:600;margin-left:3px}
+.res .x{font-size:11.5px;color:var(--ink-3);min-height:17px}
+.res.active{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-2px)}
+.extras{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;min-height:30px}
+.gradebox{display:inline-flex;align-items:center;gap:10px;padding:5px 12px 5px 5px;border:1px solid var(--line);border-radius:12px;font-size:12.5px;color:var(--ink-2)}
+.grade{width:34px;height:24px;border-radius:7px;display:grid;place-items:center;font:700 13px var(--font-display);color:#fff;background:var(--ink-3)}
+.grade.g-a{background:var(--good)}.grade.g-b{background:color-mix(in srgb,var(--good) 70%,var(--warning))}.grade.g-c{background:var(--warning);color:#000}.grade.g-d,.grade.g-f{background:var(--critical)}
+.q{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:var(--surface-2);font-size:12px;color:var(--ink-2)}
+.q.Great b{color:var(--good)}.q.Good b{color:color-mix(in srgb,var(--good) 70%,var(--warning))}.q.Poor b{color:var(--critical)}
+.hrow{display:grid;grid-template-columns:120px 1fr 1fr 60px 40px;gap:10px;font-size:12.5px;align-items:center;color:var(--ink-2);padding:3px 0}
+.hb{height:6px;border-radius:99px;background:var(--series-track);overflow:hidden}.hb i{display:block;height:100%;border-radius:99px}
+
+/* network */
+.ping{display:grid;grid-template-columns:minmax(0,1fr) 160px 84px;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.ping .n{font-weight:600;font-size:13.5px}.ping .h{font-size:12px;color:var(--ink-3)}
+.ping .v{text-align:right;font:600 20px/1 var(--font-display)}.ping .v small{font-size:12px;color:var(--ink-3);font-weight:600}
+.spark{width:160px;height:36px;display:block;overflow:visible}
+.big-switch{position:relative;width:56px;height:32px;flex:none}
+.big-switch input{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1}
+.big-switch span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .25s}
+.big-switch span::after{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .3s var(--ease)}
+.big-switch input:checked+span{background:var(--good)}.big-switch input:checked+span::after{transform:translateX(24px)}
+.big-switch.busy span{background:var(--warning)}
+
+/* sensors (detailed) */
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.search{flex:1;min-width:200px;height:38px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);padding:0 12px}
+.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.f{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.f[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+details.grp{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface)}
+details.grp summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-right:8px}
+details.grp summary .c{font-size:12.5px;color:var(--ink-3);font-weight:500}
+.subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;padding:4px 14px 14px}
+.subsec{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.subsec h4{display:flex;justify-content:space-between;align-items:center;font:600 12.5px var(--font);padding:9px 12px;background:var(--surface-2)}
+.subsec h4 span{font-weight:500;color:var(--ink-3)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;font-weight:600;color:var(--ink-3);padding:6px 12px;border-top:1px solid var(--line)}
+td{padding:6px 12px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{width:34px}
+
+/* system */
+.kvt{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;font-size:13.5px}
+.kvt span:nth-child(odd){color:var(--ink-3)}
+.field{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.field:first-child{border-top:0}
+.field input[type=number]{width:84px;height:34px;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;background:var(--surface);text-align:right}
+.toggle{position:relative;width:40px;height:22px;flex:none}.toggle input{position:absolute;inset:0;opacity:0;z-index:1;cursor:pointer}
+.toggle span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .2s}
+.toggle span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .25s var(--ease)}
+.toggle input:checked+span{background:var(--accent)}.toggle input:checked+span::after{transform:translateX(18px)}
+
+/* toasts + modals */
+.toasts{position:fixed;right:20px;bottom:20px;z-index:60;display:grid;gap:8px;max-width:min(380px,calc(100vw - 32px))}
+.toast{background:var(--ink);color:var(--surface);padding:12px 14px;border-radius:12px;font-size:13.5px;box-shadow:0 18px 40px -14px rgba(0,0,0,.5);animation:tin .2s var(--ease)}
+.toast.err{background:var(--critical);color:#fff}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+.modal-bg{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.show{display:flex}
+.modal{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;animation:tin .2s var(--ease)}
+.modal h3{font:600 17px var(--font-display);margin-bottom:4px}.modal p{font-size:13px;color:var(--ink-3);margin-bottom:12px}
+.modal textarea,.modal input[type=text]{width:100%;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);padding:10px}
+.modal textarea{min-height:110px;resize:vertical}
+
+@media (max-width:1200px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g21,.g3{grid-template-columns:1fr}.st{grid-template-columns:1fr}}
+@media (max-width:760px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;height:auto}
+  .side{position:fixed;left:0;right:0;bottom:0;z-index:20;flex-direction:row;overflow-x:auto;padding:6px 8px calc(6px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid var(--line);gap:2px}
+  .side .brand,.side .spacer,.side .foot{display:none}
+  .nav{flex-direction:column;height:52px;min-width:66px;gap:2px;font-size:10.5px;padding:6px 4px;justify-content:center}
+  .nav .badge{position:absolute;top:6px;right:14px;margin:0}
+  .main{overflow:visible;padding-bottom:80px}
+  .top,.content{padding-left:16px;padding-right:16px}
+  .g4,.g2{grid-template-columns:1fr 1fr}.results{grid-template-columns:1fr 1fr}
+  .row{grid-template-columns:28px minmax(0,1fr) 70px}.row .bar{display:none}
+  .fan{grid-template-columns:40px minmax(0,1fr) 80px}.fan .bars{display:none}
+  .ping{grid-template-columns:minmax(0,1fr) 70px}.ping .spark-wrap{display:none}
+  .drive .kv{grid-template-columns:1fr 1fr}.kvt{grid-template-columns:110px 1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side" aria-label="Sections">
+    <div class="brand"><div class="logo" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2-6 4 12 2-6h6"/></svg></div>
+      <div><b>PC Sentinel</b><small id="brand-sub">Your PC, at a glance</small></div></div>
+    <nav id="navs" style="display:contents"></nav>
+    <div class="spacer"></div>
+    <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span></div>
+  </aside>
+  <main class="main" id="main">
+    <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
+    <div class="content">
+      <div class="banner info" id="upd" hidden><div class="ic">↑</div><div><div class="t" id="upd-t">Update available</div><div class="s" id="upd-s"></div></div><div class="act"><button class="btn" id="upd-later">Later</button><button class="btn primary" id="upd-go">Update now</button></div></div>
+      <div class="banner warning" id="basic" hidden><div class="ic">i</div><div><div class="t">Basic sensor mode</div><div class="s" id="basic-s"></div></div><div class="act"><button class="btn primary" id="lhm-go">Set up full sensors</button></div></div>
+
+      <!-- OVERVIEW -->
+      <section class="page" id="p-overview">
+        <div class="banner good" id="health" hidden><div class="ic" id="health-ic">✓</div><div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div></div>
+        <div class="grid g4" id="tiles"></div>
+        <div class="grid g21 mt">
+          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div class="rows" id="apps"></div></div></section>
+          <section class="card"><div class="ch"><h2>Quick controls</h2><span class="sub">Changes apply instantly</span></div><div class="cb">
+            <div class="muted" style="margin-bottom:6px">Power plan</div><div class="seg" id="qc-plan" style="margin-bottom:16px"></div>
+            <div id="qc-disp"></div></div></section>
+        </div>
+        <div class="grid g3 mt">
+          <section class="card"><div class="ch"><h2>Drives</h2><a class="sub" href="#storage">Details</a></div><div class="cb" id="ov-drives"></div></section>
+          <section class="card"><div class="ch"><h2>Network</h2><a class="sub" href="#network">Details</a></div><div class="cb" id="ov-net"></div></section>
+          <section class="card"><div class="ch"><h2>Cooling</h2><a class="sub" href="#cooling">Details</a></div><div class="cb" id="ov-cool"></div></section>
+        </div>
+      </section>
+
+      <!-- PERFORMANCE -->
+      <section class="page" id="p-performance">
+        <section class="card"><div class="ch"><h2 id="pf-cpu-name">Processor</h2><span class="sub" id="pf-cpu-sub"></span></div><div class="cb">
+          <div class="legend"><span><i style="background:var(--series)"></i>CPU load %</span><span class="muted">last 2 minutes · hover for values</span></div>
+          <div class="chart" data-chart="cpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div>
+          <div class="muted" style="margin:14px 0 8px">Every thread, right now</div><div class="threads" id="threads"></div></div></section>
+        <div class="grid g2 mt">
+          <section class="card"><div class="ch"><h2 id="pf-gpu-name">Graphics</h2><span class="sub" id="pf-gpu-sub"></span></div><div class="cb">
+            <div class="legend"><span><i style="background:var(--series-2)"></i>GPU load %</span></div><div class="chart" data-chart="gpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div></section>
+          <section class="card"><div class="ch"><h2>Memory</h2><span class="sub" id="pf-mem-sub"></span></div><div class="cb">
+            <div class="legend"><span><i style="background:var(--good)"></i>Memory in use %</span></div><div class="chart" data-chart="ram"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div></section>
+        </div>
+        <section class="card mt" id="pf-temps-card"><div class="ch"><h2>Temperatures</h2><span class="sub">CPU and GPU, °C</span></div><div class="cb">
+          <div class="grid g2" id="pf-temps"><div><div class="legend"><span><i style="background:var(--series)"></i>CPU °C</span></div><div class="chart" data-chart="cput"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div>
+          <div><div class="legend"><span><i style="background:var(--series-2)"></i>GPU °C</span></div><div class="chart" data-chart="gput"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div></div>
+          <div class="empty" id="pf-temps-empty" hidden>Temperatures need LibreHardwareMonitor on this PC. Use "Set up full sensors" above.</div></div></section>
+      </section>
+
+      <!-- COOLING -->
+      <section class="page" id="p-cooling"><section class="card"><div class="ch"><h2>Fans</h2><span class="sub" id="cool-sub"></span></div><div class="cb"><div class="rows" id="fans" style="gap:8px"></div></div></section></section>
+
+      <!-- POWER -->
+      <section class="page" id="p-power">
+        <div class="grid g2">
+          <section class="card"><div class="ch"><h2>System power</h2><span class="sub">CPU and GPU measured, the rest estimated</span></div><div class="cb">
+            <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span class="num" id="pw-total" style="font:600 44px/1 var(--font-display);letter-spacing:-.02em">–</span><span class="muted" style="font-size:14px;font-weight:600">W</span><span class="muted" id="pw-wall"></span></div>
+            <div class="stack" id="pw-stack"></div><div class="leg2" id="pw-legend"></div>
+            <div class="field mt"><label for="psu-w">Your power supply (W)</label><input id="psu-w" type="number" min="200" max="3000" step="50" placeholder="850"></div>
+            <div class="meter" id="psu-meter"><i style="width:0"></i></div><div style="display:flex;justify-content:space-between;margin-top:8px;gap:10px"><span class="status good" id="psu-st">Enter your PSU wattage</span><span class="muted num" id="psu-peak"></span></div></div></section>
+          <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">How Windows balances speed and power</span></div><div class="cb">
+            <div id="pmode-wrap" hidden><div class="muted" style="margin-bottom:6px">Power mode (the slider in Windows Settings)</div><div class="seg" id="pmode" style="margin-bottom:16px"><button data-pm="efficiency">Best efficiency</button><button data-pm="balanced">Balanced</button><button data-pm="performance">Best performance</button></div></div>
+            <div class="plans" id="plans"><div class="empty">Loading…</div></div></div></section>
+        </div>
+        <section class="card mt"><div class="ch"><h2>Displays</h2><span class="sub">Lower refresh rates save power; higher feel smoother</span></div><div class="cb"><div class="grid g2" id="disps"></div></div></section>
+      </section>
+
+      <!-- STORAGE -->
+      <section class="page" id="p-storage"><div class="grid g2" id="drives"></div>
+        <section class="card mt"><div class="ch"><h2>Space used</h2><span class="sub">Per drive</span></div><div class="cb"><div class="rows" id="vols"></div></div></section></section>
+
+      <!-- NETWORK -->
+      <section class="page" id="p-network">
+        <div class="grid g2">
+          <section class="card"><div class="ch"><h2>Connection</h2><span class="sub">Latency every second</span></div><div class="cb"><div class="rows" id="pings" style="gap:8px"></div><div class="muted mt" id="netstats"></div></div></section>
+          <div class="grid" style="align-content:start">
+            <section class="card"><div class="ch"><h2>Throughput</h2><span class="sub">This PC right now</span></div><div class="cb"><div class="grid g2"><div><div class="muted">Download</div><div class="num big" id="nt-down">–</div></div><div><div class="muted">Upload</div><div class="num big" id="nt-up">–</div></div></div></div></section>
+            <section class="card"><div class="ch"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div><div class="cb"><div style="display:flex;justify-content:space-between;align-items:center;gap:14px"><div><div style="font-weight:600" id="vpn-title">Router VPN</div><div class="muted" id="vpn-sub">Checking…</div></div><label class="big-switch" id="vpn-switch"><input type="checkbox" id="vpn-cb" aria-label="VPN on or off"><span></span></label></div><div class="muted mt" id="vpn-msg"></div></div></section>
+            <section class="card"><div class="ch"><h2>Speed test</h2><a class="sub" href="#speed">Run one</a></div><div class="cb" id="nt-speed"></div></section>
+          </div>
+        </div>
+      </section>
+
+      <!-- SPEED TEST -->
+      <section class="page" id="p-speed"><section class="card"><div class="ch"><h2>Speed test</h2><span class="sub" id="st-sub">About 25 seconds · ping, download, upload</span></div><div class="cb st">
+        <div class="gauge-wrap"><svg id="gauge" viewBox="0 0 310 262" role="img" aria-label="Speed gauge"></svg>
+          <div class="g-center"><div class="g-val num" id="g-val">0</div><div class="g-unit">Mbps</div><div class="g-phase" id="g-phase"><span class="pd"></span><span id="g-phase-t">Ready</span></div></div>
+          <button type="button" class="go" id="st-go">START</button></div>
+        <div><div class="prog-top"><b id="prog-label">Ready when you are</b><span class="pct num" id="prog-pct">0%</span></div>
+          <div class="track" id="track"><div class="fill" id="prog-fill"></div><span class="mark" style="left:9%"></span><span class="mark" style="left:54.5%"></span></div>
+          <div class="steps"><span id="s-ping">Ping</span><span id="s-down">Download</span><span id="s-up">Upload</span><span id="s-done">Results</span></div>
+          <div class="results">
+            <div class="res" id="r-ping"><div class="l">Ping</div><div class="v"><span class="num">–</span><small>ms</small></div><div class="x">idle</div></div>
+            <div class="res" id="r-jitter"><div class="l">Jitter</div><div class="v"><span class="num">–</span><small>ms</small></div><div class="x">variation</div></div>
+            <div class="res" id="r-down"><div class="l"><i style="background:var(--series)"></i>Download</div><div class="v"><span class="num">–</span><small>Mbps</small></div><div class="x" id="x-down"></div></div>
+            <div class="res" id="r-up"><div class="l"><i style="background:var(--series-2)"></i>Upload</div><div class="v"><span class="num">–</span><small>Mbps</small></div><div class="x" id="x-up"></div></div></div>
+          <div class="extras" id="extras"></div>
+          <div class="legend"><span><i style="background:var(--series)"></i>Download</span><span><i style="background:var(--series-2)"></i>Upload</span></div>
+          <div class="chart" data-chart="speed"><svg id="st-chart" viewBox="0 0 800 150" preserveAspectRatio="none" style="height:150px"></svg></div>
+          <div class="muted" id="st-meta" style="margin-top:8px"></div><div id="history" class="mt" hidden></div></div></div></section></section>
+
+      <!-- SENSORS -->
+      <section class="page" id="p-sensors"><section class="card"><div class="cb">
+        <div class="tools"><input class="search" id="q" type="search" placeholder="Search sensors (fan, core, hot spot…)" aria-label="Search sensors"><button class="btn" id="show-all">Show hidden</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="filters"></div>
+        <div id="groups"></div></div></section></section>
+
+      <!-- SYSTEM -->
+      <section class="page" id="p-system">
+        <div class="grid g2">
+          <section class="card"><div class="ch"><h2>This PC</h2><span class="sub" id="sys-type"></span></div><div class="cb"><div class="kvt" id="sys-kv"></div></div></section>
+          <section class="card"><div class="ch"><h2>Sensor source</h2><span class="sub" id="src-sub"></span></div><div class="cb" id="src-body"></div></section>
+        </div>
+        <div class="grid g2 mt">
+          <section class="card"><div class="ch"><h2>Alerts</h2><span class="sub">A notice when something runs hot</span></div><div class="cb">
+            <div class="field"><span>Alerts on</span><label class="toggle"><input type="checkbox" id="al-on" checked aria-label="Alerts on"><span></span></label></div>
+            <div class="field"><label for="al-cpu">CPU warning at (°C)</label><input id="al-cpu" type="number" min="50" max="110" value="90"></div>
+            <div class="field"><label for="al-gpu">GPU warning at (°C)</label><input id="al-gpu" type="number" min="50" max="120" value="90"></div>
+            <div class="field"><label for="al-ram">Memory warning at (%)</label><input id="al-ram" type="number" min="50" max="99" value="92"></div></div></section>
+          <section class="card"><div class="ch"><h2>About</h2><span class="sub" id="ab-ver"></span></div><div class="cb">
+            <div class="field"><span>Updates</span><button class="btn" id="ab-upd">Check for updates</button></div>
+            <div class="field"><span>Save a full report (JSON)</span><button class="btn" id="ab-export">Export report</button></div>
+            <div class="field"><span>Send an idea or bug</span><button class="btn" id="ab-fb">Feedback</button></div></div></section>
+        </div>
+      </section>
+
+      <!-- BATTERY (laptops only) -->
+      <section class="page" id="p-battery"><section class="card"><div class="ch"><h2>Battery</h2><span class="sub" id="bt-sub"></span></div><div class="cb" id="bt-body"></div></section></section>
+    </div>
+  </main>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="modal-bg" id="fb-bg" role="dialog" aria-modal="true" aria-labelledby="fb-h"><div class="modal">
+  <h3 id="fb-h">Tell us what you think</h3><p>Ideas, bugs or something you love. It goes straight to the person who builds this.</p>
+  <div class="seg" id="fb-kind" style="margin-bottom:10px"><button data-k="idea" aria-pressed="true">Idea</button><button data-k="bug" aria-pressed="false">Bug</button><button data-k="love" aria-pressed="false">Love it</button></div>
+  <textarea id="fb-msg" maxlength="1000" placeholder="What should be better?"></textarea>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="muted" id="fb-st">Anonymous</span><div style="display:flex;gap:8px"><button class="btn" id="fb-cancel">Cancel</button><button class="btn primary" id="fb-send">Send</button></div></div></div></div>
+<div class="modal-bg" id="rn-bg" role="dialog" aria-modal="true" aria-labelledby="rn-h"><div class="modal">
+  <h3 id="rn-h">Name this fan</h3><p>For example: Front intake, AIO pump, Rear exhaust. Leave empty to use the original name.</p>
+  <input type="text" id="rn-in" maxlength="40" aria-label="Fan name">
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn" id="rn-cancel">Cancel</button><button class="btn primary" id="rn-save">Save</button></div></div></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = { get(k,d){ try{ const v = localStorage.getItem("sentinel." + k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k,v){ try{ localStorage.setItem("sentinel." + k, JSON.stringify(v)); } catch {} } };
+const n0 = (v) => v == null || isNaN(v) ? "–" : Math.round(v).toLocaleString();
+const n1 = (v) => v == null || isNaN(v) ? "–" : (Math.round(v * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const auto = (v) => v == null || isNaN(v) ? "–" : (Math.abs(v) >= 100 ? n0(v) : n1(v));
+const rate = (b) => b == null ? "–" : b >= 1e9 ? `${n1(b / 1e9)} GB/s` : b >= 1e6 ? `${n1(b / 1e6)} MB/s` : b >= 1e3 ? `${n0(b / 1e3)} KB/s` : `${n0(b)} B/s`;
+const api = async (p, o) => { const r = await fetch(p, { headers: { "Content-Type": "application/json" }, ...o }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || `Request failed (${r.status})`); return d; };
+function toast(m, err){ const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = m; $("toasts").appendChild(t); setTimeout(() => t.remove(), err ? 6000 : 3200); }
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const when = (s) => new Date(s * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+/* ---------- smooth numbers ---------- */
+const TW = new Map(); let rafT = 0;
+function tween(el, to, fmt = auto, dur = 800){ if (!el) return; if (to == null || isNaN(to)) { TW.delete(el); el._c = null; el.textContent = "–"; return; }
+  const from = el._c == null ? to : el._c; TW.set(el, { from, to, st: performance.now(), dur, fmt }); if (!rafT) rafT = requestAnimationFrame(stepT); }
+function stepT(t){ rafT = 0; for (const [el, s] of TW) { const k = Math.min(1, (t - s.st) / s.dur), e = 1 - Math.pow(1 - k, 3); el._c = s.from + (s.to - s.from) * e; el.textContent = s.fmt(el._c); if (k >= 1) TW.delete(el); } if (TW.size) rafT = requestAnimationFrame(stepT); }
+function smooth(p){ if (p.length < 2) return ""; let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+  for (let i = 0; i < p.length - 1; i++) { const a = p[i - 1] || p[i], b = p[i], c = p[i + 1], e = p[i + 2] || c;
+    d += ` C${(b[0] + (c[0] - a[0]) / 6).toFixed(1)},${(b[1] + (c[1] - a[1]) / 6).toFixed(1)} ${(c[0] - (e[0] - b[0]) / 6).toFixed(1)},${(c[1] - (e[1] - b[1]) / 6).toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`; } return d; }
+
+/* ---------- navigation ---------- */
+const PAGES = [
+  ["overview", "Overview", "Health, live tiles and quick controls", '<path d="M3 11l9-8 9 8M5 9.5V20h14V9.5"/>'],
+  ["performance", "Performance", "CPU, graphics and memory over the last 2 minutes", '<path d="M3 17l5-5 4 4 8-8M14 8h6v6"/>'],
+  ["cooling", "Cooling", "Every fan, how fast it spins, and what drives it", '<circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7 3 0 3 4-4 7zM14 12c4 0 7 1 7 4 0 3-4 3-7-4zM12 14c0 4-1 7-4 7-3 0-3-4 4-7zM10 12c-4 0-7-1-7-4 0-3 4-3 7 4z"/>'],
+  ["power", "Power", "System power, power plans and display refresh rates", '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'],
+  ["storage", "Storage", "Drive health, wear and space", '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 15h.01M11 15h6"/>'],
+  ["network", "Network", "Latency, throughput and VPN", '<path d="M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0M2 9a15 15 0 0120 0"/><circle cx="12" cy="19.5" r="1"/>'],
+  ["speed", "Speed test", "Ping, download and upload in about 25 seconds", '<path d="M12 14l4-4M4 18a9 9 0 1116 0"/>'],
+  ["sensors", "Sensors", "Every sensor, organized by part", '<path d="M4 6h16M4 12h16M4 18h10"/>'],
+  ["battery", "Battery", "Charge, health and power use", '<rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2M6 10v4"/>'],
+  ["system", "System", "This PC, sensor source, alerts and updates", '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'],
+];
+$("navs").innerHTML = PAGES.map(([id, t, , ic]) => `<button class="nav" data-p="${id}" id="nav-${id}" ${id === "battery" ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${t}</button>`).join("");
+let page = "overview";
+function go(p, push = true){
+  if (!PAGES.some(x => x[0] === p)) p = "overview"; page = p;
+  document.querySelectorAll(".page").forEach(s => s.classList.toggle("active", s.id === "p-" + p));
+  document.querySelectorAll(".nav").forEach(b => b.setAttribute("aria-current", b.dataset.p === p ? "page" : "false"));
+  const meta = PAGES.find(x => x[0] === p); $("pg-title").textContent = meta[1]; $("pg-sub").textContent = meta[2]; document.title = `${meta[1]} · PC Sentinel`;
+  if (push && location.hash !== "#" + p) history.replaceState(null, "", "#" + p);
+  $("main").scrollTo({ top: 0 });
+  if (p === "performance") document.querySelectorAll(".chart svg").forEach(s => s._init = false);
+  if (p === "power") loadPower(); if (p === "speed") { drawGauge(); drawSpeedChart(); } if (p === "battery") loadBattery();
+  render();
+}
+$("navs").addEventListener("click", (e) => { const b = e.target.closest(".nav"); if (b) go(b.dataset.p); });
+window.addEventListener("hashchange", () => go(location.hash.slice(1), false));
+// keyboard: 1-9 jump between sections (when not typing)
+document.addEventListener("keydown", (e) => { if (e.target.closest("input,textarea") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
+// swipe between sections on touch screens
+let tx = null, ty = null; document.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+document.addEventListener("touchend", (e) => { if (tx == null) return; const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null; if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx)) return;
+  const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden).map(x => x[0]); const i = vis.indexOf(page); const n = vis[i + (dx < 0 ? 1 : -1)]; if (n) go(n); }, { passive: true });
+
+/* ---------- charts ---------- */
+const H = { cpu: [], gpu: [], ram: [], pw: [], cput: [], gput: [] }; const HMAX = 120;
+function lineChart(key, arr, color, fixedMax, unit){
+  const svg = document.querySelector(`[data-chart="${key}"] svg`); if (!svg) return;
+  const W = 800, Hh = 170, vals = arr.filter(v => v != null), max = fixedMax || Math.max(10, ...vals) * 1.15;
+  const x = (i) => 4 + ((i + (HMAX - arr.length)) / (HMAX - 1)) * (W - 8), y = (v) => Hh - 6 - (v / max) * (Hh - 18);
+  const pts = arr.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+  if (!svg._init || svg._max !== Math.round(max)) { svg._max = Math.round(max);
+    svg.innerHTML = `${[.25, .5, .75, 1].map(f => `<line x1="0" x2="${W}" y1="${y(max / (fixedMax ? 1 : 1.15) * f)}" y2="${y(max / (fixedMax ? 1 : 1.15) * f)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("")}
+      <line x1="0" x2="${W}" y1="${Hh - 6}" y2="${Hh - 6}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>
+      <path class="ar" fill="${color}" opacity=".1"/><path class="ln" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`; svg._init = true; }
+  const d = smooth(pts); svg.querySelector(".ln").setAttribute("d", d);
+  svg.querySelector(".ar").setAttribute("d", pts.length > 1 ? d + ` L${pts[pts.length - 1][0]},${Hh - 6} L${pts[0][0]},${Hh - 6} Z` : "");
+  svg.parentElement._data = { arr, unit: unit || "%" };
+}
+document.addEventListener("mousemove", (e) => {
+  const c = e.target.closest(".chart"); document.querySelectorAll(".chart .tip,.chart .cursor").forEach(t => { if (!c || t.parentElement !== c) t.remove(); });
+  if (!c || !c._data || !c._data.arr.length) return;
+  const r = c.getBoundingClientRect(), a = c._data.arr, pos = (e.clientX - r.left) / r.width, i = Math.round(pos * (HMAX - 1)) - (HMAX - a.length);
+  if (i < 0 || i >= a.length || a[i] == null) return;
+  let t = c.querySelector(".tip"), cur = c.querySelector(".cursor"); if (!t) { t = document.createElement("div"); t.className = "tip"; c.appendChild(t); cur = document.createElement("div"); cur.className = "cursor"; c.appendChild(cur); }
+  const px = e.clientX - r.left; t.style.left = `${Math.max(50, Math.min(r.width - 50, px))}px`; cur.style.left = `${px}px`;
+  const ago = a.length - 1 - i; t.textContent = `${auto(a[i])}${c._data.unit} · ${ago ? ago + " s ago" : "now"}`;
+});
+
+/* ---------- overview ---------- */
+const lvl = (v, w, c) => v == null ? "good" : v >= c ? "critical" : v >= w ? "warning" : "good";
+const HOT = { good: "Normal", warning: "Warm", critical: "Hot" };
+function trend(id, color){ return `<svg class="trend" viewBox="0 0 300 42" preserveAspectRatio="none" aria-hidden="true"><path id="ta-${id}" fill="${color}" opacity=".12"/><path id="tl-${id}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`; }
+function drawTrend(id, arr){ const a = arr.slice(-60).filter(v => v != null); if (a.length < 2) return; const max = Math.max(...a) * 1.08, min = Math.min(...a) * .92, sp = Math.max(1, max - min);
+  const pts = a.map((v, i) => [(i + (60 - a.length)) / 59 * 300, 40 - (v - min) / sp * 36]); const d = smooth(pts);
+  $("tl-" + id).setAttribute("d", d); $("ta-" + id).setAttribute("d", d + ` L${pts[pts.length - 1][0]},42 L${pts[0][0]},42 Z`); }
+function buildTiles(){ if ($("t-cpu")) return; const tile = (id, l, u, c, href) => `<a class="card tile" href="#${href}" style="color:inherit"><div class="l"><span>${l}</span><span id="t-${id}-sub"></span></div>
+  <div class="v"><span class="num" id="t-${id}">–</span><small id="t-${id}-u">${u}</small></div><div class="m num" id="t-${id}-m"></div>${trend(id, c)}<div class="status good" id="t-${id}-st">Normal</div></a>`;
+  $("tiles").innerHTML = tile("cpu", "Processor", "°C", "var(--series)", "performance") + tile("gpu", "Graphics", "°C", "var(--series-2)", "performance") + tile("ram", "Memory", "%", "var(--good)", "performance") + tile("pw", "System power", "W", "var(--warning)", "power"); }
+function setSt(id, l, t){ const e = $(id); e.className = "status " + l; e.textContent = t; }
+function renderOverview(){
+  const hw = snap.hardware, s = hw.summary || {}; buildTiles();
+  const h = s.health || { score: 100, label: "All good", notes: [] }, hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
+  $("health").hidden = false; $("health").className = `banner ${hl}`; $("health-ic").textContent = hl === "good" ? "✓" : "!"; $("health-t").textContent = h.label; $("health-s").textContent = (h.notes || []).join(" · ");
+  const cpuT = s.cpu_temp; $("t-cpu-sub").textContent = s.cpu_name || "";
+  if (cpuT != null) { $("t-cpu-u").textContent = "°C"; tween($("t-cpu"), cpuT, n0); $("t-cpu-m").textContent = `${n0(s.cpu_load)}% busy${s.cpu_power != null ? ` · ${n0(s.cpu_power)} W` : ""}`; const l = lvl(cpuT, 80, 90); setSt("t-cpu-st", l, HOT[l]); }
+  else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "busy · temperature needs full sensors"; const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
+  const gT = s.gpu_hotspot ?? s.gpu_temp; $("t-gpu-sub").textContent = s.gpu_name || "";
+  if (gT != null) { $("t-gpu-u").textContent = "°C"; tween($("t-gpu"), s.gpu_temp ?? gT, n0); $("t-gpu-m").textContent = `${n0(s.gpu_load)}% busy${s.gpu_hotspot != null ? ` · hot spot ${n0(s.gpu_hotspot)}°C` : ""}`; const l = lvl(gT, 85, 100); setSt("t-gpu-st", l, HOT[l]); }
+  else { $("t-gpu-u").textContent = "%"; tween($("t-gpu"), s.gpu_load, n0); $("t-gpu-m").textContent = s.gpu_name ? "busy · temperature needs full sensors" : "No graphics card found"; setSt("t-gpu-st", "good", "Load normal"); }
+  tween($("t-ram"), s.ram_load, n0); $("t-ram-sub").textContent = s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : ""; $("t-ram-m").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : "";
+  const rl = lvl(s.ram_load, 80, 92); setSt("t-ram-st", rl, { good: "Plenty free", warning: "Getting full", critical: "Almost full" }[rl]);
+  const pw = hw.power || {}; const measured = pw.measured && (pw.measured["CPU package"] || pw.measured["Graphics card"]);
+  if (measured) { tween($("t-pw"), pw.dc_total_w, n0); $("t-pw-u").textContent = "W"; $("t-pw-sub").textContent = "estimated"; $("t-pw-m").textContent = `≈ ${n0(pw.wall_w)} W from the wall`;
+    const psu = +store.get("psuW", 0), load = psu ? pw.dc_total_w / psu * 100 : null; setSt("t-pw-st", load == null ? "idle" : lvl(load, 70, 85), load == null ? "Add your PSU on Power" : `${n0(load)}% of your PSU`); }
+  else { $("t-pw").textContent = "–"; $("t-pw-m").textContent = "needs full sensors"; setSt("t-pw-st", "idle", "Not measured"); }
+  ["cpu", "gpu", "ram", "pw"].forEach(k => drawTrend(k, k === "cpu" && cpuT != null ? H.cput : k === "gpu" && gT != null ? H.gput : H[k]));
+  const dr = hw.drives || []; $("ov-drives").innerHTML = dr.length ? dr.map(d => `<div class="mini"><span>${esc(d.name)}</span><span class="pill ${d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical"}">${esc(d.health)}${d.life_left != null ? ` · ${d.life_left}% life` : ""}</span></div>`).join("") : `<div class="muted">No drives reported</div>`;
+  const net = snap.network || {}; $("ov-net").innerHTML = `<div class="big num">${net.primary_ping_ms == null ? "–" : n0(net.primary_ping_ms)}<small>ms ping</small></div><div class="muted">${net.online ? "Online" : "Offline"} · jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}${snap.vpn && snap.vpn.vpn_enabled ? " · VPN on" : ""}</div>`;
+  const fans = (hw.cooling || {}).fans || []; $("ov-cool").innerHTML = fans.length ? `<div class="big num">${fans.filter(f => f.spinning).length}<small>of ${fans.length} fans spinning</small></div><div class="muted">fastest ${n0(Math.max(...fans.map(f => f.rpm)))} RPM${s.storage_max_temp != null ? ` · hottest drive ${n0(s.storage_max_temp)}°C` : ""}</div>` : `<div class="muted">Fan speeds need full sensors (LibreHardwareMonitor).</div>`;
+}
+let appsKey = "cpu";
+$("apps-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; appsKey = b.dataset.k; $("apps-seg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderApps(); });
+let apps = null; const COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#6250d6", "#008300", "#e34948"];
+async function loadApps(){ try { apps = await api("/api/processes"); renderApps(); } catch {} }
+const mb = (v) => v >= 1024 ? n1(v / 1024) + " GB" : n0(v) + " MB";
+function renderApps(){ if (!apps) return; const list = (appsKey === "cpu" ? apps.by_cpu : appsKey === "gpu" ? apps.by_gpu : apps.by_mem) || []; const val = (a) => appsKey === "cpu" ? a.cpu : appsKey === "gpu" ? a.gpu : a.mem_mb; const max = Math.max(1, ...list.map(val)), box = $("apps");
+  if (box.dataset.sig !== appsKey + list.map(a => a.name).join()) { box.dataset.sig = appsKey + list.map(a => a.name).join();
+    box.innerHTML = list.map(a => `<div class="row" data-n="${esc(a.name)}"><span class="av" style="background:${COLORS[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % COLORS.length]}">${esc(a.name.slice(0, 2).toUpperCase())}</span>
+    <span class="nm">${esc(a.name)}<small></small></span><span class="bar meter"><i style="width:0"></i></span><span class="vv"></span></div>`).join("") || `<div class="empty">Measuring…</div>`; }
+  list.forEach((a, i) => { const r = box.children[i]; if (!r || !r.querySelector) return;
+    r.querySelector("small").textContent = appsKey === "gpu" ? (a.vram_mb ? `${mb(a.vram_mb)} video memory` : "") : a.count > 1 ? `${a.count} processes` : "";
+    r.querySelector(".bar i").style.width = `${(appsKey === "cpu" || appsKey === "gpu" ? val(a) : val(a) / max * 100)}%`;
+    r.querySelector(".vv").textContent = appsKey === "mem" ? mb(a.mem_mb) : n1(val(a)) + "%"; });
+  if (appsKey === "gpu" && apps.gpu_available === false) { box.dataset.sig = ""; box.innerHTML = `<div class="empty">Windows isn't reporting per-app GPU use on this PC.</div>`; } }
+
+/* ---------- power ---------- */
+let plans = null, disps = null;
+let pmode = null;
+async function loadPower(){ try { [plans, disps, pmode] = await Promise.all([api("/api/power/plans"), api("/api/display"), api("/api/power/mode").catch(() => null)]); renderPowerCtl(); } catch {} }
+function renderPMode(){ $("pmode-wrap").hidden = !(pmode && pmode.available); if (pmode) $("pmode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.pm === pmode.mode)); }
+$("pmode").addEventListener("click", async (e) => { const b = e.target.closest("[data-pm]"); if (!b || b.getAttribute("aria-pressed") === "true") return;
+  try { pmode = await api("/api/power/mode", { method: "POST", body: JSON.stringify({ mode: b.dataset.pm }) }); renderPMode(); toast(`Power mode: ${b.textContent}`); } catch (err) { toast(err.message, true); } });
+const PLAN_DESC = { "power saver": "Longest battery, lowest heat", "balanced": "Windows default, adjusts to what you do", "high performance": "Faster response, more power", "ultimate performance": "Maximum speed, most power" };
+function renderPowerCtl(){
+  renderPMode();
+  if (plans) {
+    $("plans").innerHTML = plans.plans.map(p => `<button class="plan" data-g="${p.guid}" aria-pressed="${p.active}"><span class="r"></span><span><b>${esc(p.name)}</b><small>${esc(PLAN_DESC[p.name.toLowerCase()] || "Custom plan")}</small></span></button>`).join("") || `<div class="empty">No power plans reported</div>`;
+    $("qc-plan").innerHTML = plans.plans.slice(0, 5).map(p => `<button data-g="${p.guid}" aria-pressed="${p.active}">${esc(p.name.replace(/ performance$/i, ""))}</button>`).join(""); }
+  if (disps) { const seg = (d) => `<div class="seg" data-dev="${esc(d.device)}">${d.rates.map(r => `<button data-hz="${r}" aria-pressed="${r === d.hz}">${r} Hz</button>`).join("")}</div>`;
+    $("disps").innerHTML = disps.displays.map((d, i) => `<div class="disp"><div class="h"><b>Display ${i + 1}${d.primary ? " (main)" : ""} · ${d.width}×${d.height}</b><span class="muted">${esc(d.gpu)}</span></div><div style="margin-top:10px">${seg(d)}</div></div>`).join("") || `<div class="empty">No displays reported</div>`;
+    const p = disps.displays[0]; $("qc-disp").innerHTML = p && p.rates.length > 1 ? `<div class="muted" style="margin-bottom:6px">Main display refresh rate</div>${seg(p)}` : ""; }
+}
+document.addEventListener("click", async (e) => {
+  const g = e.target.closest("[data-g]"), hz = e.target.closest("[data-hz]");
+  if (g && g.getAttribute("aria-pressed") !== "true") { try { plans = await api("/api/power/plans", { method: "POST", body: JSON.stringify({ guid: g.dataset.g }) }); renderPowerCtl(); toast(`Power plan: ${plans.plans.find(p => p.active).name}`); } catch (err) { toast(err.message, true); } }
+  if (hz && hz.getAttribute("aria-pressed") !== "true") { const dev = hz.closest("[data-dev]").dataset.dev; try { disps = await api("/api/display", { method: "POST", body: JSON.stringify({ device: dev, hz: +hz.dataset.hz }) }); renderPowerCtl(); toast(`Refresh rate set to ${hz.dataset.hz} Hz`); } catch (err) { toast(err.message, true); } }
+});
+let pwPeak = 0;
+function renderPower(){
+  const p = snap.hardware.power; if (!p || !p.measured) { $("pw-total").textContent = "–"; $("pw-wall").textContent = "Power readings need full sensors"; return; }
+  tween($("pw-total"), p.dc_total_w, n0); $("pw-wall").textContent = `≈ ${n0(p.wall_w)} W from the wall`; pwPeak = Math.max(pwPeak, p.dc_total_w || 0);
+  const parts = [["CPU package", p.measured["CPU package"], "var(--series)"], ["Graphics card", p.measured["Graphics card"], "var(--series-2)"], ...Object.entries(p.estimated || {}).map(([k, v], i) => [k + " (est.)", v, ["#1baf7a", "#eda100", "#e87ba4", "#6250d6", "#8f8e86"][i % 5]])].filter(x => x[1] != null);
+  const total = parts.reduce((a, x) => a + (x[1] || 0), 0) || 1, st = $("pw-stack");
+  if (st.children.length !== parts.length) st.innerHTML = parts.map(x => `<i style="background:${x[2]};width:0"></i>`).join("");
+  parts.forEach((x, i) => { st.children[i].style.width = `${(x[1] || 0) / total * 100}%`; st.children[i].title = `${x[0]}: ${n1(x[1])} W`; });
+  $("pw-legend").innerHTML = parts.map(x => `<div><span><i style="background:${x[2]}"></i>${esc(x[0])}</span><span class="num">${n1(x[1])} W</span></div>`).join("");
+  const psu = +store.get("psuW", 0); if (document.activeElement !== $("psu-w")) $("psu-w").value = psu || "";
+  if (psu) { const load = p.dc_total_w / psu * 100, l = lvl(load, 70, 85); $("psu-meter").className = "meter " + (l === "good" ? "" : l); $("psu-meter").firstElementChild.style.width = Math.min(100, load) + "%";
+    setSt("psu-st", l, l === "good" ? `Plenty of headroom: ${n0(load)}% load` : l === "warning" ? `Working hard: ${n0(load)}% load` : `Near its limit: ${n0(load)}% load`); $("psu-peak").textContent = `peak ${n0(pwPeak)} W · ${n0(psu - p.dc_total_w)} W spare`; }
+  else { setSt("psu-st", "idle", "Enter your PSU wattage to see headroom"); $("psu-peak").textContent = `peak ${n0(pwPeak)} W`; }
+}
+$("psu-w").addEventListener("change", () => { const v = Math.round(+$("psu-w").value); store.set("psuW", v >= 100 && v <= 5000 ? v : 0); renderPower(); });
+
+/* ---------- performance ---------- */
+function renderPerformance(){
+  const hw = snap.hardware, s = hw.summary || {}, cpu = (hw.groups || []).find(g => g.kind === "cpu"), dev = hw.device || {};
+  $("pf-cpu-name").textContent = s.cpu_name || "Processor";
+  const clk = cpu && cpu.sensors.filter(x => x.type === "Clock" && /core #\d+$|effective|average/i.test(x.name)).map(x => x.value).filter(v => v > 0);
+  $("pf-cpu-sub").textContent = [dev.cores && `${dev.cores} cores`, dev.threads && `${dev.threads} threads`, clk && clk.length && `${n0(Math.max(...clk))} MHz now`, s.cpu_load != null && `${n0(s.cpu_load)}% busy`].filter(Boolean).join(" · ");
+  $("pf-gpu-name").textContent = s.gpu_name || "Graphics"; $("pf-gpu-sub").textContent = [s.gpu_load != null && `${n0(s.gpu_load)}% busy`, s.gpu_power != null && `${n0(s.gpu_power)} W`].filter(Boolean).join(" · ");
+  $("pf-mem-sub").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB` : "";
+  lineChart("cpu", H.cpu, css("--series"), 100); lineChart("gpu", H.gpu, css("--series-2"), 100); lineChart("ram", H.ram, css("--good"), 100);
+  const hasT = H.cput.some(v => v != null) || H.gput.some(v => v != null); $("pf-temps-empty").hidden = hasT; $("pf-temps").hidden = !hasT;
+  if (hasT) { lineChart("cput", H.cput, css("--series"), null, "°C"); lineChart("gput", H.gput, css("--series-2"), null, "°C"); }
+  let th = (cpu ? cpu.sensors : []).filter(x => x.type === "Load" && /thread/i.test(x.name));
+  if (!th.length) th = (cpu ? cpu.sensors : []).filter(x => x.type === "Load" && /core #|cpu \d+/i.test(x.name) && !/max|total/i.test(x.name));
+  const box = $("threads"); if (box.children.length !== th.length) box.innerHTML = th.map((t, i) => `<div class="th"><div class="col"><i style="height:0"></i></div><span>${i + 1}</span></div>`).join("") || `<div class="muted">Per-thread load isn't available.</div>`;
+  th.forEach((t, i) => { const c = box.children[i]; if (!c) return; const bar = c.querySelector("i"); bar.style.height = Math.max(2, Math.min(100, t.value)) + "%"; bar.classList.toggle("hot", t.value > 85); c.title = `${t.name}: ${n0(t.value)}%`; });
+}
+
+/* ---------- cooling ---------- */
+const FAN = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 10.6c.3-2.9 1.6-6.6 4.6-6.6 2.2 0 3 1.9 2.3 3.4-.9 1.9-3.6 3-6.9 3.2zm1.4 1.4c2.9.3 6.6 1.6 6.6 4.6 0 2.2-1.9 3-3.4 2.3-1.9-.9-3-3.6-3.2-6.9zM12 13.4c-.3 2.9-1.6 6.6-4.6 6.6-2.2 0-3-1.9-2.3-3.4.9-1.9 3.6-3 6.9-3.2zM10.6 12c-2.9-.3-6.6-1.6-6.6-4.6 0-2.2 1.9-3 3.4-2.3 1.9.9 3 3.6 3.2 6.9z"/><circle cx="12" cy="12" r="1.6"/></svg>`;
+const ang = {}; let fanRaf = 0, fanLast = 0;
+const motionOff = () => document.documentElement.dataset.motion === "off" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+function spin(t){ const dt = fanLast ? Math.min(.1, (t - fanLast) / 1000) : 0; fanLast = t;
+  if (!motionOff()) document.querySelectorAll(".fan[data-rpm]").forEach(el => { const k = el.dataset.key; ang[k] = ((ang[k] || 0) + dt * (+el.dataset.rpm || 0) * .6) % 360; el.querySelector(".blade svg").style.transform = `rotate(${ang[k]}deg)`; });
+  fanRaf = page === "cooling" ? requestAnimationFrame(spin) : 0; if (!fanRaf) fanLast = 0; }
+function renderCooling(){
+  const c = snap.hardware.cooling || {}, fans = c.fans || [], names = store.get("fanNames", {});
+  $("cool-sub").textContent = fans.length ? `${fans.filter(f => f.spinning).length} of ${fans.length} spinning${c.fancontrol ? " · curves from FanControl" : ""}` : "";
+  const box = $("fans"), sig = fans.map(f => f.key).join("|");
+  if (!fans.length) { box.innerHTML = `<div class="empty">Windows itself doesn't report fan speeds. Set up full sensors (LibreHardwareMonitor) to see every fan.</div>`; box.dataset.sig = ""; return; }
+  if (box.dataset.sig !== sig) { box.dataset.sig = sig; box.innerHTML = fans.map(f => `<div class="fan" data-key="${esc(f.key)}"><div class="blade">${FAN}</div>
+    <div style="min-width:0"><div class="nm"><span class="fn"></span><button data-rename="${esc(f.key)}" type="button">Rename</button></div><div class="sb fs"></div></div>
+    <div class="bars"><div class="bl"><span>Speed vs its max</span><span class="num fo"></span></div><div class="meter"><i class="fo-b" style="width:0"></i></div><div class="bl"><span>Control signal</span><span class="num fd"></span></div><div class="meter"><i class="fd-b" style="width:0;background:var(--ink-3)"></i></div></div>
+    <div class="rpm"><span class="num fr">–</span><small>RPM</small></div></div>`).join(""); }
+  fans.forEach(f => { const el = box.querySelector(`.fan[data-key="${CSS.escape(f.key)}"]`); if (!el) return; el.dataset.rpm = f.rpm; el.classList.toggle("off", !f.spinning);
+    el.querySelector(".fn").textContent = names[f.key] || f.name;
+    el.querySelector(".fs").textContent = [f.location, f.driven_by ? (/^not/i.test(f.driven_by) ? f.driven_by : `follows ${f.driven_by}`) : null, f.curve ? `curve "${f.curve}"` : null, f.peak_rpm ? `max seen ${n0(f.peak_rpm)} RPM` : null].filter(Boolean).join(" · ");
+    tween(el.querySelector(".fr"), f.rpm, n0); el.querySelector(".fo").textContent = f.output_pct == null ? "–" : `${n0(f.output_pct)}%`; el.querySelector(".fo-b").style.width = `${f.output_pct || 0}%`;
+    el.querySelector(".fd").textContent = f.duty_pct == null ? "not reported" : `${n0(f.duty_pct)}%`; el.querySelector(".fd-b").style.width = `${f.duty_pct == null ? 0 : f.duty_pct}%`; });
+  if (!fanRaf) fanRaf = requestAnimationFrame(spin);
+}
+let renaming = null;
+$("fans").addEventListener("click", (e) => { const b = e.target.closest("[data-rename]"); if (!b) return; renaming = b.dataset.rename; $("rn-in").value = (store.get("fanNames", {})[renaming]) || ""; $("rn-in").placeholder = b.closest(".fan").querySelector(".fn").textContent; $("rn-bg").classList.add("show"); setTimeout(() => $("rn-in").focus(), 50); });
+const rnClose = () => $("rn-bg").classList.remove("show");
+$("rn-cancel").onclick = rnClose; $("rn-bg").addEventListener("click", (e) => { if (e.target === $("rn-bg")) rnClose(); });
+$("rn-save").onclick = () => { const names = store.get("fanNames", {}), v = $("rn-in").value.trim(); if (v) names[renaming] = v.slice(0, 40); else delete names[renaming]; store.set("fanNames", names); rnClose(); renderCooling(); };
+$("rn-in").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rn-save").click(); });
+
+/* ---------- storage ---------- */
+function renderStorage(){
+  const dr = snap.hardware.drives || [], box = $("drives"), sig = dr.map(d => d.name + d.health + d.life_left + d.temp + d.hours).join("|");
+  if (box.dataset.sig !== sig) { box.dataset.sig = sig; box.innerHTML = dr.map(d => { const hcls = d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical";
+    return `<div class="card drive"><div class="hd"><div><b>${esc(d.name)}</b><span class="muted">${esc(d.kind)} · ${n0(d.size_gb)} GB${d.firmware ? " · firmware " + esc(d.firmware) : ""}</span></div><span class="pill ${hcls}">${esc(d.health)}</span></div>
+      ${d.life_left != null ? `<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span>Life left</span><b class="num">${d.life_left}%</b></div><div class="meter ${d.life_left < 20 ? "critical" : d.life_left < 50 ? "warning" : ""}"><i style="width:${d.life_left}%"></i></div>` : `<div class="muted">Wear level needs full sensors or admin access.</div>`}
+      <div class="kv"><div><b>${d.temp != null ? n0(d.temp) + "°C" : "–"}</b><span>Temperature</span></div><div><b>${d.hours != null ? n0(d.hours) : "–"}</b><span>Hours powered on</span></div><div><b>${d.written_gb != null ? (d.written_gb >= 1000 ? n1(d.written_gb / 1000) + " TB" : n0(d.written_gb) + " GB") : d.spare != null ? d.spare + "%" : "–"}</b><span>${d.written_gb != null ? "Data written" : "Spare capacity"}</span></div></div>
+      <div class="muted" style="margin-top:10px">${d.smart_source ? "Health details from " + esc(d.smart_source) : "Health status from Windows"}</div></div>`; }).join("") || `<div class="card empty">No drives reported</div>`; }
+  const vols = []; (snap.hardware.groups || []).forEach(g => g.sensors.forEach(s => { if (s.type !== "Load") return;
+    if (g.kind === "storage" && /used space/i.test(s.name)) vols.push({ n: g.name, v: s.value }); else if (/ used$/i.test(s.name)) vols.push({ n: s.name.replace(/ used$/i, ""), v: s.value }); }));
+  $("vols").innerHTML = vols.map(v => `<div class="row" style="grid-template-columns:minmax(0,1fr) 2fr 64px"><span class="nm">${esc(v.n)}</span><span class="meter ${v.v > 90 ? "critical" : v.v > 80 ? "warning" : ""}"><i style="width:${v.v}%"></i></span><span class="vv">${n0(v.v)}%</span></div>`).join("") || `<div class="empty">No volumes reported</div>`;
+}
+
+/* ---------- network + vpn ---------- */
+function sparkPath(h){ const W = 160, Hh = 36, ok = h.filter(v => v != null); if (ok.length < 2) return { l: "", d: null }; const max = Math.max(...ok) * 1.2, n = h.length, x = (i) => i / Math.max(1, n - 1) * (W - 6) + 3, y = (v) => Hh - 3 - v / (max || 1) * (Hh - 8);
+  const p = []; h.forEach((v, i) => { if (v != null) p.push([x(i), y(v)]); }); return { l: smooth(p), d: p[p.length - 1] }; }
+function renderNet(){
+  const net = snap.network || {}, t = net.targets || [], box = $("pings");
+  if (box.dataset.sig !== t.map(p => p.id).join()) { box.dataset.sig = t.map(p => p.id).join(); box.innerHTML = t.map(p => `<div class="ping" data-id="${esc(p.id)}"><div><div class="n">${esc(p.name)}</div><div class="h">${esc(p.host)} · <span class="status good ps">OK</span></div></div>
+    <div class="spark-wrap"><svg class="spark" viewBox="0 0 160 36" aria-hidden="true"><line x1="0" y1="34" x2="160" y2="34" stroke="var(--grid)"/><path class="sl" fill="none" stroke="var(--series)" stroke-width="2" stroke-linecap="round"/><circle class="sd" r="3.5" fill="var(--series)" stroke="var(--surface)" stroke-width="2" cx="-9" cy="-9"/></svg></div>
+    <div class="v"><span class="num pv">–</span><small> ms</small></div></div>`).join("") || `<div class="empty">No ping targets</div>`; }
+  t.forEach(p => { const el = box.querySelector(`.ping[data-id="${CSS.escape(p.id)}"]`); if (!el) return; const l = p.latency_ms == null ? "critical" : p.latency_ms > 120 ? "warning" : "good", ps = el.querySelector(".ps");
+    ps.className = "status ps " + l; ps.textContent = p.latency_ms == null ? "No reply" : l === "warning" ? "Slow" : "OK"; tween(el.querySelector(".pv"), p.latency_ms, n0, 700);
+    const sp = sparkPath(p.history || []); el.querySelector(".sl").setAttribute("d", sp.l); if (sp.d) { el.querySelector(".sd").setAttribute("cx", sp.d[0]); el.querySelector(".sd").setAttribute("cy", sp.d[1]); } });
+  $("netstats").textContent = `Jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"} · ${net.online ? "online" : "offline"}`;
+  let up = 0, dn = 0; (snap.hardware.groups || []).filter(g => g.kind === "network").forEach(g => g.sensors.forEach(s => { if (s.type === "Throughput") { if (/upload/i.test(s.name)) up += s.value; if (/download/i.test(s.name)) dn += s.value; } }));
+  $("nt-down").textContent = rate(dn); $("nt-up").textContent = rate(up);
+  const l = store.get("lastSpeed", null); $("nt-speed").innerHTML = l ? `<div class="big num">${auto(l.download_mbps)}<small>down</small> ${auto(l.upload_mbps)}<small>up Mbps</small></div><div class="muted">${when(l.at)} · ping ${n0(l.ping_ms)} ms${l.grade ? " · grade " + esc(l.grade) : ""}</div>` : `<div class="muted">No test yet.</div>`;
+}
+let vpnBusy = false;
+function renderVPN(){ const v = snap.vpn || {}; $("vpn-router").textContent = v.router_ip ? `Router ${v.router_ip}` : ""; $("vpn-title").textContent = v.tunnel || "Router VPN";
+  $("vpn-sub").textContent = v.mode === "none" ? "Not set up on this PC" : v.vpn_enabled == null ? "Checking the router…" : v.vpn_enabled ? `Connected${v.server ? " · " + v.server : ""}` : `Off${v.server ? " · " + v.server + " ready" : ""}`;
+  if (!vpnBusy) $("vpn-cb").checked = !!v.vpn_enabled; $("vpn-cb").disabled = v.mode === "none" || vpnBusy; $("vpn-msg").textContent = v.message && v.message !== "Ready." ? v.message : ""; }
+$("vpn-cb").addEventListener("change", async () => { vpnBusy = true; $("vpn-switch").classList.add("busy"); $("vpn-msg").textContent = $("vpn-cb").checked ? "Turning VPN on…" : "Turning VPN off…";
+  try { snap.vpn = await api("/api/vpn/toggle", { method: "POST", body: JSON.stringify({ enable: $("vpn-cb").checked }) }); } catch (e) { $("vpn-msg").textContent = e.message; } vpnBusy = false; $("vpn-switch").classList.remove("busy"); renderVPN(); });
+
+/* ---------- sensors (detailed) ---------- */
+let hidden = new Set(store.get("hiddenSensors", [])), types = new Set(store.get("types", ["Temperature", "Load", "Fan", "Power", "Clock", "Voltage"]));
+const ALLT = ["Temperature", "Power", "Load", "Clock", "Fan", "Control", "Voltage", "Current", "Data", "SmallData", "Throughput", "Level", "Timing", "Factor", "Energy", "Other"];
+const TL = { Temperature: "Temps", SmallData: "Memory MB", Throughput: "Network" }, KL = { cpu: "CPU", gpu: "GPU", memory: "Memory", storage: "Drive", motherboard: "Motherboard", network: "Network", battery: "Battery", psu: "Power supply", other: "Other" };
+const SEC = [["Temperature", "Temperatures", "°C"], ["Power", "Power draw", "W"], ["Load", "Usage", "%"], ["Clock", "Clock speeds", "MHz"], ["Fan", "Fan speeds", "RPM"], ["Control", "Fan control", "%"], ["Voltage", "Voltages", "V"], ["Current", "Current", "A"], ["Level", "Levels", "%"], ["Data", "Data", "GB"], ["SmallData", "Memory", "MB"], ["Throughput", "Throughput", ""], ["Timing", "Timings", "ns"], ["Factor", "Factors", ""], ["Energy", "Energy", "mWh"], ["Other", "Other", ""]];
+function renderSensors(){
+  const hw = snap.hardware, present = ALLT.filter(t => (hw.groups || []).some(g => g.sensors.some(x => x.type === t))), sig = present.join() + [...types].join();
+  if ($("filters").dataset.sig !== sig) { $("filters").dataset.sig = sig; $("filters").innerHTML = present.map(t => `<button class="f" data-t="${t}" aria-pressed="${types.has(t)}">${TL[t] || t}</button>`).join(""); }
+  const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1", open = new Set(store.get("openGroups", ["cpu", "gpu"])), keys = new Set();
+  (hw.groups || []).forEach(g => { const rows = g.sensors.filter(x => types.has(x.type) && (!q || (g.name + " " + x.name + " " + x.type).toLowerCase().includes(q)) && (showAll || !hidden.has(x.id)));
+    const key = g.kind + ":" + g.name; keys.add(key); let d = $("groups").querySelector(`details[data-key="${CSS.escape(key)}"]`);
+    if (!rows.length) { if (d) d.remove(); return; }
+    const struct = rows.map(x => x.id).join(",") + "|" + [...hidden].join();
+    if (!d) { d = document.createElement("details"); d.className = "grp"; d.dataset.key = key; if (open.has(key) || open.has(g.kind)) d.open = true; $("groups").appendChild(d); }
+    if (q && !d.open) d.open = true;
+    if (d.dataset.struct !== struct) { d.dataset.struct = struct;
+      d.innerHTML = `<summary><span><span class="k">${KL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary><div class="subgrid">` + SEC.map(([t, title, unit]) => { const list = rows.filter(x => x.type === t); if (!list.length) return "";
+        return `<div class="subsec"><h4>${title}${unit ? ` (${unit})` : ""}<span>${list.length}</span></h4><table><thead><tr><th></th><th>Sensor</th><th class="n">Now</th><th class="n">Min</th><th class="n">Max</th></tr></thead><tbody>
+        ${list.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}" data-sid="${esc(x.id)}"><td class="cbx"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td><td>${esc(x.name)}</td><td class="n"><b class="nv"></b></td><td class="n mn"></td><td class="n mx"></td></tr>`).join("")}</tbody></table></div>`; }).join("") + `</div>`; }
+    rows.forEach(x => { const tr = d.querySelector(`tr[data-sid="${CSS.escape(x.id)}"]`); if (!tr) return; const f = x.type === "Throughput" ? rate : n1; if (x.type === "Throughput") tr.querySelector(".nv").textContent = rate(x.value); else tween(tr.querySelector(".nv"), x.value, n1, 700);
+      tr.querySelector(".mn").textContent = x.min == null ? "–" : f(+x.min); tr.querySelector(".mx").textContent = x.max == null ? "–" : f(+x.max); }); });
+  $("groups").querySelectorAll("details.grp").forEach(d => { if (!keys.has(d.dataset.key)) d.remove(); });
+  if (!$("groups").children.length) $("groups").innerHTML = `<div class="empty">No sensors match.</div>`; else $("groups").querySelectorAll(".empty").forEach(e => e.remove());
+}
+$("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; types.has(b.dataset.t) ? types.delete(b.dataset.t) : types.add(b.dataset.t); store.set("types", [...types]); renderSensors(); });
+$("groups").addEventListener("change", (e) => { const id = e.target.dataset.id; if (!id) return; e.target.checked ? hidden.delete(id) : hidden.add(id); store.set("hiddenSensors", [...hidden]); renderSensors(); });
+$("groups").addEventListener("toggle", (e) => { const d = e.target; if (!d.dataset || !d.dataset.key || $("q").value) return; const o = new Set(store.get("openGroups", ["cpu", "gpu"])); d.open ? o.add(d.dataset.key) : (o.delete(d.dataset.key), o.delete(d.dataset.key.split(":")[0])); store.set("openGroups", [...o]); }, true);
+$("q").addEventListener("input", renderSensors);
+$("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; renderSensors(); };
+
+/* ---------- system ---------- */
+function renderSystem(){
+  const hw = snap.hardware, d = hw.device || {}, m = hw.monitors || {};
+  $("sys-type").textContent = d.type === "laptop" ? "Laptop" : d.type ? "Desktop" : "";
+  const kv = [["Processor", d.cpu], ["Cores / threads", d.cores ? `${d.cores} / ${d.threads}` : null], ["Graphics", (d.gpus || []).join(", ")], ["Memory", hw.summary && hw.summary.ram_total_gb ? `${n0(hw.summary.ram_total_gb)} GB` : null], ["Motherboard", d.board], ["Windows", d.os]];
+  $("sys-kv").innerHTML = kv.filter(x => x[1]).map(([k, v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("") || `<span class="muted">Reading…</span>`;
+  $("src-sub").textContent = hw.level === "basic" ? "Basic" : hw.level ? "Full" : "";
+  $("src-body").innerHTML = `<div class="field"><span>Reading sensors from</span><b>${esc(hw.source || "–")}</b></div><div class="field"><span>Sensors found</span><b class="num">${n0(hw.sensor_count)}</b></div>
+    <div class="field"><span>Other monitoring apps running</span><span>${(m.running || []).map(x => `<span class="pill">${esc(x)}</span>`).join(" ") || "none"}</span></div>
+    ${hw.level === "basic" ? `<div class="field"><span>${esc(hw.help || "Install LibreHardwareMonitor for temperatures, fans and power.")}</span><button class="btn primary" data-lhm>Set up</button></div>` : ""}`;
+}
+async function setupLhm(){ const b = $("lhm-go"); b.disabled = true; b.textContent = "Setting up…"; toast("Installing LibreHardwareMonitor. Windows will ask for permission once.");
+  try { await api("/api/setup/lhm", { method: "POST" }); toast("Done. Full sensors appear in a few seconds."); } catch (e) { toast(e.message, true); } b.disabled = false; b.textContent = "Set up full sensors"; }
+$("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (e.target.closest("[data-lhm]")) setupLhm(); });
+
+/* ---------- battery (laptops) ---------- */
+let pack = undefined, bhist = null, bright = null, batTimer = 0;
+async function loadBattery(){
+  try { pack = await api("/api/laptop/battery"); } catch { pack = null; }
+  if (pack && pack.has_battery) { if (!bhist) api("/api/laptop/battery/history").then(h => { bhist = h; renderBattery(); }).catch(() => {}); try { bright = await api("/api/laptop/brightness"); } catch {} }
+  renderBattery(); clearTimeout(batTimer); if (page === "battery") batTimer = setTimeout(loadBattery, 5000);
+}
+const hm = (m) => m == null ? "–" : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+function renderBattery(){
+  if (document.activeElement && document.activeElement.id === "bt-br") return;
+  const bg = (snap && snap.hardware.groups || []).find(g => g.kind === "battery"), lv = bg && bg.sensors.find(s => /level|charge/i.test(s.name) && s.type !== "Voltage");
+  const has = pack && pack.has_battery; $("bt-sub").textContent = has ? "From Windows' battery sensors" : "";
+  const pct = has && pack.charge_pct != null ? pack.charge_pct : lv ? lv.value : null, R = 54, C = 2 * Math.PI * R;
+  const ring = `<svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true"><circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--series-track)" stroke-width="12"/>
+    <circle cx="70" cy="70" r="${R}" fill="none" stroke="${pct != null && pct < 20 ? "var(--critical)" : "var(--good)"}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - (pct || 0) / 100)}" transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .9s var(--ease)"/></svg>`;
+  const stat = (k, v, sub) => `<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px"><div class="muted">${k}</div><div class="big num">${v}</div>${sub ? `<div class="muted">${sub}</div>` : ""}</div>`;
+  const hero = `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap"><div style="position:relative;width:140px;height:140px">${ring}<div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div class="num" style="font:600 34px/1 var(--font-display)">${pct == null ? "–" : n0(pct)}<small style="font-size:14px">%</small></div><div class="muted">${has && pack.state ? esc(pack.state) : "charged"}</div></div></div></div>
+    <div><div style="font:600 18px var(--font-display)">${has ? esc(pack.verdict || "") : "Battery"}</div><div class="muted">${has ? [pack.maker, pack.model, pack.chemistry].filter(Boolean).map(esc).join(" · ") : ""}</div>
+    ${has && pack.minutes_to_full ? `<div class="muted mt">Full in about ${hm(pack.minutes_to_full)}</div>` : has && pack.minutes_left ? `<div class="muted mt">About ${hm(pack.minutes_left)} left at this pace</div>` : ""}</div></div>`;
+  if (!has) { $("bt-body").innerHTML = hero + `<div class="banner info mt"><div class="ic">+</div><div><div class="t">Battery details aren't available</div><div class="s">Windows isn't reporting health, cycles or charge rate for this battery, so only the charge level is shown.</div></div></div>`; return; }
+  const h = (bhist && bhist.history) || [];
+  const histSvg = h.length > 1 ? (() => { const W = 800, Hh = 140, mn = Math.min(...h.map(x => x.health_pct)) - 3, mx = Math.max(100, ...h.map(x => x.health_pct)), x = (i) => 6 + i / (h.length - 1) * (W - 12), y = (v) => Hh - 6 - (v - mn) / (mx - mn) * (Hh - 16);
+    const pts = h.map((r, i) => [x(i), y(r.health_pct)]), d = smooth(pts); return `<svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" style="width:100%;height:140px;display:block"><path d="${d} L${pts[pts.length - 1][0]},${Hh} L${pts[0][0]},${Hh} Z" fill="var(--good)" opacity=".1"/><path d="${d}" fill="none" stroke="var(--good)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div style="display:flex;justify-content:space-between" class="muted"><span>${esc((h[0].start || "").slice(0, 10))} · ${n1(h[0].health_pct)}%</span><span>${esc((h[h.length - 1].end || "").slice(0, 10))} · ${n1(h[h.length - 1].health_pct)}%</span></div>`; })() : `<div class="muted">Windows hasn't recorded enough history yet.</div>`;
+  $("bt-body").innerHTML = hero + `<div class="grid g4 mt">
+    ${stat("Health", pack.health_pct != null ? n1(pack.health_pct) + "%" : "–", pack.full_mwh && pack.design_mwh ? `${n1(pack.full_mwh / 1000)} of ${n1(pack.design_mwh / 1000)} Wh when new` : "")}
+    ${stat("Charge cycles", pack.cycles ?? "–", "full charges so far")}
+    ${stat(pack.rate_w > 0 ? "Charging at" : pack.rate_w < 0 ? "Using" : "Power", pack.rate_w ? n1(Math.abs(pack.rate_w)) + " W" : "0 W", pack.voltage_v ? `${n1(pack.voltage_v)} V` : "")}
+    ${stat("Wear", pack.wear_pct != null ? n1(pack.wear_pct) + "%" : "–", "capacity lost since new")}</div>
+    <div class="grid g2 mt"><div><div class="muted" style="margin-bottom:6px">Battery health over time</div>${histSvg}</div>
+    <div>${bright && bright.available ? `<div class="muted" style="margin-bottom:6px">Screen brightness</div><div style="display:flex;align-items:center;gap:12px"><input type="range" id="bt-br" min="0" max="100" value="${bright.percent}" style="flex:1;accent-color:var(--accent)" aria-label="Screen brightness"><b class="num" id="bt-brv">${bright.percent}%</b></div>` : ""}</div></div>`;
+  const br = $("bt-br"); if (br) { br.oninput = () => { $("bt-brv").textContent = br.value + "%"; }; br.onchange = async () => { try { bright = await api("/api/laptop/brightness", { method: "POST", body: JSON.stringify({ percent: +br.value }) }); } catch (e) { toast(e.message, true); } }; }
+}
+
+/* ---------- alerts ---------- */
+const AL = Object.assign({ on: true, cpu: 90, gpu: 90, ram: 92 }, store.get("alerts", {})); $("al-on").checked = AL.on; $("al-cpu").value = AL.cpu; $("al-gpu").value = AL.gpu; $("al-ram").value = AL.ram;
+["al-on", "al-cpu", "al-gpu", "al-ram"].forEach(id => $(id).addEventListener("change", () => { Object.assign(AL, { on: $("al-on").checked, cpu: +$("al-cpu").value || 90, gpu: +$("al-gpu").value || 90, ram: +$("al-ram").value || 92 }); store.set("alerts", AL); }));
+const lastAlert = {};
+function checkAlerts(s){ if (!AL.on) return; const fire = (k, cond, msg) => { if (cond && Date.now() - (lastAlert[k] || 0) > 300000) { lastAlert[k] = Date.now(); toast(msg, true); } };
+  fire("cpu", s.cpu_temp != null && s.cpu_temp >= AL.cpu, `CPU is at ${n0(s.cpu_temp)}°C`); const g = s.gpu_hotspot ?? s.gpu_temp; fire("gpu", g != null && g >= AL.gpu, `GPU is at ${n0(g)}°C`); fire("ram", s.ram_load != null && s.ram_load >= AL.ram, `Memory is ${n0(s.ram_load)}% full`); }
+
+/* ---------- updates, about, export ---------- */
+async function checkUpdate(force){ try { const u = await api("/api/update" + (force ? "?force=true" : "")); $("ab-ver").textContent = `Version ${u.current}`;
+  if (u.available && (force || store.get("skipVersion", "") !== u.latest)) { $("upd").hidden = false; $("upd").dataset.v = u.latest; $("upd-t").textContent = `Ultra Suite ${u.latest} is available`; $("upd-s").textContent = u.summary || (u.notes || "").split("\n").map(l => l.replace(/[#*`]/g, "").trim()).find(l => l && !/^ultra suite/i.test(l)) || "New features and fixes."; }
+  else if (force) toast(u.error ? "Couldn't check for updates right now." : `You're on the newest version (${u.current}).`); } catch { if (force) toast("Couldn't check for updates right now.", true); } }
+$("upd-later").onclick = () => { store.set("skipVersion", $("upd").dataset.v || ""); $("upd").hidden = true; };
+$("upd-go").onclick = async () => { $("upd-go").disabled = true; $("upd-go").textContent = "Downloading…"; try { await api("/api/update/install", { method: "POST" }); toast("The installer is starting. Ultra Suite reopens when it's done."); } catch (e) { toast(e.message, true); } $("upd-go").disabled = false; $("upd-go").textContent = "Update now"; };
+$("ab-upd").onclick = () => checkUpdate(true);
+$("ab-export").onclick = () => { const rep = { exported: new Date().toISOString(), snapshot: snap, apps, plans, displays: disps }; const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(rep, null, 2)], { type: "application/json" })); a.download = `pc-sentinel-report-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("Report saved to your Downloads folder."); };
+
+/* ---------- feedback ---------- */
+let fbKind = "idea"; const fbOpen = () => { $("fb-bg").classList.add("show"); $("fb-st").textContent = "Anonymous"; setTimeout(() => $("fb-msg").focus(), 50); }, fbClose = () => $("fb-bg").classList.remove("show");
+$("fb-open").onclick = fbOpen; $("ab-fb").onclick = fbOpen; $("fb-cancel").onclick = fbClose; $("fb-bg").addEventListener("click", (e) => { if (e.target === $("fb-bg")) fbClose(); });
+$("fb-kind").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; fbKind = b.dataset.k; $("fb-kind").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
+$("fb-send").onclick = async () => { const msg = $("fb-msg").value.trim(); if (msg.length < 3) { $("fb-st").textContent = "Write a few words first"; return; } $("fb-send").disabled = true; $("fb-st").textContent = "Sending…";
+  try { await api("/api/feedback", { method: "POST", body: JSON.stringify({ kind: fbKind, message: msg }) }); $("fb-st").textContent = "Thank you! Sent."; $("fb-msg").value = ""; setTimeout(fbClose, 900); } catch (e) { $("fb-st").textContent = e.message; } $("fb-send").disabled = false; };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { fbClose(); rnClose(); } });
+
+/* ---------- speed test ---------- */
+const G = { cx: 155, cy: 150, r: 118, start: -135, sweep: 270 }; const STOPS = [0, 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+const sp = { running: false, phase: null, target: 0, shown: 0, down: [], up: [], ws: null, prog: 0 };
+const polar = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [G.cx + r * Math.cos(a), G.cy + r * Math.sin(a)]; };
+const arcP = (f) => { const end = G.start + G.sweep * Math.max(.0001, Math.min(1, f)), [x1, y1] = polar(G.start, G.r), [x2, y2] = polar(end, G.r); return `M${x1.toFixed(1)},${y1.toFixed(1)} A${G.r},${G.r} 0 ${end - G.start > 180 ? 1 : 0} 1 ${x2.toFixed(1)},${y2.toFixed(1)}`; };
+const frac = (v) => { const n = STOPS.length - 1; if (v <= 0) return 0; for (let i = 0; i < n; i++) if (v <= STOPS[i + 1]) return (i + (v - STOPS[i]) / (STOPS[i + 1] - STOPS[i])) / n; return 1; };
+function drawGauge(){ if ($("gauge").dataset.ok) return; $("gauge").dataset.ok = 1;
+  const ticks = STOPS.map((s, i) => { const [x, y] = polar(G.start + G.sweep * i / (STOPS.length - 1), G.r - 26); return `<text class="g-tick" x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${s >= 1000 ? s / 1000 + "G" : s}</text>`; }).join("");
+  const minor = Array.from({ length: (STOPS.length - 1) * 4 + 1 }, (_, i) => { const deg = G.start + G.sweep * i / ((STOPS.length - 1) * 4), [a, b] = polar(deg, G.r + 11), [c, d] = polar(deg, G.r + (i % 4 ? 15 : 19)); return `<line x1="${a.toFixed(1)}" y1="${b.toFixed(1)}" x2="${c.toFixed(1)}" y2="${d.toFixed(1)}" stroke="var(--line-strong)" stroke-width="${i % 4 ? 1 : 2}"/>`; }).join("");
+  $("gauge").innerHTML = `${minor}<path d="${arcP(1)}" fill="none" stroke="var(--series-track)" stroke-width="16" stroke-linecap="round"/><path id="g-arc" d="${arcP(0)}" fill="none" stroke="var(--series)" stroke-width="16" stroke-linecap="round"/>${ticks}
+    <g id="g-needle" style="transform:rotate(${G.start}deg)"><path d="M${G.cx - 4},${G.cy} L${G.cx},${G.cy - G.r + 18} L${G.cx + 4},${G.cy} Z" fill="var(--ink)"/><circle cx="${G.cx}" cy="${G.cy}" r="9" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/></g>`; }
+function animG(){ sp.shown += (sp.target - sp.shown) * .09; if (Math.abs(sp.target - sp.shown) < .05) sp.shown = sp.target; const f = sp.phase === "ping" ? 0 : frac(sp.shown);
+  const a = $("g-arc"); if (a) { a.setAttribute("d", arcP(f)); a.setAttribute("stroke", sp.phase === "upload" ? "var(--series-2)" : "var(--series)"); } const nd = $("g-needle"); if (nd) nd.style.transform = `rotate(${G.start + G.sweep * f}deg)`;
+  $("g-val").textContent = sp.phase === "ping" ? n0(sp.target) : auto(sp.shown); if (sp.running || sp.shown !== sp.target) requestAnimationFrame(animG); }
+const setPh = (l, m) => { $("g-phase").className = "g-phase" + (m ? " on" : "") + (m === "up" ? " up" : ""); $("g-phase-t").textContent = l; };
+const setR = (id, v, act, f) => { tween($(id).querySelector(".v span"), v, f || auto, 600); $(id).classList.toggle("active", !!act); };
+function setProg(p, l){ sp.prog = Math.max(0, Math.min(1, p)); $("prog-fill").style.width = (sp.prog * 100).toFixed(1) + "%"; tween($("prog-pct"), sp.prog * 100, v => `${Math.round(v)}%`, 300); if (l) $("prog-label").textContent = l;
+  [["s-ping", 0, .09], ["s-down", .09, .545], ["s-up", .545, 1], ["s-done", 1, 1.01]].forEach(([id, a, b]) => { $(id).className = sp.prog >= b ? "done" : sp.prog >= a && sp.running ? "on" : ""; }); }
+function drawSpeedChart(){ const W = 800, Hh = 150, n = 50, max = Math.max(10, ...sp.down, ...sp.up) * 1.12, x = (i) => 6 + i / (n - 1) * (W - 12), y = (v) => Hh - 4 - v / max * (Hh - 18);
+  const ln = (a, c) => { if (a.length < 2) return ""; const p = a.map((v, i) => [x(i), y(v)]), d = smooth(p); return `<path d="${d} L${p[p.length - 1][0]},${Hh - 4} L${p[0][0]},${Hh - 4} Z" fill="${c}" opacity=".12"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`; };
+  $("st-chart").innerHTML = `<line x1="0" x2="${W}" y1="${Hh - 4}" y2="${Hh - 4}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>` + ln(sp.down, "var(--series)") + ln(sp.up, "var(--series-2)"); }
+function extras(m){ if (!m || !m.grade) { $("extras").innerHTML = ""; return; }
+  $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is busy"><span class="grade g-${m.grade[0].toLowerCase()}">${esc(m.grade)}</span>Bufferbloat · busy ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` + Object.entries(m.quality || {}).map(([k, v]) => `<span class="q ${esc(v)}">${esc(k)} <b>${esc(v)}</b></span>`).join(""); }
+function hist(){ const h = store.get("speedHistory", []); $("history").hidden = !h.length; if (!h.length) return; const mx = Math.max(...h.map(x => x.download_mbps), 1);
+  $("history").innerHTML = `<div class="muted" style="margin-bottom:4px">Recent tests (download, upload, ping, grade)</div>` + h.slice(0, 6).map(x => `<div class="hrow"><span>${when(x.at)}</span>
+    <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.download_mbps)}<span class="hb" style="flex:1"><i style="width:${x.download_mbps / mx * 100}%;background:var(--series)"></i></span></span>
+    <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.upload_mbps)}<span class="hb" style="flex:1"><i style="width:${Math.min(100, x.upload_mbps / mx * 100)}%;background:var(--series-2)"></i></span></span><span class="num">${n0(x.ping_ms)} ms</span><span>${esc(x.grade || "")}</span></div>`).join(""); }
+(function last(){ const l = store.get("lastSpeed", null); if (!l) { $("st-meta").textContent = "Press START to measure ping, download and upload."; return; } setR("r-ping", l.ping_ms, false, n0); setR("r-jitter", l.jitter_ms, false, n1); setR("r-down", l.download_mbps); setR("r-up", l.upload_mbps); extras(l); hist(); $("st-meta").textContent = `Last test ${when(l.at)} · ${l.server}`; })();
+$("st-go").onclick = () => { if (sp.running) { sp.ws && sp.ws.close(); return; } Object.assign(sp, { running: true, down: [], up: [], target: 0, shown: 0 }); drawGauge(); drawSpeedChart(); extras(null);
+  ["r-ping", "r-jitter", "r-down", "r-up"].forEach(i => setR(i, null)); $("x-down").textContent = $("x-up").textContent = ""; $("st-go").textContent = "STOP"; $("st-go").classList.add("stop"); $("track").classList.add("running"); $("st-meta").textContent = "Testing… pause other downloads for the most accurate result."; setProg(0, "Connecting…"); requestAnimationFrame(animG);
+  const ws = sp.ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/speedtest`); let done = false;
+  ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === "phase") { sp.phase = m.phase; sp.target = 0; setPh({ ping: "Measuring ping", download: "Downloading", upload: "Uploading" }[m.phase], m.phase === "upload" ? "up" : "on"); $(({ ping: "r-ping", download: "r-down", upload: "r-up" })[m.phase]).classList.add("active"); }
+    else if (m.type === "progress") { if (m.phase === "ping") { sp.target = m.ping_ms; setR("r-ping", m.ping_ms, true, n0); setProg(.09 * m.progress, "Measuring ping"); }
+      else { sp.target = m.mbps; (m.phase === "download" ? sp.down : sp.up).push(m.mbps); drawSpeedChart(); setR(m.phase === "download" ? "r-down" : "r-up", m.mbps, true); if (m.loaded_ms != null) $(m.phase === "download" ? "x-down" : "x-up").textContent = `busy ping ${n0(m.loaded_ms)} ms`;
+        setProg(m.phase === "download" ? .09 + .455 * m.progress : .545 + .455 * m.progress, m.phase === "download" ? "Download in progress" : "Upload in progress"); } }
+    else if (m.type === "phase_done") { if (m.phase === "ping") { setR("r-ping", m.ping_ms, false, n0); setR("r-jitter", m.jitter_ms, false, n1); $("st-sub").textContent = `Server: ${m.server}`; } if (m.phase === "download") { setR("r-down", m.mbps); if (m.server) $("st-sub").textContent = `Download server: ${m.server}`; } if (m.phase === "upload") setR("r-up", m.mbps); }
+    else if (m.type === "note") $("st-meta").textContent = m.note;
+    else if (m.type === "done") { done = true; store.set("lastSpeed", m); const h = store.get("speedHistory", []); h.unshift(m); store.set("speedHistory", h.slice(0, 20)); sp.phase = null; sp.target = m.download_mbps; setPh("Done"); setProg(1, "Test complete"); extras(m); hist(); $("st-meta").textContent = `${auto(m.download_mbps)} down / ${auto(m.upload_mbps)} up Mbps · ping ${n0(m.ping_ms)} ms · ${m.server}`; }
+    else if (m.type === "error") { done = true; setPh("Failed"); $("st-meta").textContent = m.error; } };
+  ws.onclose = () => { sp.running = false; $("st-go").textContent = "TEST AGAIN"; $("st-go").classList.remove("stop"); $("track").classList.remove("running"); if (!done) { setPh("Stopped"); sp.target = 0; $("st-meta").textContent = "Test stopped."; setProg(sp.prog, "Stopped"); } ["r-ping", "r-jitter", "r-down", "r-up"].forEach(i => $(i).classList.remove("active")); requestAnimationFrame(animG); };
+  ws.onerror = () => { $("st-meta").textContent = "Couldn't reach the Sentinel server."; }; };
+
+/* ---------- main loop ---------- */
+let snap = null, lastMsg = 0, retry = 0;
+function push(k, v){ H[k].push(v == null ? null : v); if (H[k].length > HMAX) H[k].shift(); }
+function render(){
+  if (!snap) return; const hw = snap.hardware, s = hw.summary || {}, dev = hw.device || {};
+  $("brand-sub").textContent = s.cpu_name ? `${dev.type === "laptop" ? "Laptop" : "Desktop"} · ${s.cpu_name.replace(/\b(AMD|Intel\(R\)|Core\(TM\))\s*/g, "").split(" ").slice(0, 3).join(" ")}` : "Your PC, at a glance";
+  $("basic").hidden = hw.level !== "basic"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor.";
+  $("lhm-go").hidden = hw.can_install_lhm === false; $("nav-battery").hidden = !dev.has_battery;
+  const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
+  const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
+  ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
+}
+function onSnap(d){ snap = d; lastMsg = Date.now(); const s = d.hardware.summary || {};
+  push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); push("pw", d.hardware.power && d.hardware.power.dc_total_w); push("cput", s.cpu_temp); push("gput", s.gpu_temp);
+  checkAlerts(s); if (!document.hidden) render(); }
+function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`); ws.onopen = () => { retry = 0; };
+  ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
+setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && snap.hardware.level !== "basic"; $("live").innerHTML = `<span class="dot ${fresh ? (full ? "good" : "warning") : "critical"}"></span>${fresh ? (snap ? `Live · ${snap.hardware.sensor_count} sensors` : "Live") : "Reconnecting…"}`; }, 1000);
+setInterval(() => { if (page === "overview" && !document.hidden) loadApps(); }, 2500);
+go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); checkUpdate(false); connect();
+</script>
+</body>
+</html>

@@ -3,17 +3,14 @@
 Ultra Suite core: runs every background service in one process (bundled as ultrasuite-core.exe).
 
   127.0.0.1:8091  speaker helper (output picker, volume lock, OneScript)
-  127.0.0.1:8093  deck knob daemon
   127.0.0.1:8081  Code Red Alarm API + UI
   127.0.0.1:8084  PC Sentinel API + UI
+  127.0.0.1:8300/8301  Insights collector + dashboard (owner's PC only, ULTRASUITE_OWNER=1)
 
 Settings:  %APPDATA%\\UltraSuite\\settings.env   (created on first run; the repo's .env wins in dev)
 Data:      %LOCALAPPDATA%\\UltraSuite\\data       (alarms, speaker choice, logs)
 
-Subcommands:
-  ultrasuite-core.exe                 run the services (exits if they're already running)
-  ultrasuite-core.exe deck install  install the deck plugin + "Ultra Suite" profile
-  ultrasuite-core.exe deck remove
+Run with no arguments; it exits if the services are already running.
 """
 import os
 import sys
@@ -95,7 +92,7 @@ def load_settings():
             f.write("# Ultra Suite settings (private to this PC)\n"
                     f"BRIDGE_TOKEN={secrets.token_hex(20)}\n"
                     f"GLINET_ROUTER_IP={_gateway()}\n"
-                    "GLINET_ADMIN_PASSWORD=\nONESCRIPT_PATH=\nPEBBLE_DEVICE_MATCH=\nDEFAULT_RING_DURATION_SEC=600\n"
+                    "GLINET_ADMIN_PASSWORD=\nONESCRIPT_PATH=\nALARM_SPEAKER_MATCH=\nDEFAULT_RING_DURATION_SEC=600\n"
                     "TELEMETRY=ask\n")
     values = {}
     for line in open(path, encoding="utf-8-sig"):
@@ -145,15 +142,13 @@ def run_services():
         print("[core] already running")
         return 0
     from http.server import ThreadingHTTPServer
-    bridge = load_module("ultra_audio_bridge", os.path.join(ROOT, "01_pebble_code_red_alarm", "backend", "audio_enforcer.py"))
-    knobs = load_module("ultra_knob_daemon", os.path.join(ROOT, "03_deck_deck_config", "plugin", "volume_knob_daemon.py"))
+    bridge = load_module("ultra_audio_bridge", os.path.join(ROOT, "code_red_alarm", "backend", "audio_enforcer.py"))
     if not port_busy(8091):
         threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", 8091), bridge.Handler).serve_forever, daemon=True).start()
-    if not port_busy(8093):
-        threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", 8093), knobs.KnobDaemonHandler).serve_forever, daemon=True).start()
+    start_local_addons(ThreadingHTTPServer)
 
-    load_package("alarm_backend", os.path.join(ROOT, "01_pebble_code_red_alarm", "backend"))
-    load_package("sentinel_backend", os.path.join(ROOT, "04_hardware_net_sentinel", "backend"))
+    load_package("alarm_backend", os.path.join(ROOT, "code_red_alarm", "backend"))
+    load_package("sentinel_backend", os.path.join(ROOT, "pc_sentinel", "backend"))
     import importlib
     alarm_app = importlib.import_module("alarm_backend.main").app
     sentinel_app = importlib.import_module("sentinel_backend.main").app
@@ -161,7 +156,7 @@ def run_services():
     insights = None
     if os.environ.get("ULTRASUITE_OWNER") == "1":  # only on the owner's PC
         try:
-            insights = load_module("ultra_insights", os.path.join(ROOT, "05_insights", "insights.py"))
+            insights = load_module("ultra_insights", os.path.join(ROOT, "insights", "insights.py"))
         except Exception as exc:
             print(f"[core] insights not loaded: {exc}")
 
@@ -183,24 +178,26 @@ def run_services():
     return 0
 
 
-def deck(cmd):
-    gen = load_module("ultra_deck", os.path.join(ROOT, "03_deck_deck_config", "generate_deck_profile.py"))
-    if not os.path.isdir(gen.DECK_DIR):
-        print("deck Studio is not installed.")
-        return 0
-    if cmd == "remove":
-        gen.remove()
-    else:
-        gen.install_plugin()
-        gen.build_profile()
-        if "--restart" in sys.argv:
-            gen.restart_studio()
-    return 0
+def start_local_addons(server_cls):
+    """Personal extras that are not part of Ultra Suite and never ship with it.
+
+    The owner's deck deck knobs talk to a small volume service on 127.0.0.1:8093. Its file lives outside the
+    repo (installed: %APPDATA%\\UltraSuite\\local\\volume_knob_daemon.py; from source: private\\deck_deck\\plugin\\).
+    When the file isn't there, nothing runs.
+    """
+    places = [os.path.join(CONF_DIR, "local", "volume_knob_daemon.py"),
+              os.path.join(ROOT, "private", "deck_deck", "plugin", "volume_knob_daemon.py")]
+    path = next((p for p in places if os.path.isfile(p)), None)
+    if not path or port_busy(8093):
+        return
+    try:
+        knobs = load_module("ultra_knob_daemon", path)
+        threading.Thread(target=server_cls(("127.0.0.1", 8093), knobs.KnobDaemonHandler).serve_forever, daemon=True).start()
+        print(f"[core] local add-on: knob service from {path}")
+    except Exception as exc:
+        print(f"[core] local add-on failed: {exc}")
 
 
 if __name__ == "__main__":
     load_settings()
-    args = sys.argv[1:]
-    if args[:1] == ["deck"]:
-        sys.exit(deck(args[1] if len(args) > 1 else "install"))
     sys.exit(run_services())

@@ -11,17 +11,14 @@ _progress/
 **/code_red_siren.wav
 **/__pycache__/
 *.pyc
-02_translucent_taskbar_dock/src-tauri/target/
-02_translucent_taskbar_dock/src-tauri/gen/
+ultra_dock/src-tauri/target/
+ultra_dock/src-tauri/gen/
 node_modules/
-03_deck_deck_config/*_backup_*/
 
-# Vendored runtime for the deck plugin (deck Studio has no npm)
-!03_deck_deck_config/com.ultrasuite.knobs.deckPlugin/node_modules/
 
 # Build output
 build/
-02_translucent_taskbar_dock/src-tauri/appicons/
+ultra_dock/src-tauri/appicons/
 
 # Private reports for the owner (never published)
 private/

@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
+<title>Code Red Alarm</title>
+<script src="/__ui/theme.js"></script><script src="/__ui/update.js" defer></script><script src="/__dev/reload.js"></script>
+
+<link rel="icon" type="image/png" href="/__ui/icons/alarm.png" />
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --surface-2:#f0f2f5; --line:#e4e7ec; --line-strong:#d3d8e0;
+  --ink:#0f1218; --ink-2:#4a5260; --ink-3:#7b8494;
+  --accent:#3e63dd; --accent-ink:#ffffff; --accent-soft:#e6edfe;
+  --red:#e5484d; --red-soft:#feebec; --red-ink:#ce2c31;
+  --green:#30a46c; --green-soft:#e6f6eb; --amber:#ffb224; --amber-soft:#fff4d5;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  --shadow-lg:0 20px 40px -12px rgba(16,24,40,.25);
+  --r:14px; --r-sm:10px;
+  --font:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+  --font-display:"Segoe UI Variable Display","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+  --mono:"Cascadia Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0b0d12; --surface:#13161d; --surface-2:#1a1e27; --line:#232834; --line-strong:#2f3542;
+  --ink:#edeef0; --ink-2:#b0b4ba; --ink-3:#7c828d;
+  --accent:#5b7fff; --accent-soft:#1d2645; --red:#ec5d5e; --red-soft:#3b1219; --red-ink:#ff9592;
+  --green:#3dd68c; --green-soft:#132d21; --amber:#ffca16; --amber-soft:#302008;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lg:0 24px 48px -12px rgba(0,0,0,.6);
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--font);min-height:100vh;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+.wrap{max-width:1440px;margin:0 auto;padding:28px 32px 48px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--red);display:grid;place-items:center;box-shadow:var(--shadow)}
+.brand h1{font:600 19px/1.2 var(--font-display);letter-spacing:-.01em}
+.brand p{font-size:13px;color:var(--ink-3)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);flex:none}
+.dot.ok{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+.dot.bad{background:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+.dot.warn{background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
+
+.grid{display:grid;grid-template-columns:400px minmax(0,1fr);gap:24px;align-items:start}
+.stack{display:grid;gap:24px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 0}
+.card-h h2{font:600 15px/1.3 var(--font-display)}
+.card-h .sub{font-size:12.5px;color:var(--ink-3)}
+.card-b{padding:16px 20px 20px}
+
+.clock{padding:22px 20px 20px;border-bottom:1px solid var(--line);text-align:center}
+.clock .t{font:600 52px/1 var(--font-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.clock .d{margin-top:8px;color:var(--ink-3);font-size:13.5px}
+.next{margin-top:12px;display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink-2);background:var(--surface-2);border-radius:999px;padding:5px 12px}
+
+label.f{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.field{margin-bottom:14px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.in{width:100%;height:42px;padding:0 12px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.in:hover{border-color:var(--ink-3)}
+.in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237b8494' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;text-overflow:ellipsis}
+input[type=time].in{font-variant-numeric:tabular-nums}
+.hint{font-size:12px;color:var(--ink-3);margin-top:6px}
+
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.day{height:38px;border-radius:9px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2);transition:all .12s}
+.day:hover{border-color:var(--ink-3)}
+.day[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.presets{display:flex;gap:6px;margin-top:8px}
+.preset{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink-2)}
+.preset:hover{background:var(--surface-2)}
+
+.switch-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.switch-row .t{font-weight:600;font-size:14px}
+.switch-row .s{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+.switch{position:relative;width:42px;height:24px;flex:none;margin-top:2px}
+.switch input{position:absolute;opacity:0;inset:0;cursor:pointer;z-index:1}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--line-strong);transition:background .15s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.switch input:checked+span{background:var(--accent)}
+.switch.red input:checked+span{background:var(--red)}
+.switch input:checked+span::after{transform:translateX(18px)}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.cr{border:1px solid var(--line);border-radius:12px;padding:14px;margin:4px 0 16px;transition:border-color .15s,background .15s}
+.cr.on{border-color:color-mix(in srgb,var(--red) 45%,transparent);background:var(--red-soft)}
+.cr .phrase{margin-top:12px}
+.cr:not(.on) .phrase{display:none}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13.5px;transition:background .12s,border-color .12s,transform .06s;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.block{width:100%;height:44px}
+.btn.sm{height:32px;padding:0 11px;font-size:12.5px}
+
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.alarm{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--surface);display:flex;flex-direction:column;gap:12px;transition:border-color .15s,opacity .15s}
+.alarm.off{opacity:.62}
+.alarm.red{border-color:color-mix(in srgb,var(--red) 35%,var(--line))}
+.alarm-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.alarm .time{font:600 34px/1 var(--font-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.alarm .time small{font-size:15px;font-weight:600;color:var(--ink-3);margin-left:4px}
+.alarm .name{font-weight:600;font-size:14px;margin-top:6px;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:11.5px;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--surface-2);color:var(--ink-2)}
+.tag.red{background:var(--red-soft);color:var(--red-ink)}
+.alarm-actions{display:flex;gap:6px;margin-top:auto}
+.alarm-actions .btn{flex:1}
+.empty{border:1px dashed var(--line-strong);border-radius:12px;padding:36px 20px;text-align:center;color:var(--ink-3)}
+.empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:4px}
+
+.out-row{display:flex;gap:10px}
+.out-row select{flex:1;min-width:0}
+.banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:14px}
+.banner.warn{background:var(--amber-soft);color:var(--ink)}
+.banner.bad{background:var(--red-soft);color:var(--ink);border:1px solid color-mix(in srgb,var(--red) 40%,transparent);margin-bottom:20px;animation:tin .2s ease-out}
+.banner.bad b{color:var(--red-ink)}
+.tag.ok{background:var(--green-soft);color:var(--green)}
+.tag.miss{background:var(--amber-soft);color:var(--ink)}
+.alarm.editing{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.alarm{animation:tin .2s ease-out}
+.form-actions{display:flex;gap:8px}
+.form-actions .btn.primary{flex:1}
+#h-new .badge{font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:2px}
+.banner code{font-family:var(--mono);font-size:12px}
+
+/* Ringing screen */
+.ring{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(10,4,6,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.ring.show{display:flex}
+.ring::before{content:"";position:absolute;inset:0;pointer-events:none;animation:pulse 1.1s ease-in-out infinite alternate;box-shadow:inset 0 0 120px rgba(229,72,77,.55)}
+@keyframes pulse{from{opacity:.35}to{opacity:1}}
+.ring-box{position:relative;width:100%;max-width:560px;background:#15090b;color:#fff;border:1px solid rgba(236,93,94,.55);border-radius:22px;padding:32px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.ring-box .k{font-size:12px;font-weight:700;letter-spacing:.14em;color:#ff9592;text-transform:uppercase}
+.ring-box h2{font:600 26px/1.25 var(--font-display);margin-top:8px;overflow-wrap:anywhere}
+.ring-box .cd{font:600 64px/1 var(--font-display);font-variant-numeric:tabular-nums;color:#ff6369;margin:18px 0 6px;letter-spacing:-.03em}
+.ring-box .cds{font-size:12.5px;color:#c9a5a7}
+.target{margin:20px 0 12px;padding:14px;border:1px dashed rgba(255,149,146,.6);border-radius:12px;font:600 17px/1.4 var(--mono);user-select:none;-webkit-user-select:none;overflow-wrap:anywhere}
+.ring-box .in{background:#0d0506;border-color:rgba(255,149,146,.45);color:#fff;height:48px;font-family:var(--mono);font-size:16px}
+.ring-box .in:focus{box-shadow:0 0 0 3px rgba(229,72,77,.35);border-color:#ff6369}
+.ring-box label.f{color:#ffb3b0;text-align:left}
+.err{min-height:20px;color:#ff9592;font-size:13px;margin:10px 0}
+.ring-box .btn.block{height:50px;font-size:15px}
+.ring-box .meta{margin-top:14px;font-size:12px;color:#a98587}
+
+/* Toasts */
+.toasts{position:fixed;right:20px;bottom:20px;z-index:60;display:grid;gap:8px;max-width:min(380px,calc(100vw - 32px))}
+.toast{display:flex;gap:10px;align-items:flex-start;background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:12px;box-shadow:var(--shadow-lg);font-size:13.5px;animation:tin .18s ease-out}
+.toast.err{background:var(--red);color:#fff}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+
+.sound-unlock{display:none;margin-top:12px}
+.sound-unlock.show{display:inline-flex}
+
+@media (max-width:1100px){.grid{grid-template-columns:1fr}#alarms-card{order:-1}}
+@media (max-width:640px){
+  .wrap{padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
+  header.top{margin-bottom:16px}
+  .clock .t{font-size:44px}
+  .list{grid-template-columns:1fr}
+  .btn,.day,.in{min-height:48px}
+  .btn.sm{min-height:40px}
+  .row2{grid-template-columns:1fr}
+  .ring-box{padding:24px 18px}
+  .ring-box .cd{font-size:52px}
+  .toasts{left:16px;right:16px;bottom:16px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/></svg></div>
+      <div><h1>Code Red Alarm</h1><p>Wake-up alarms that can't be ignored</p></div>
+    </div>
+    <div class="chips" role="status" aria-live="polite"><span data-theme-slot></span>
+      <span class="chip" id="chip-engine"><span class="dot"></span>Connecting…</span>
+      <span class="chip" id="chip-speaker"><span class="dot"></span>Speaker: checking…</span>
+    </div>
+  </header>
+
+  <div class="banner bad" id="clock-warn" role="alert" hidden>
+    <span aria-hidden="true">⚠</span>
+    <div id="clock-warn-text"></div>
+  </div>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="card" aria-labelledby="h-new">
+        <div class="clock">
+          <div class="t" id="clock">--:--</div>
+          <div class="d" id="date">Connecting to alarm engine…</div>
+          <div class="next" id="next" hidden></div>
+        </div>
+        <div class="card-h"><h2 id="h-new">New alarm</h2></div>
+        <form class="card-b" id="form" novalidate>
+          <div class="field">
+            <label class="f" for="f-label">Name</label>
+            <input class="in" id="f-label" maxlength="80" placeholder="Morning wake-up" value="Wake up" required />
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label class="f" for="f-time">Time</label>
+              <input class="in" type="time" id="f-time" value="07:00" required />
+            </div>
+            <div class="field">
+              <label class="f" for="f-duration">Rings for</label>
+              <select class="in" id="f-duration">
+                <option value="60">1 minute</option><option value="300">5 minutes</option>
+                <option value="600" selected>10 minutes</option><option value="900">15 minutes</option>
+                <option value="1800">30 minutes</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="f" id="days-label">Repeat on</label>
+            <div class="days" role="group" aria-labelledby="days-label" id="days"></div>
+            <div class="presets">
+              <button type="button" class="preset" data-p="wk">Weekdays</button>
+              <button type="button" class="preset" data-p="we">Weekends</button>
+              <button type="button" class="preset" data-p="all">Every day</button>
+              <button type="button" class="preset" data-p="none">Once</button>
+            </div>
+          </div>
+          <div class="field" id="date-field" hidden>
+            <label class="f" for="f-date">On date</label>
+            <input class="in" type="date" id="f-date" />
+            <div class="hint">One-time alarm. It turns itself off after ringing.</div>
+          </div>
+          <div class="field">
+            <label class="f" for="f-math">Wake-up math</label>
+            <select class="in" id="f-math">
+              <option value="0">Off</option><option value="1" selected>Easy: one sum to solve</option><option value="2">Hard: bigger numbers</option>
+            </select>
+          </div>
+          <div class="cr on" id="cr">
+            <div class="switch-row">
+              <div><div class="t">Code Red</div><div class="s">To stop it, type a phrase exactly. Paste is blocked, so you have to get up.</div></div>
+              <label class="switch red"><input type="checkbox" id="f-codered" checked aria-label="Code Red phrase lock" /><span></span></label>
+            </div>
+            <div class="phrase">
+              <label class="f" for="f-phrase">Phrase to type</label>
+              <input class="in" id="f-phrase" maxlength="120" value="I am out of bed and ready" />
+              <div class="hint">Case-sensitive.</div>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn ghost" id="cancel-edit" hidden>Cancel</button>
+            <button type="submit" class="btn primary block" id="save">Save alarm</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="h-sound">
+        <div class="card-h"><h2 id="h-sound">Sound</h2><span class="sub" id="sound-sub"></span></div>
+        <div class="card-b">
+          <div class="banner warn" id="bridge-warn" hidden>
+            <span aria-hidden="true">⚠</span>
+            <div>The speaker helper isn't responding, so alarms only ring in open windows and browser tabs. Choose Quit in the Ultra Dock menu and open the app again from the Start menu (or restart the PC).</div>
+          </div>
+          <div class="field">
+            <label class="f" for="out">Play alarms on</label>
+            <div class="out-row">
+              <select class="in" id="out"></select>
+              <button type="button" class="btn" id="test-sound" title="Play a 3-second test sound">Test</button>
+            </div>
+          </div>
+          <div class="switch-row">
+            <div><div class="t">Force full volume while ringing</div><div class="s">Unmutes and holds this speaker at 100%, then puts your volume back.</div></div>
+            <label class="switch"><input type="checkbox" id="lock" checked aria-label="Force full volume while ringing" /><span></span></label>
+          </div>
+          <div class="switch-row" style="margin-top:14px">
+            <div><div class="t">Also ring in this browser</div><div class="s">Useful on your phone over Tailscale.</div></div>
+            <label class="switch"><input type="checkbox" id="browser-ring" checked aria-label="Also ring in this browser" /><span></span></label>
+          </div>
+          <button type="button" class="btn sm sound-unlock" id="unlock">Allow sound in this browser</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" aria-labelledby="h-list" id="alarms-card">
+      <div class="card-h"><h2 id="h-list">Alarms</h2><span class="sub" id="count"></span></div>
+      <div class="card-b"><div class="list" id="list" aria-live="polite"></div></div>
+    </section>
+  </div>
+</div>
+
+<div class="ring" id="ring" role="alertdialog" aria-modal="true" aria-labelledby="ring-title">
+  <div class="ring-box">
+    <div class="k" id="ring-kind">Alarm</div>
+    <h2 id="ring-title">Wake up</h2>
+    <div class="cd" id="ring-cd">10:00</div>
+    <div class="cds">until it stops on its own</div>
+    <div id="ring-phrase-wrap">
+      <div class="target" id="ring-target" aria-label="Phrase to type"></div>
+    </div>
+    <div id="ring-math-wrap" class="field" hidden>
+      <label class="f" for="ring-math">Solve: <span id="ring-math-q"></span></label>
+      <input class="in" id="ring-math" type="number" inputmode="numeric" autocomplete="off" />
+    </div>
+    <input class="in" id="ring-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Type the phrase above" />
+    <div class="err" id="ring-err" role="alert"></div>
+    <button type="button" class="btn danger block" id="ring-stop">Stop alarm</button>
+    <div class="meta" id="ring-meta"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = { get(k, d){ try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+                set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+
+function toast(msg, isErr=false){
+  const t = document.createElement("div");
+  t.className = "toast" + (isErr ? " err" : "");
+  t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), isErr ? 6000 : 3200);
+}
+async function api(path, opts={}){
+  const res = await fetch(path, { headers: {"Content-Type":"application/json"}, ...opts });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    let msg = data.detail || data.error || `Request failed (${res.status})`;
+    if (Array.isArray(msg)) msg = msg.map(e => e.msg).join("; ");
+    throw new Error(msg);
+  }
+  return data;
+}
+function chip(id, state, text){ const c = $(id); c.innerHTML = `<span class="dot ${state}"></span>${esc(text)}`; c.title = text; }
+/* "Speakers (5- USB Audio)" -> "USB Audio"; "1 - PHL24 (2- AMD High Definition Audio Device)" -> "PHL24 (AMD High Definition Audio Device)" */
+const pretty = (n) => {
+  let s = String(n || "").replace(/^\d+\s*-\s*/, "").replace(/\((\d+-\s*)/g, "(");
+  const m = s.match(/^(?:Speakers|Headphones|Speaker)\s*\((.+)\)$/i);
+  return m ? m[1] : s;
+};
+const fmt12 = (hhmm) => { const [h,m] = hhmm.split(":").map(Number); return { t: `${((h+11)%12)+1}:${String(m).padStart(2,"0")}`, ap: h < 12 ? "AM" : "PM" }; };
+
+/* ---------- Day picker ---------- */
+const daysEl = $("days");
+DAYS.forEach((d) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "day"; b.textContent = d.slice(0,2); b.dataset.day = d;
+  b.setAttribute("aria-label", d); b.setAttribute("aria-pressed", ["Mon","Tue","Wed","Thu","Fri"].includes(d));
+  b.onclick = () => { b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); syncDate(); };
+  daysEl.appendChild(b);
+});
+const selectedDays = () => [...daysEl.children].filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.dataset.day);
+function setDays(list){ [...daysEl.children].forEach(b => b.setAttribute("aria-pressed", list.includes(b.dataset.day))); syncDate(); }
+function syncDate(){
+  const once = selectedDays().length === 0;
+  $("date-field").hidden = !once;
+  if (once && !$("f-date").value) {
+    const now = new Date(), [h,m] = $("f-time").value.split(":").map(Number), t = new Date(now);
+    t.setHours(h, m, 0, 0); if (t <= now) t.setDate(t.getDate()+1);
+    $("f-date").value = t.toLocaleDateString("en-CA");
+  }
+}
+document.querySelectorAll(".preset").forEach(p => p.onclick = () => setDays({wk:DAYS.slice(0,5), we:["Sat","Sun"], all:DAYS, none:[]}[p.dataset.p]));
+$("f-codered").onchange = () => $("cr").classList.toggle("on", $("f-codered").checked);
+
+/* ---------- Alarms ---------- */
+let alarms = [], editingId = null;
+/* Alarms ring by the engine's clock. engineSkew = engine time minus this device's time, in ms. */
+let engineSkew = 0;
+const engineNow = () => new Date(Date.now() + engineSkew);
+const dateKey = (d) => d.toLocaleDateString("en-CA");
+function nextRing(a, now = engineNow()){
+  if (!a.enabled) return null;
+  const [h,m] = a.time_hhmm.split(":").map(Number);
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now); d.setDate(now.getDate()+i); d.setHours(h,m,0,0);
+    if (d <= now) continue;
+    const ok = a.target_date ? dateKey(d) === a.target_date : (a.weekdays||[]).includes(DAYS[(d.getDay()+6)%7]);
+    if (ok) return d;
+  }
+  return null;
+}
+/* A one-time alarm whose moment passed (beyond the engine's 30-minute catch-up) without ringing. */
+function missed(a, now = engineNow()){
+  if (!a.target_date || !a.enabled || a.last_triggered_date) return false;
+  const at = new Date(`${a.target_date}T${a.time_hhmm}:00`);
+  return now - at > 30 * 60000;
+}
+const inText = (d, now = engineNow()) => {
+  const mins = Math.max(1, Math.round((d - now)/60000)), h = Math.floor(mins/60), m = mins%60;
+  return h >= 24 ? `in ${Math.floor(h/24)}d ${h%24}h` : `in ${h ? h+"h " : ""}${m}m`;
+};
+function nextAlarmText(){
+  const next = alarms.map(a => nextRing(a)).filter(Boolean).sort((x,y) => x - y)[0];
+  return next ? `Next alarm ${inText(next)}` : "";
+}
+function sorted(){
+  const now = engineNow();
+  return [...alarms].sort((a, b) => {
+    const na = nextRing(a, now), nb = nextRing(b, now);
+    if (na && nb) return na - nb;
+    if (na || nb) return na ? -1 : 1;
+    return a.time_hhmm.localeCompare(b.time_hhmm);
+  });
+}
+function statusTag(a){
+  if (missed(a)) return `<span class="tag miss" title="The alarm engine wasn't running on the right clock at that time">Missed</span>`;
+  if (a.target_date && !a.enabled && a.last_triggered_date) return `<span class="tag ok">Rang</span>`;
+  const n = nextRing(a);
+  return n ? `<span class="tag">Rings ${inText(n)}</span>` : "";
+}
+function render(){
+  $("count").textContent = alarms.length ? `${alarms.filter(a=>a.enabled).length} of ${alarms.length} on` : "";
+  const n = nextAlarmText(); $("next").hidden = !n; $("next").textContent = n;
+  if (!alarms.length) {
+    $("list").innerHTML = `<div class="empty"><b>No alarms yet</b>Create one on the left. It will ring on this PC and any device you open this page on.</div>`;
+    return;
+  }
+  $("list").innerHTML = sorted().map(a => {
+    const t = fmt12(a.time_hhmm);
+    const when = a.target_date ? new Date(a.target_date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})
+      : (a.weekdays.length === 7 ? "Every day" : a.weekdays.join(" "));
+    return `<article class="alarm ${a.enabled ? "" : "off"} ${a.code_red ? "red" : ""} ${a.id === editingId ? "editing" : ""}">
+      <div class="alarm-top">
+        <div><div class="time">${t.t}<small>${t.ap}</small></div><div class="name">${esc(a.label)}</div></div>
+        <label class="switch"><input type="checkbox" ${a.enabled ? "checked" : ""} data-toggle="${esc(a.id)}" aria-label="${a.enabled ? "Turn off" : "Turn on"} ${esc(a.label)}"><span></span></label>
+      </div>
+      <div class="tags">
+        ${statusTag(a)}
+        <span class="tag">${esc(when)}</span>
+        <span class="tag">${Math.round(a.ring_duration_sec/60)} min</span>
+        ${a.code_red ? `<span class="tag red" title="${esc(a.custom_phrase)}">Code Red</span>` : ""}
+        ${a.math_mission_difficulty ? `<span class="tag">Math ${a.math_mission_difficulty === 2 ? "hard" : "easy"}</span>` : ""}
+      </div>
+      <div class="alarm-actions">
+        <button class="btn sm" data-test="${esc(a.id)}">Preview</button>
+        <button class="btn sm" data-edit="${esc(a.id)}" aria-label="Edit ${esc(a.label)}">Edit</button>
+        <button class="btn sm ghost" data-del="${esc(a.id)}" aria-label="Delete ${esc(a.label)}">Delete</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+/* ---------- Edit mode ---------- */
+function setDuration(sec){
+  const sel = $("f-duration");
+  if (![...sel.options].some(o => +o.value === sec)) sel.add(new Option(`${Math.round(sec/60)} minutes`, sec));
+  sel.value = String(sec);
+}
+function startEdit(a){
+  editingId = a.id;
+  $("f-label").value = a.label; $("f-time").value = a.time_hhmm; setDuration(a.ring_duration_sec);
+  $("f-date").value = a.target_date || ""; setDays(a.target_date ? [] : a.weekdays);
+  $("f-math").value = String(a.math_mission_difficulty || 0);
+  $("f-codered").checked = !!a.code_red; $("cr").classList.toggle("on", !!a.code_red);
+  if (a.code_red) $("f-phrase").value = a.custom_phrase || "";
+  $("h-new").innerHTML = `Edit alarm<span class="badge">${esc(a.label)}</span>`;
+  $("save").textContent = "Save changes"; $("cancel-edit").hidden = false;
+  render(); $("h-new").scrollIntoView({behavior: "smooth", block: "center"}); $("f-label").focus({preventScroll: true});
+}
+function endEdit(){
+  editingId = null; $("form").reset(); $("f-date").value = ""; setDays(DAYS.slice(0,5));
+  $("cr").classList.toggle("on", $("f-codered").checked);
+  $("h-new").textContent = "New alarm"; $("save").textContent = "Save alarm"; $("cancel-edit").hidden = true; render();
+}
+$("cancel-edit").onclick = endEdit;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("ring").classList.contains("show")) endEdit(); });
+
+$("list").addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-test],[data-del],[data-edit]"); if (!t) return;
+  if (t.dataset.edit) { const a = alarms.find(x => x.id === t.dataset.edit); if (a) startEdit(a); return; }
+  try {
+    if (t.dataset.test) { unlockAudio(); await api(`/api/alarms/${encodeURIComponent(t.dataset.test)}/test-ring?seconds=10`, {method:"POST"}); }
+    if (t.dataset.del) {
+      const a = alarms.find(x => x.id === t.dataset.del);
+      if (!confirm(`Delete "${a ? a.label : "this alarm"}"?`)) return;
+      alarms = (await api(`/api/alarms/${encodeURIComponent(t.dataset.del)}`, {method:"DELETE"})).alarms;
+      if (t.dataset.del === editingId) endEdit(); else render();
+      toast("Alarm deleted");
+    }
+  } catch (err) { toast(err.message, true); }
+});
+$("list").addEventListener("change", async (e) => {
+  const id = e.target.dataset.toggle; if (!id) return;
+  try { alarms = (await api(`/api/alarms/${encodeURIComponent(id)}/toggle`, {method:"PATCH"})).alarms; render(); }
+  catch (err) { toast(err.message, true); e.target.checked = !e.target.checked; }
+});
+async function loadAlarms(){ try { alarms = (await api("/api/alarms")).alarms || []; render(); } catch (err) { toast("Couldn't load alarms: " + err.message, true); } }
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const days = selectedDays();
+  const label = $("f-label").value.trim(), codeRed = $("f-codered").checked, phrase = $("f-phrase").value.trim();
+  if (!label) { toast("Give the alarm a name.", true); $("f-label").focus(); return; }
+  if (!$("f-time").value) { toast("Pick a time.", true); return; }
+  if (!days.length && !$("f-date").value) { toast("Pick a day or a date.", true); return; }
+  if (codeRed && phrase.length < 4) { toast("Code Red needs a phrase of at least 4 characters.", true); $("f-phrase").focus(); return; }
+  const btn = $("save"), editing = editingId; btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const data = await api(editing ? `/api/alarms/${encodeURIComponent(editing)}` : "/api/alarms", { method: editing ? "PUT" : "POST", body: JSON.stringify({
+      label, time_hhmm: $("f-time").value, target_date: days.length ? null : $("f-date").value,
+      weekdays: days, recurring: days.length > 0, enabled: true, code_red: codeRed, custom_phrase: codeRed ? phrase : "",
+      volume_percent: 100, ring_duration_sec: +$("f-duration").value, math_mission_difficulty: +$("f-math").value })});
+    alarms = data.alarms;
+    const saved = alarms.find(a => a.id === data.id), n = saved && nextRing(saved);
+    const t = fmt12($("f-time").value);
+    toast(`${editing ? "Updated" : "Saved"}: ${label} at ${t.t} ${t.ap}${n ? ", rings " + inText(n) : ""}`);
+    if (editing) endEdit(); else render();
+  } catch (err) { toast(err.message, true); }
+  finally { btn.disabled = false; btn.textContent = editingId ? "Save changes" : "Save alarm"; }
+});
+
+/* ---------- Sound output ---------- */
+async function loadAudio(){
+  try {
+    const d = await api("/api/audio");
+    const sel = $("out");
+    sel.innerHTML = (d.devices || []).map(x => {
+      const label = x.name === "default" ? (x.label || "System default").replace(/\((.*)\)$/, (_, inner) => `(${pretty(inner)})`) : pretty(x.name);
+      return `<option value="${esc(x.name)}" title="${esc(x.name)}">${esc(label)}</option>`;
+    }).join("");
+    sel.value = d.selected || "default";
+    if (sel.value !== (d.selected || "default")) sel.value = "default";
+    $("lock").checked = d.lock_volume !== false;
+    const caps = d.capabilities || {};
+    $("lock").disabled = d.bridge_online && caps.volume_lock === false;
+    sel.disabled = !d.bridge_online; $("test-sound").disabled = !d.bridge_online;
+    $("bridge-warn").hidden = !!d.bridge_online;
+    const name = sel.options[sel.selectedIndex]?.text || "Default";
+    chip("chip-speaker", d.bridge_online ? "ok" : "warn", d.bridge_online ? `Speaker: ${name.replace(/^System default \((.*)\)$/, "$1")}` : "Speaker helper offline");
+    $("lock").closest(".switch-row").title = $("lock").disabled ? "Volume lock is available on Windows only" : "";
+    $("sound-sub").textContent = d.bridge_online ? `${Math.max(0,(d.devices||[]).length-1)} outputs found` : "";
+  } catch (err) { chip("chip-speaker","bad","Speaker: error"); }
+}
+async function saveAudio(body, okMsg){
+  try { await api("/api/audio/output", {method:"POST", body: JSON.stringify(body)}); toast(okMsg); loadAudio(); }
+  catch (err) { toast(err.message, true); loadAudio(); }
+}
+$("out").onchange = () => saveAudio({output: $("out").value}, "Alarms will play on " + $("out").options[$("out").selectedIndex].text);
+$("lock").onchange = () => saveAudio({lock_volume: $("lock").checked}, $("lock").checked ? "Full volume lock on" : "Full volume lock off");
+$("test-sound").onclick = async () => {
+  const b = $("test-sound"); b.disabled = true; b.textContent = "Playing…";
+  try { await api("/api/audio/test", {method:"POST"}); } catch (err) { toast(err.message, true); }
+  setTimeout(() => { b.disabled = false; b.textContent = "Test"; }, 3200);
+};
+$("browser-ring").checked = store.get("browserRing", true);
+$("browser-ring").onchange = () => { store.set("browserRing", $("browser-ring").checked); if (!$("browser-ring").checked) stopBrowserSiren(); };
+
+/* ---------- Browser siren (phone / other devices) ---------- */
+let ctx = null, sirenTimer = null;
+function unlockAudio(){
+  try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch {}
+  $("unlock").classList.toggle("show", !!ctx && ctx.state !== "running");
+}
+document.addEventListener("pointerdown", unlockAudio, { once: true });
+$("unlock").onclick = unlockAudio;
+function startBrowserSiren(){
+  if (sirenTimer || !$("browser-ring").checked) return;
+  unlockAudio(); if (!ctx) return;
+  const beep = () => {
+    if (ctx.state !== "running") { $("unlock").classList.add("show"); return; }
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+    o.type = "square"; o.frequency.setValueAtTime(960, t); o.frequency.setValueAtTime(1440, t + 0.25);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.48);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.5);
+  };
+  beep(); sirenTimer = setInterval(beep, 550);
+}
+function stopBrowserSiren(){ if (sirenTimer) { clearInterval(sirenTimer); sirenTimer = null; } }
+
+/* ---------- Ringing screen ---------- */
+let ringingId = null, needPhrase = false;
+function showRing(msg){
+  const a = msg.alarm, test = !!a.is_test;
+  needPhrase = !!a.code_red && !test;
+  if (ringingId !== a.id) {
+    ringingId = a.id; $("ring-input").value = ""; $("ring-math").value = ""; $("ring-err").textContent = "";
+    setTimeout(() => (needPhrase ? $("ring-input") : (msg.math_question && !test ? $("ring-math") : $("ring-stop"))).focus(), 50);
+  }
+  $("ring").classList.add("show");
+  $("ring-kind").textContent = test ? "Preview" : (a.code_red ? "Code Red" : "Alarm");
+  $("ring-title").textContent = a.label;
+  const r = Math.max(0, msg.remaining_sec|0);
+  $("ring-cd").textContent = `${String(Math.floor(r/60)).padStart(2,"0")}:${String(r%60).padStart(2,"0")}`;
+  $("ring-phrase-wrap").hidden = !needPhrase; $("ring-input").hidden = !needPhrase;
+  $("ring-target").textContent = a.custom_phrase || "";
+  const showMath = !!msg.math_question && !test;
+  $("ring-math-wrap").hidden = !showMath; $("ring-math-q").textContent = msg.math_question || "";
+  $("ring-stop").textContent = needPhrase ? "Check phrase and stop" : "Stop alarm";
+  $("ring-meta").textContent = test ? "This is a short preview." : "";
+  startBrowserSiren();
+}
+function hideRing(){ $("ring").classList.remove("show"); ringingId = null; stopBrowserSiren(); }
+["paste","drop","copy","cut"].forEach(ev => $("ring-input").addEventListener(ev, (e) => { e.preventDefault(); $("ring-err").textContent = "Paste is blocked. Type it."; }));
+$("ring-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ring-stop").click(); });
+$("ring-math").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ring-stop").click(); });
+$("ring-stop").onclick = async () => {
+  const b = $("ring-stop"); b.disabled = true;
+  try {
+    await api("/api/alarms/dismiss", {method:"POST", body: JSON.stringify({ alarm_id: ringingId || "manual",
+      typed_phrase: $("ring-input").value, math_answer: $("ring-math").value === "" ? null : parseInt($("ring-math").value, 10) })});
+    hideRing(); toast("Alarm stopped. Good morning.");
+  } catch (err) { $("ring-err").textContent = err.message.replace(/^CODE RED LOCK: /, ""); }
+  finally { b.disabled = false; }
+};
+
+/* ---------- Clock check ----------
+   Alarms ring by the engine's clock. If it disagrees with this device by more than two minutes, say so loudly:
+   that is exactly how an alarm once rang 8 hours off without anyone noticing. */
+function checkClock(eng){
+  const off = Math.round(engineSkew / 60000), warn = $("clock-warn");
+  if (Math.abs(off) < 2) { warn.hidden = true; return; }
+  const t = (d) => d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  const h = Math.abs(off) >= 60 ? `${Math.round(Math.abs(off)/6)/10} hours` : `${Math.abs(off)} minutes`;
+  $("clock-warn-text").innerHTML = `<b>The alarm clock and this device disagree by ${h}.</b> The alarm engine says ${t(eng)}, this device says ${t(new Date())}. `
+    + `Alarms ring by the engine's clock. If this device is right, choose Quit in the Ultra Dock menu and open the app again from the Start menu (or restart the PC). `
+    + `If you're on another device in a different time zone, you can ignore this.`;
+  warn.hidden = false;
+}
+
+/* ---------- Live connection ---------- */
+let ws = null, retry = 0;
+function connect(){
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => { retry = 0; chip("chip-engine", "ok", "Live"); loadAlarms(); };
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.server_time) { const [h,mi] = m.server_time.split(":"); const t = fmt12(`${h}:${mi}`); $("clock").textContent = `${t.t} ${t.ap}`; }
+    if (m.server_iso) {
+      const eng = new Date(m.server_iso);
+      engineSkew = eng - Date.now();
+      $("date").textContent = eng.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+      checkClock(eng);
+    } else if (m.server_date) $("date").textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+    if (m.is_ringing && m.alarm) showRing(m); else if (ringingId) hideRing();
+  };
+  ws.onclose = () => { chip("chip-engine", "bad", "Reconnecting…"); const d = Math.min(10000, 1000 * 2 ** retry++); setTimeout(connect, d); };
+  ws.onerror = () => ws.close();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadAudio(); if (ws && ws.readyState > 1) connect(); } });
+setInterval(() => { const n = nextAlarmText(); $("next").hidden = !n; $("next").textContent = n; }, 30000);
+setInterval(loadAudio, 30000);
+syncDate(); loadAlarms(); loadAudio(); connect();
+</script>
+
+<!-- Feedback (sends to the Ultra Suite team) -->
+<style>
+.fbk-btn{position:fixed;right:18px;bottom:18px;z-index:40;height:38px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:600 13px var(--font);box-shadow:0 8px 24px -10px rgba(0,0,0,.35);cursor:pointer;transition:transform .15s}
+.fbk-btn:hover{transform:translateY(-1px)}
+.fbk-bg{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:20px}
+.fbk-bg.show{display:flex}
+.fbk{width:100%;max-width:440px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px;animation:fbkin .2s ease-out}
+@keyframes fbkin{from{opacity:0;transform:translateY(8px)}}
+.fbk h3{font:600 17px var(--font);margin-bottom:4px}.fbk p{font-size:13px;color:var(--ink-3);margin-bottom:12px}
+.fbk .kinds{display:flex;gap:6px;margin-bottom:10px}.fbk .kinds button{flex:1;height:34px;border-radius:9px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font:600 12.5px var(--font);cursor:pointer}
+.fbk .kinds button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.fbk textarea{width:100%;min-height:110px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:10px;font:14px var(--font);resize:vertical}
+.fbk .row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px}.fbk .row span{font-size:12.5px;color:var(--ink-3)}
+.fbk .row div{display:flex;gap:8px}.fbk .row button{height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:600 13px var(--font);cursor:pointer}
+.fbk .row button.go2{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+<button class="fbk-btn" id="fbk-open" type="button">Feedback</button>
+<div class="fbk-bg" id="fbk-bg" role="dialog" aria-modal="true" aria-labelledby="fbk-h"><div class="fbk">
+  <h3 id="fbk-h">Tell us what you think</h3><p>Ideas, bugs or something you love. It goes straight to the person who builds this.</p>
+  <div class="kinds" id="fbk-kinds"><button type="button" data-k="idea" aria-pressed="true">Idea</button><button type="button" data-k="bug" aria-pressed="false">Bug</button><button type="button" data-k="love" aria-pressed="false">Love it</button></div>
+  <textarea id="fbk-msg" maxlength="1000" placeholder="What should be better?"></textarea>
+  <div class="row"><span id="fbk-st">Anonymous</span><div><button type="button" id="fbk-cancel">Cancel</button><button type="button" class="go2" id="fbk-send">Send</button></div></div>
+</div></div>
+<script>
+(() => { const g = (i) => document.getElementById(i); let kind = "idea";
+  const close = () => g("fbk-bg").classList.remove("show");
+  g("fbk-open").onclick = () => { g("fbk-bg").classList.add("show"); g("fbk-st").textContent = "Anonymous"; setTimeout(() => g("fbk-msg").focus(), 50); };
+  g("fbk-cancel").onclick = close; g("fbk-bg").addEventListener("click", (e) => { if (e.target === g("fbk-bg")) close(); });
+  g("fbk-kinds").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; kind = b.dataset.k; g("fbk-kinds").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
+  g("fbk-send").onclick = async () => { const msg = g("fbk-msg").value.trim(); if (msg.length < 3) { g("fbk-st").textContent = "Write a few words first"; return; }
+    g("fbk-send").disabled = true; g("fbk-st").textContent = "Sending…";
+    try { const r = await fetch("/api/feedback", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind, message: msg})});
+      const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || "Couldn't send");
+      g("fbk-st").textContent = "Thank you! Sent."; g("fbk-msg").value = ""; setTimeout(close, 900);
+    } catch (err) { g("fbk-st").textContent = err.message; } finally { g("fbk-send").disabled = false; } };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
+</script>
+</body>
+</html>
