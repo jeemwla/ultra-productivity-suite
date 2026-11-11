@@ -10,7 +10,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -18,16 +18,22 @@ from .lhm_collector import collect_hardware_telemetry
 from .net_monitor import get_live_ping_snapshot, run_on_demand_speedtest
 from .glinet_vpn import vpn_controller
 from . import speedtest
+from . import preferences
 
 latest = {"hardware": {"live": False, "source": "starting", "groups": [], "summary": {}},
-          "network": {"online": False, "targets": []}, "vpn": vpn_controller.status(), "ts": 0}
+          "network": {"online": False, "targets": []}, "vpn": {"supported": False, "message": "Enable router controls in Settings / Extras."}, "ts": 0}
 
 
 async def poll_loop():
     while True:
         try:
-            hw, net, _ = await asyncio.gather(collect_hardware_telemetry(), get_live_ping_snapshot(), vpn_controller.refresh())
-            latest.update(hardware=hw, network=net, vpn=vpn_controller.status(), ts=time.time())
+            prefs = preferences.load()
+            jobs = [collect_hardware_telemetry(), get_live_ping_snapshot(router_ping=prefs["router_ping"])]
+            if prefs["router_vpn"]:
+                jobs.append(vpn_controller.refresh())
+            results = await asyncio.gather(*jobs)
+            vpn = vpn_controller.status() if prefs["router_vpn"] else {"supported": False, "message": "Enable router controls in Settings / Extras."}
+            latest.update(hardware=results[0], network=results[1], vpn=vpn, preferences=prefs, ts=time.time())
         except Exception as exc:
             print(f"[sentinel] poll error: {exc}")
         await asyncio.sleep(1.0)
@@ -41,6 +47,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Hardware & Network Sentinel", lifespan=lifespan)
+preferences.register(app)
 
 from . import power_context  # noqa: E402  optional local desktop PSU context, no hardware writes
 power_context.register(app)
@@ -83,11 +90,15 @@ async def trigger_speedtest():
 
 @app.get("/api/vpn/status")
 async def get_vpn_status():
+    if not preferences.load()["router_vpn"]:
+        return {"supported": False, "message": "Enable router controls in Settings / Extras."}
     return vpn_controller.status()
 
 
 @app.post("/api/vpn/toggle")
 async def toggle_glinet_vpn(payload: VPNTogglePayload):
+    if not preferences.load()["router_vpn"]:
+        raise HTTPException(409, "Router VPN controls are disabled in Settings / Extras.")
     result = await vpn_controller.toggle_vpn(payload.enable)
     latest["vpn"] = result
     return result

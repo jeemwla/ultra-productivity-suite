@@ -57,6 +57,11 @@ a{color:var(--accent);text-decoration:none}
 .nav .badge{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--critical)}
 .side .spacer{flex:1}
 .side .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 6px 2px;border-top:1px solid var(--line);margin-top:8px}
+.side .foot .chip{max-width:105px}
+.side .foot .nav{width:34px;height:34px;min-width:34px;justify-content:center;padding:0;flex:none}
+.settings-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
+.settings-row label{flex:1;cursor:pointer}.settings-row input{width:18px;height:18px;accent-color:var(--accent);flex:none}
+.settings-row select{max-width:170px;min-width:0}.settings-actions{display:flex;flex-wrap:wrap;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:999px;background:var(--surface-2);font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3);flex:none}
 .dot.good{background:var(--good)}.dot.warning{background:var(--warning)}.dot.critical{background:var(--critical)}
@@ -286,7 +291,9 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
   body{overflow:auto}
   .app{grid-template-columns:1fr;height:auto}
   .side{position:fixed;left:0;right:0;bottom:0;z-index:20;flex-direction:row;overflow-x:auto;padding:6px 8px calc(6px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid var(--line);gap:2px}
-  .side .brand,.side .spacer,.side .foot{display:none}
+  .side .brand,.side .spacer{display:none}
+  .side .foot{display:flex;flex:none;border:0;margin:0;padding:0;gap:2px;align-items:center;position:sticky;right:0;background:var(--surface);z-index:1;box-shadow:-8px 0 8px var(--surface)}
+  .side .foot #live{display:none}
   .nav{flex-direction:column;height:52px;min-width:66px;gap:2px;font-size:10.5px;padding:6px 4px;justify-content:center}
   .nav .badge{position:absolute;top:6px;right:14px;margin:0}
   .main{overflow:visible;padding-bottom:80px}
@@ -310,7 +317,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
       <div><b>PC Sentinel</b><small id="brand-sub">Your PC, at a glance</small></div></div>
     <nav id="navs" style="display:contents"></nav>
     <div class="spacer"></div>
-    <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span></div>
+    <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span><button class="nav" id="nav-settings" data-p="settings" aria-label="Settings / Extras" title="Settings / Extras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
   </aside>
   <main class="main" id="main">
     <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
@@ -398,7 +405,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
           <section class="card"><div class="ch"><h2>Connection</h2><span class="sub">Latency every second</span></div><div class="cb"><div class="rows" id="pings" style="gap:8px"></div><div class="muted mt" id="netstats"></div></div></section>
           <div class="grid" style="align-content:start">
             <section class="card"><div class="ch"><h2>Throughput</h2><span class="sub">This PC right now</span></div><div class="cb"><div class="grid g2"><div><div class="muted">Download</div><div class="num big" id="nt-down">–</div></div><div><div class="muted">Upload</div><div class="num big" id="nt-up">–</div></div></div></div></section>
-            <section class="card"><div class="ch"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div><div class="cb"><div style="display:flex;justify-content:space-between;align-items:center;gap:14px"><div><div style="font-weight:600" id="vpn-title">Router VPN</div><div class="muted" id="vpn-sub">Checking…</div></div><label class="big-switch" id="vpn-switch"><input type="checkbox" id="vpn-cb" aria-label="VPN on or off"><span></span></label></div><div class="muted mt" id="vpn-msg"></div></div></section>
+            <section class="card" id="vpn-card" hidden><div class="ch"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div><div class="cb"><div style="display:flex;justify-content:space-between;align-items:center;gap:14px"><div><div style="font-weight:600" id="vpn-title">Router VPN</div><div class="muted" id="vpn-sub">Checking…</div></div><label class="big-switch" id="vpn-switch"><input type="checkbox" id="vpn-cb" aria-label="VPN on or off"><span></span></label></div><div class="muted mt" id="vpn-msg"></div></div></section>
             <section class="card"><div class="ch"><h2>Speed test</h2><a class="sub" href="#speed">Run one</a></div><div class="cb" id="nt-speed"></div></section>
           </div>
         </div>
@@ -428,6 +435,21 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="filters"></div>
         <div id="groups"></div></div></section></section>
 
+      <section class="page" id="p-settings">
+        <div class="grid g2">
+          <section class="card"><div class="ch"><h2>Your pages</h2><span class="sub">Choose what appears in navigation</span></div><div class="cb">
+            <p class="muted">Settings / Extras always stays available. Keep at least one page visible. Hiding a page does not disable hardware monitoring or stop an active speed test.</p>
+            <div id="settings-pages"></div>
+          </div></section>
+          <section class="card"><div class="ch"><h2>Optional router features</h2><span class="sub">Off by default</span></div><div class="cb">
+            <p class="muted">These controls are for a separately configured router. A normal Windows VPN does not need them. Enabling controls does not turn a VPN connection on or off.</p>
+            <div class="settings-row"><label for="extra-vpn">Show router VPN controls<br><span class="muted">Enables status polling and the optional router controls.</span></label><input type="checkbox" id="extra-vpn"></div>
+            <div class="settings-row"><label for="extra-router-ping">Monitor router latency<br><span class="muted">Includes the configured router among latency targets.</span></label><input type="checkbox" id="extra-router-ping"></div>
+            <p class="muted mt">No router password or address is saved by this page. Configuration is managed separately.</p>
+          </div></section>
+        </div>
+        <section class="card mt"><div class="cb"><div class="settings-actions"><button class="btn primary" type="button" id="settings-save">Save settings</button><button class="btn" type="button" id="settings-reset">Reset draft to defaults</button></div><p class="muted mt" role="status" id="settings-status">Loading settings from this PC…</p><p class="muted mt">Saved on this PC and shared by its Sentinel windows. Appearance and motion are available from the palette button next to Settings.</p></div></section>
+      </section>
       <!-- SYSTEM -->
       <section class="page" id="p-system">
         <div class="grid g2">
@@ -497,11 +519,46 @@ const PAGES = [
   ["sensors", "Sensors", "Every sensor, organized by part", '<path d="M4 6h16M4 12h16M4 18h10"/>'],
   ["battery", "Battery", "Charge, health and power use", '<rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2M6 10v4"/>'],
   ["system", "System", "This PC, sensor source, alerts and updates", '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'],
+  ["settings", "Settings / Extras", "Choose pages and optional features for this PC", ""],
 ];
-$("navs").innerHTML = PAGES.map(([id, t, , ic]) => `<button class="nav" data-p="${id}" id="nav-${id}" ${id === "battery" ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${t}</button>`).join("");
+$("navs").innerHTML = PAGES.filter(p=>p[0]!=="settings").map(([id, t, , ic]) => `<button class="nav" data-p="${id}" id="nav-${id}" ${id === "battery" ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${t}</button>`).join("");
+/* ---------- per-PC preferences ---------- */
+function defaultPreferences(){return {pages:Object.fromEntries(PAGES.filter(p=>p[0]!=="settings").map(([id])=>[id,id==="battery"?null:true])),router_vpn:false,router_ping:false,revision:"0"};}
+function pageVisible(id,settings,hasBattery){return id==="settings"||settings.pages[id]===true||(id==="battery"&&settings.pages.battery===null&&hasBattery);}
+function freshPreferences(current,incoming){try{return BigInt(incoming.revision||"0")>=BigInt(current.revision||"0");}catch{return false;}}
+let prefs=defaultPreferences(),preferencesDirty=false,preferencesEditing=0,preferencesSaving=false;
+$("settings-pages").innerHTML=PAGES.filter(p=>p[0]!=="settings").map(([id,title])=>id==="battery"?`<div class="settings-row"><label for="setting-page-battery">Battery<br><span class="muted">Automatic follows battery detection; Show also works on desktops.</span></label><select id="setting-page-battery"><option value="auto">Automatic</option><option value="show">Show</option><option value="hide">Hide</option></select></div>`:`<div class="settings-row"><label for="setting-page-${id}">${title}</label><input type="checkbox" id="setting-page-${id}"></div>`).join("");
+function fillPreferences(value){
+  for(const [id] of PAGES.filter(p=>p[0]!=="settings"))if(id==="battery")$("setting-page-battery").value=value.pages.battery===null?"auto":value.pages.battery?"show":"hide";else $("setting-page-"+id).checked=value.pages[id];
+  $("extra-vpn").checked=value.router_vpn;$("extra-router-ping").checked=value.router_ping;
+}
+function applyPreferences(){
+  const hasBattery=!!(snap&&snap.hardware.device?.has_battery);
+  for(const [id] of PAGES)$("nav-"+id).hidden=!pageVisible(id,prefs,hasBattery);
+  $("vpn-card").hidden=!prefs.router_vpn;
+  if(!pageVisible(page,prefs,hasBattery))go(PAGES.find(([id])=>id!=="settings"&&pageVisible(id,prefs,hasBattery))?.[0]||"settings");
+}
+function acceptPreferences(value){
+  if(!value||!freshPreferences(prefs,value))return;
+  prefs=value;if(!preferencesDirty)fillPreferences(prefs);applyPreferences();
+}
+async function loadPreferences(){try{acceptPreferences(await api("/api/preferences"));if(!preferencesDirty)$("settings-status").textContent=prefs.storage_status==="ok"?"Saved settings loaded from this PC.":prefs.storage_status==="invalid_or_unavailable"?"Saved settings could not be read. Safe defaults are active; Save will replace the invalid record.":"Default pages are shown. Router extras are off until you choose them.";}catch{$("settings-status").textContent="Settings could not be loaded. Retry Save when the local service is available.";}}
+function preferenceDraft(){const value={pages:{},router_vpn:$("extra-vpn").checked,router_ping:$("extra-router-ping").checked};for(const [id] of PAGES.filter(p=>p[0]!=="settings"))value.pages[id]=id==="battery"?({auto:null,show:true,hide:false}[$("setting-page-battery").value]):$("setting-page-"+id).checked;return value;}
+for(const el of document.querySelectorAll('#settings-pages input,#settings-pages select,#extra-vpn,#extra-router-ping'))el.addEventListener('change',()=>{preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Unsaved changes. Choose Save settings to apply.";});
+$("settings-save").onclick=async()=>{
+  if(preferencesSaving)return;const draft=preferenceDraft(),edit=preferencesEditing;
+  if(!Object.values(draft.pages).some(v=>v===true)){$("settings-status").textContent="Keep at least one page visible before saving.";return;}
+  preferencesSaving=true;$("settings-save").disabled=true;$("settings-reset").disabled=true;$("settings-status").textContent="Saving…";
+  try{acceptPreferences(await api("/api/preferences",{method:"POST",body:JSON.stringify(draft)}));if(edit===preferencesEditing){preferencesDirty=false;fillPreferences(prefs);$("settings-status").textContent="Saved on this PC. All Sentinel windows will use these settings.";}else $("settings-status").textContent="Submitted settings saved. Your newer edits are still unsaved.";}
+  catch(e){$("settings-status").textContent="Not saved: "+e.message;}
+  finally{preferencesSaving=false;$("settings-save").disabled=false;$("settings-reset").disabled=false;}
+};
+$("settings-reset").onclick=()=>{fillPreferences(defaultPreferences());preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Default draft restored. Choose Save settings to apply; nothing has changed yet.";};
+fillPreferences(prefs);
+/* ---------- navigation actions ---------- */
 let page = "overview";
 function go(p, push = true){
-  if (!PAGES.some(x => x[0] === p)) p = "overview"; page = p;
+  if (!PAGES.some(x => x[0] === p)||!pageVisible(p,prefs,!!(snap&&snap.hardware.device?.has_battery))) p = PAGES.find(([id])=>id!=="settings"&&pageVisible(id,prefs,!!(snap&&snap.hardware.device?.has_battery)))?.[0]||"settings"; page = p;
   document.querySelectorAll(".page").forEach(s => s.classList.toggle("active", s.id === "p-" + p));
   document.querySelectorAll(".nav").forEach(b => b.setAttribute("aria-current", b.dataset.p === p ? "page" : "false"));
   const meta = PAGES.find(x => x[0] === p); $("pg-title").textContent = meta[1]; $("pg-sub").textContent = meta[2]; document.title = `${meta[1]} · PC Sentinel`;
@@ -512,6 +569,7 @@ function go(p, push = true){
   render();
 }
 $("navs").addEventListener("click", (e) => { const b = e.target.closest(".nav"); if (b) go(b.dataset.p); });
+$("nav-settings").addEventListener("click",()=>go("settings"));
 window.addEventListener("hashchange", () => go(location.hash.slice(1), false));
 // keyboard: 1-9 jump between sections (when not typing)
 document.addEventListener("keydown", (e) => { if (e.target.closest("input,textarea") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
@@ -971,19 +1029,19 @@ function render(){
   $("brand-sub").textContent = dev.hostname || "Your PC";
   $("brand-sub").title = dev.hostname ? "Windows computer name" : "Windows computer name is unavailable";
   $("basic").hidden = hw.level !== "basic"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor.";
-  $("lhm-go").hidden = hw.can_install_lhm === false; $("nav-battery").hidden = !dev.has_battery;
+  $("lhm-go").hidden = hw.can_install_lhm === false; applyPreferences();
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
   const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
   ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
 }
-function onSnap(d){ snap = d; lastMsg = Date.now(); const s = d.hardware.summary || {};
+function onSnap(d){ snap = d; if(d.preferences)acceptPreferences(d.preferences); lastMsg = Date.now(); const s = d.hardware.summary || {};
   push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); recordPowerHistory(d.hardware.power); push("cput", s.cpu_temp); push("gput", s.gpu_temp);
   checkAlerts(s); if (!document.hidden) render(); }
 function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`); ws.onopen = () => { retry = 0; };
   ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
 setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && snap.hardware.level !== "basic"; $("live").innerHTML = `<span class="dot ${fresh ? (full ? "good" : "warning") : "critical"}"></span>${fresh ? (snap ? `Live · ${snap.hardware.sensor_count} sensors` : "Live") : "Reconnecting…"}`; }, 1000);
 setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
-go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); checkUpdate(false); connect();
+go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); connect();
 </script>
 <script src="/psu_picker.js"></script>
 </body>

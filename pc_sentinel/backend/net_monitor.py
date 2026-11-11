@@ -52,10 +52,16 @@ async def measure_tcp_ping(host: str, port: int, timeout: float = 1.5) -> Option
         return None
 
 
-async def get_live_ping_snapshot() -> Dict:
-    values = await asyncio.gather(*(measure_tcp_ping(t["host"], t["port"]) for t in PING_TARGETS))
+def is_router_target(target):
+    return (target["id"] == "router" or "router" in target["name"].casefold()
+            or target["host"] == os.getenv("GLINET_ROUTER_IP", "").strip())
+
+
+async def get_live_ping_snapshot(*, router_ping=False) -> Dict:
+    targets = [t for t in PING_TARGETS if router_ping or not is_router_target(t)]
+    values = await asyncio.gather(*(measure_tcp_ping(t["host"], t["port"]) for t in targets))
     results = []
-    for t, ms in zip(PING_TARGETS, values):
+    for t, ms in zip(targets, values):
         h = history[t["id"]]
         h.append(ms)
         ok = [v for v in h if v is not None]
@@ -64,7 +70,7 @@ async def get_live_ping_snapshot() -> Dict:
                         "avg_ms": round(sum(ok) / len(ok), 1) if ok else None,
                         "loss_pct": loss, "history": list(h)[-30:]})
     primary = results[0] if results else {}
-    ok = [v for v in history[PING_TARGETS[0]["id"]] if v is not None] if PING_TARGETS else []
+    ok = [v for v in history[targets[0]["id"]] if v is not None] if targets else []
     jitter = round(statistics.pstdev(ok[-20:]), 1) if len(ok) >= 3 else None
     online = any(r["latency_ms"] is not None for r in results)
     return {"online": online, "primary_ping_ms": primary.get("latency_ms"), "jitter_ms": jitter, "targets": results}
