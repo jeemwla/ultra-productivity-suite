@@ -28,32 +28,57 @@ _gpu_pdh = None
 
 
 def _gpu_by_pid() -> dict:
-    """Per-process GPU use the way Task Manager shows it: the busiest engine type (3D, Copy, Video...) per process."""
+    """Windows counter utilization: busiest physical engine across reported GPUs per process.
+
+    https://devblogs.microsoft.com/directx/gpus-in-the-task-manager/
+    """
     global _gpu_pdh
+    import math
+    began = time.time()
+    unavailable = {"processes": {}, "engine_complete": False, "memory_complete": False, "observed_at": began}
     if not IS_WIN:
-        return {}
+        return unavailable
     try:
         if _gpu_pdh is None:
             from .native_sensors import Pdh
             _gpu_pdh = Pdh([r"\GPU Engine(*)\Utilization Percentage", r"\GPU Process Memory(*)\Dedicated Usage"])
         data = _gpu_pdh.collect()
     except Exception:
-        return {}
+        return unavailable
+    engine_path, memory_path = r"\GPU Engine(*)\Utilization Percentage", r"\GPU Process Memory(*)\Dedicated Usage"
+    statuses = getattr(_gpu_pdh, "last_status", {})
+    engine_complete = statuses.get(engine_path) == "complete"
+    memory_complete = statuses.get(memory_path) == "complete"
     eng = {}
     for inst, v in (data.get(r"\GPU Engine(*)\Utilization Percentage") or {}).items():
-        m = re.match(r"pid_(\d+)_.*engtype_(.+)$", inst)
+        m = re.match(r"pid_(\d+)_(.*engtype_.+)$", inst)
+        if not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+            engine_complete = False
+            continue
         if m:
             k = (int(m.group(1)), m.group(2))
             eng[k] = eng.get(k, 0.0) + v
+        elif inst != "_Total":
+            engine_complete = False
     out = {}
     for (pid, _t), v in eng.items():
-        out.setdefault(pid, {"gpu": 0.0, "vram_mb": 0.0})
-        out[pid]["gpu"] = max(out[pid]["gpu"], v)
+        out.setdefault(pid, {"gpu": None, "vram_mb": None, "engines": {}})
+        out[pid]["gpu"] = max(out[pid]["gpu"] or 0.0, v)
+        out[pid]["engines"][_t] = v
     for inst, v in (data.get(r"\GPU Process Memory(*)\Dedicated Usage") or {}).items():
         m = re.match(r"pid_(\d+)_", inst)
+        if not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+            memory_complete = False
+            continue
         if m:
-            out.setdefault(int(m.group(1)), {"gpu": 0.0, "vram_mb": 0.0})["vram_mb"] += v / 1048576
-    return out
+            row = out.setdefault(int(m.group(1)), {"gpu": None, "vram_mb": None, "engines": {}})
+            row["vram_mb"] = (row["vram_mb"] or 0.0) + v / 1048576
+        elif inst != "_Total":
+            memory_complete = False
+    for row in out.values():
+        row["gpu_complete"] = engine_complete
+    return {"processes": out, "engine_complete": engine_complete,
+            "memory_complete": memory_complete, "observed_at": began}
 
 
 def _run(args, timeout=20):
@@ -61,47 +86,204 @@ def _run(args, timeout=20):
 
 
 # ----------------------------------------------------------------------------- top apps
-def top_apps(limit=8):
-    if _proc_cache["data"] is not None and time.time() - _proc_cache["at"] < 2:
-        return _proc_cache["data"]
-    ncpu = psutil.cpu_count() or 1
-    apps = {}
-    gpu = _gpu_by_pid()
-    # psutil measures CPU between two calls on the SAME Process object, so keep them alive across polls
-    alive = set()
-    for p in psutil.process_iter(["name", "memory_info", "exe"]):
-        alive.add(p.pid)
-        tracked = _procs.get(p.pid)
-        if tracked is None:
-            tracked = _procs[p.pid] = p
-            try:
-                tracked.cpu_percent(None)  # prime; the real value arrives on the next poll
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+def top_apps(limit=8, *, all_limit=0, include_details=False, group_id=None):
+    """Cache full group rankings, then apply each caller's response limits.
+
+    CPU percentages use total machine capacity. First observations or an unknown
+    creation identity have no CPU interval yet, retained explicitly in status
+    fields. Windows path normalization is lexical; it does not verify signatures
+    or collapse filesystem aliases. Unusable paths remain per-process groups.
+    """
+    import copy
+    import hashlib
+    import math
+    import ntpath
+    import threading
+    from .process_names import describe_process, _absolute_windows_path
+
+    if type(limit) is not int or not 1 <= limit <= 512 or type(all_limit) is not int or not 0 <= all_limit <= 512:
+        raise ValueError("Top limit must be 1..512 and full-list limit 0..512.")
+
+    def number(value, default=0.0):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return default
         try:
-            name = (p.info["name"] or "").replace(".exe", "")
-            if not name or name.lower() in ("system idle process", "idle", "system", "registry", "memory compression"):
+            value = float(value)
+        except (ValueError, OverflowError):
+            return default
+        return value if math.isfinite(value) and value >= 0 else default
+
+    # Concurrent to_thread requests share sampling state but get independent
+    # response copies and independently sliced limits.
+    with _proc_cache.setdefault("lock", threading.RLock()):
+        now = time.monotonic()
+        cached = _proc_cache.get("data")
+        if cached is None or "all_apps" not in cached or not 0 <= now - _proc_cache["at"] < 2:
+            ncpu = max(1, psutil.cpu_count() or 1)
+            apps, retained, seen_pids = {}, set(), set()
+            gpu_sample = _gpu_by_pid()
+            envelope = isinstance(gpu_sample, dict) and "processes" in gpu_sample
+            gpu = gpu_sample["processes"] if envelope else gpu_sample
+            engine_complete = envelope and gpu_sample.get("engine_complete") is True
+            memory_complete = envelope and gpu_sample.get("memory_complete") is True
+            gpu_observed_at = number(gpu_sample.get("observed_at"), None) if envelope else None
+            # New process_iter objects provide fresh creation times. Our own
+            # records retain CPU intervals only across a confirmed lifetime.
+            clear = getattr(psutil.process_iter, "cache_clear", None)
+            if callable(clear):
+                clear()
+            for process in psutil.process_iter(["name", "memory_info", "exe", "create_time"], ad_value=None):
+                pid = process.pid
+                if pid in seen_pids:
+                    continue
+                seen_pids.add(pid)
+                try:
+                    info = process.info
+                    raw_name = info.get("name")
+                    if isinstance(raw_name, str) and raw_name.lower() in ("system idle process", "idle", "system", "registry", "memory compression"):
+                        continue
+                    exe = info.get("exe")
+                    path = _absolute_windows_path(exe)
+                    raw_name = raw_name if isinstance(raw_name, str) and raw_name else (ntpath.basename(path) if path else "Unknown process")
+                    created = number(info.get("create_time"), None)
+                    previous = _procs.get(pid)
+                    same_lifetime = (created is not None and isinstance(previous, dict)
+                                     and previous.get("created") == created)
+                    tracked = previous["process"] if same_lifetime else process
+                    cpu, cpu_status = 0.0, "sampled"
+                    try:
+                        reading = tracked.cpu_percent(None)
+                        if same_lifetime:
+                            measured_cpu = number(reading, None)
+                            if measured_cpu is None:
+                                cpu_status = "unavailable"
+                            else:
+                                cpu = min(100.0, measured_cpu / ncpu)
+                        else:
+                            cpu_status = "warming_up" if created is not None else "identity_unavailable"
+                    except psutil.AccessDenied:
+                        cpu_status = "unavailable"
+                    _procs[pid] = {"process": tracked, "created": created}
+                    retained.add(pid)
+                    rss = number(getattr(info.get("memory_info"), "rss", None), None)
+                    mem = rss / 1048576 if rss is not None else None
+                    reading = gpu.get(pid) or {}
+                    gpu_value = number(reading.get("gpu"), None)
+                    observable_at_gpu_sample = created is not None and gpu_observed_at is not None and created <= gpu_observed_at
+                    if envelope and not observable_at_gpu_sample:
+                        gpu_value = None
+                    no_engine = gpu_value is None and engine_complete and observable_at_gpu_sample
+                    if gpu_value is None and engine_complete and observable_at_gpu_sample:
+                        gpu_value = 0.0
+                    gpu_pct = min(100.0, gpu_value) if gpu_value is not None else None
+                    child_gpu_complete = gpu_pct is not None and (engine_complete if envelope else True)
+                    vram = number(reading.get("vram_mb"), None)
+                    if envelope and not observable_at_gpu_sample:
+                        vram = None
+                    if vram is None and memory_complete and observable_at_gpu_sample:
+                        vram = 0.0
+                    detail = describe_process({"name": raw_name, "exe": exe if isinstance(exe, str) else None,
+                                               "file_description": info.get("file_description"), "pid": pid,
+                                               "create_time": created, "canonical_exe": path,
+                                               "cpu": round(cpu, 1) if cpu_status == "sampled" else None,
+                                               "mem_mb": round(mem) if mem is not None else None,
+                                               "gpu": round(gpu_pct, 1) if gpu_pct is not None else None,
+                                               "vram_mb": round(vram) if vram is not None else None,
+                                               "gpu_sample_status": "no_gpu_engine_instance" if no_engine else "reported" if gpu_pct is not None else "unavailable_or_new_process",
+                                               "gpu_complete": child_gpu_complete,
+                                               "cpu_sample_status": cpu_status,
+                                               "creation_identity_available": created is not None})
+                    detail["name"] = re.sub(r"\.exe$", "", raw_name, flags=re.I)
+                    key = ("exe", path) if path else ("process", pid, created)
+                    if key not in apps:
+                        label = describe_process({"name": raw_name, "exe": exe if isinstance(exe, str) else None,
+                                                  "file_description": info.get("file_description")})
+                        label["name"] = re.sub(r"\.exe$", "", raw_name, flags=re.I)
+                        stable_group_id = "exe:" + hashlib.sha256(path.encode("utf-8")).hexdigest() if path else f"pid:{pid}:{created if created is not None else 'unverified'}"
+                        apps[key] = {**label, "canonical_exe": path, "group_id": stable_group_id,
+                                     "grouping_source": "canonical_executable_path" if path else "individual_process",
+                                     "cpu": 0.0, "mem_mb": 0.0, "gpu": 0.0, "vram_mb": 0.0,
+                                     "count": 0, "pids": [], "processes": [], "cpu_complete": True,
+                                     "mem_complete": True, "gpu_complete": True,
+                                     "_gpu_engine_sums": {}, "_gpu_unmapped": False}
+                    group = apps[key]
+                    group["cpu"] += cpu
+                    group["mem_mb"] += mem if mem is not None else 0
+                    group["gpu"] += gpu_pct if gpu_pct is not None else 0
+                    engines = (reading.get("engines") or {}) if not envelope or observable_at_gpu_sample else {}
+                    for engine, value in engines.items():
+                        valid = number(value, None)
+                        if valid is not None:group["_gpu_engine_sums"][engine] = group["_gpu_engine_sums"].get(engine, 0.0) + valid
+                    if gpu_pct and not engines:group["_gpu_unmapped"] = True
+                    group["vram_mb"] += vram if vram is not None else 0
+                    group["count"] += 1
+                    group["pids"].append(pid)
+                    group["processes"].append(detail)
+                    group["cpu_complete"] = group["cpu_complete"] and cpu_status == "sampled"
+                    group["mem_complete"] = group["mem_complete"] and mem is not None
+                    group["gpu_complete"] = group["gpu_complete"] and child_gpu_complete
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            for pid in list(_procs):
+                if pid not in retained:
+                    del _procs[pid]
+            rows = list(apps.values())
+            for row in rows:
+                if row["_gpu_engine_sums"] and not row["_gpu_unmapped"]:
+                    row["gpu"] = max(row["_gpu_engine_sums"].values())
+                row["gpu_percent_basis"] = "busiest_reported_physical_engine" if not row["_gpu_unmapped"] else "sum_of_process_reports"
+                row["cpu_threshold_eligible"] = row["cpu"] >= 0.5
+                row["gpu_threshold_eligible"] = row["gpu"] >= 0.5
+                row["cpu"] = round(min(100.0, row["cpu"]), 1)
+                row["mem_mb"] = round(row["mem_mb"])
+                row["gpu"] = round(min(100.0, row["gpu"]), 1)
+                row["vram_mb"] = round(row["vram_mb"])
+                row["pids"].sort()
+                row["processes"].sort(key=lambda child: child["pid"])
+            tie = lambda row: row["group_id"]
+            all_rows = sorted(rows, key=lambda row: (-row["cpu"], tie(row)))
+            cached = {"all_apps": all_rows,
+                      "by_cpu": [row for row in all_rows if row["cpu_threshold_eligible"]],
+                      "by_mem": sorted(rows, key=lambda row: (-row["mem_mb"], tie(row))),
+                      "by_gpu": sorted([row for row in rows if row["gpu_threshold_eligible"]],
+                                       key=lambda row: (-row["gpu"], -row["vram_mb"], tie(row))),
+                      "gpu_available": bool(engine_complete or any(number(v.get("gpu"), None) is not None for v in gpu.values())),
+                      "gpu_collection_status": "complete" if engine_complete else "partial" if gpu else "unavailable",
+                      "total_processes": sum(row["count"] for row in rows),
+                      "total_groups": len(rows), "observed_at": time.time(),
+                      "cpu_hidden_groups": sum(not row["cpu_threshold_eligible"] for row in rows),
+                      "cpu_threshold_pct": 0.5, "gpu_threshold_pct": 0.5,
+                      "cpu_percent_basis": "whole_machine",
+                      "memory_basis": "summed_process_working_sets_may_include_shared_pages"}
+            _proc_cache.update(at=time.monotonic(), data=cached)
+        response = {**cached, "by_cpu": cached["by_cpu"][:limit] if group_id is None else [],
+                    "by_mem": cached["by_mem"][:limit] if group_id is None else [],
+                    "by_gpu": cached["by_gpu"][:limit] if group_id is None else [],
+                    "all_apps": cached["all_apps"][:all_limit] if group_id is None else [r for r in cached["all_apps"] if r["group_id"] == group_id],
+                    "all_included": all_limit > 0 or group_id is not None,
+                    "truncated": bool(all_limit and cached["total_groups"] > all_limit)}
+        # Copy only requested rows; compact polling never copies every child PID.
+        memo = {}
+        for key in ("by_cpu", "by_mem", "by_gpu", "all_apps"):
+            response[key] = [memo.setdefault(id(row), {k:v for k,v in row.items() if not k.startswith("_") and (include_details or k not in ("processes", "pids"))}) for row in response[key]]
+        response = copy.deepcopy(response)
+    # Version-resource file I/O is outside the shared PDH/process sampling lock.
+    from .process_metadata import file_description
+    seen, reads = set(), 0
+    for key in ("by_cpu", "by_mem", "by_gpu", "all_apps"):
+        for row in response[key]:
+            if id(row) in seen:
                 continue
-            cpu = tracked.cpu_percent(None) / ncpu
-            mem = p.info["memory_info"].rss if p.info.get("memory_info") else 0
-            a = apps.setdefault(name.lower(), {"name": name, "cpu": 0.0, "mem_mb": 0.0, "gpu": 0.0, "vram_mb": 0.0, "count": 0, "exe": p.info.get("exe")})
-            a["cpu"] += cpu; a["mem_mb"] += mem / 1048576; a["count"] += 1
-            g = gpu.get(p.pid)
-            if g:
-                a["gpu"] += g["gpu"]; a["vram_mb"] += g["vram_mb"]
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    for pid in list(_procs):
-        if pid not in alive:
-            del _procs[pid]
-    rows = list(apps.values())
-    for r in rows:
-        r["cpu"] = round(r["cpu"], 1); r["mem_mb"] = round(r["mem_mb"]); r["gpu"] = round(min(100.0, r["gpu"]), 1); r["vram_mb"] = round(r["vram_mb"])
-    data = {"by_cpu": sorted(rows, key=lambda r: -r["cpu"])[:limit], "by_mem": sorted(rows, key=lambda r: -r["mem_mb"])[:limit],
-            "by_gpu": sorted(rows, key=lambda r: (-r["gpu"], -r["vram_mb"]))[:limit], "gpu_available": bool(gpu),
-            "total_processes": sum(r["count"] for r in rows)}
-    _proc_cache.update(at=time.time(), data=data)
-    return data
+            seen.add(id(row))
+            if row.get("name_source") == "windows_glossary" or not row.get("canonical_exe"):
+                continue
+            description, performed_read = file_description(row["canonical_exe"], cached_only=reads >= 24, with_status=True)
+            reads += int(performed_read)
+            if description:
+                label = describe_process({**row, "name": row.get("raw_filename") or row["name"], "file_description": description})
+                label["name"] = row["name"]
+                row.update(label)
+    return response
 
 
 # ----------------------------------------------------------------------------- power plans
@@ -283,9 +465,19 @@ def setup_lhm():
 
 def register(app):
     @app.get("/api/processes")
-    async def _procs():
+    async def _procs(limit: int = 8, all_limit: int = 0):
         import asyncio
-        return await asyncio.to_thread(top_apps)
+        if not 1 <= limit <= 512 or not 0 <= all_limit <= 512:
+            raise HTTPException(422, "Top limit must be 1..512 and full-list limit 0..512.")
+        return await asyncio.to_thread(top_apps, limit, all_limit=all_limit)
+
+    @app.get("/api/processes/{group_id}")
+    async def _process_group(group_id: str):
+        import asyncio
+        result = await asyncio.to_thread(top_apps, 1, include_details=True, group_id=group_id)
+        if not result["all_apps"]:
+            raise HTTPException(404, "This process group is no longer present.")
+        return {"group": result["all_apps"][0], "observed_at": result["observed_at"]}
 
     @app.get("/api/power/plans")
     async def _plans():

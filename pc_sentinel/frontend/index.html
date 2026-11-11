@@ -283,6 +283,9 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
   .ping{grid-template-columns:minmax(0,1fr) 70px}.ping .spark-wrap{display:none}
   .drive .kv{grid-template-columns:1fr 1fr}.kvt{grid-template-columns:110px 1fr}
 }
+
+.process-list.expanded{max-height:540px;overflow:auto;overscroll-behavior:contain;padding:2px}.process-group{margin:0;border-bottom:1px solid var(--line)}.process-summary{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(40px,80px) 75px;gap:10px;align-items:center;list-style:none;cursor:pointer;padding:10px 0}.process-summary::-webkit-details-marker{display:none}.process-summary .nm{min-width:0;overflow-wrap:anywhere}.process-summary small{display:block;color:var(--ink-3);font-size:11px;line-height:1.4;margin-top:3px}.process-summary .vv{text-align:right;font-variant-numeric:tabular-nums}.process-details{padding:4px 8px 14px 40px;font-size:12px}.process-details p{margin:8px 0;overflow-wrap:anywhere}.process-details code{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.process-detail-table{max-height:250px;overflow:auto}.process-detail-table table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}.process-detail-table th,.process-detail-table td{padding:5px 8px;border-bottom:1px solid var(--line)}.process-detail-table th{position:sticky;top:0;background:var(--surface)}@media(max-width:650px){.process-summary{grid-template-columns:28px minmax(0,1fr) 72px}.process-summary .bar{display:none}.process-details{padding-left:6px}#apps-search{width:100%}}*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border:2px solid transparent;background-clip:padding-box;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
+
 </style>
 </head>
 <body>
@@ -305,7 +308,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
         <div class="banner good" id="health" hidden><div class="ic" id="health-ic">✓</div><div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div></div>
         <div class="grid g4" id="tiles"></div>
         <div class="grid g21 mt">
-          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div class="rows" id="apps"></div></div></section>
+          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><button type="button" id="apps-more" aria-pressed="false">Show all apps</button><input id="apps-search" type="search" aria-label="Find an app or process" placeholder="Find app, filename or path" hidden></div><p class="muted" id="apps-note" style="margin-bottom:10px"></p><div class="rows process-list" id="apps"></div><button type="button" id="apps-page-more" style="margin-top:12px" hidden>Show 40 more groups</button></div></section>
           <section class="card"><div class="ch"><h2>Quick controls</h2><span class="sub">Changes apply instantly</span></div><div class="cb">
             <div class="muted" style="margin-bottom:6px">Power plan</div><div class="seg" id="qc-plan" style="margin-bottom:16px"></div>
             <div id="qc-disp"></div></div></section>
@@ -548,20 +551,57 @@ function renderOverview(){
   const net = snap.network || {}; $("ov-net").innerHTML = `<div class="big num">${net.primary_ping_ms == null ? "–" : n0(net.primary_ping_ms)}<small>ms ping</small></div><div class="muted">${net.online ? "Online" : "Offline"} · jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}${snap.vpn && snap.vpn.vpn_enabled ? " · VPN on" : ""}</div>`;
   const fans = (hw.cooling || {}).fans || []; $("ov-cool").innerHTML = fans.length ? `<div class="big num">${fans.filter(f => f.spinning).length}<small>of ${fans.length} fans spinning</small></div><div class="muted">fastest ${n0(Math.max(...fans.map(f => f.rpm)))} RPM${s.storage_max_temp != null ? ` · hottest drive ${n0(s.storage_max_temp)}°C` : ""}</div>` : `<div class="muted">Fan speeds need full sensors (LibreHardwareMonitor).</div>`;
 }
-let appsKey = "cpu";
-$("apps-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; appsKey = b.dataset.k; $("apps-seg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderApps(); });
-let apps = null; const COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#6250d6", "#008300", "#e34948"];
-async function loadApps(){ try { apps = await api("/api/processes"); renderApps(); } catch {} }
-const mb = (v) => v >= 1024 ? n1(v / 1024) + " GB" : n0(v) + " MB";
-function renderApps(){ if (!apps) return; const list = (appsKey === "cpu" ? apps.by_cpu : appsKey === "gpu" ? apps.by_gpu : apps.by_mem) || []; const val = (a) => appsKey === "cpu" ? a.cpu : appsKey === "gpu" ? a.gpu : a.mem_mb; const max = Math.max(1, ...list.map(val)), box = $("apps");
-  if (box.dataset.sig !== appsKey + list.map(a => a.name).join()) { box.dataset.sig = appsKey + list.map(a => a.name).join();
-    box.innerHTML = list.map(a => `<div class="row" data-n="${esc(a.name)}"><span class="av" style="background:${COLORS[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % COLORS.length]}">${esc(a.name.slice(0, 2).toUpperCase())}</span>
-    <span class="nm">${esc(a.name)}<small></small></span><span class="bar meter"><i style="width:0"></i></span><span class="vv"></span></div>`).join("") || `<div class="empty">Measuring…</div>`; }
-  list.forEach((a, i) => { const r = box.children[i]; if (!r || !r.querySelector) return;
-    r.querySelector("small").textContent = appsKey === "gpu" ? (a.vram_mb ? `${mb(a.vram_mb)} video memory` : "") : a.count > 1 ? `${a.count} processes` : "";
-    r.querySelector(".bar i").style.width = `${(appsKey === "cpu" || appsKey === "gpu" ? val(a) : val(a) / max * 100)}%`;
-    r.querySelector(".vv").textContent = appsKey === "mem" ? mb(a.mem_mb) : n1(val(a)) + "%"; });
-  if (appsKey === "gpu" && apps.gpu_available === false) { box.dataset.sig = ""; box.innerHTML = `<div class="empty">Windows isn't reporting per-app GPU use on this PC.</div>`; } }
+let appsKey="cpu",appsExpanded=false,appsLimit=40,appsGeneration=0,lastAppsRequest=0,appsError="",appsOrder=[];
+let apps=null;const processDetails=new Map();const COLORS=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#6250d6","#008300","#e34948"];
+const mb=v=>v>=1024?n1(v/1024)+" GB":n0(v)+" MB";
+function processRows(data,key,expanded,query,limit,order=[]){
+ const field=key==="mem"?"mem_mb":key,source=expanded?data.all_apps:(key==="cpu"?data.by_cpu:key==="gpu"?data.by_gpu:data.by_mem),q=query.trim().toLowerCase();
+ const list=(source||[]).filter(a=>!q||[a.display_name,a.name,a.explanation,a.exe].filter(Boolean).join(" ").toLowerCase().includes(q));
+ if(expanded)list.sort((a,b)=>(b[field]??-1)-(a[field]??-1)||String(a.group_id).localeCompare(String(b.group_id)));
+ if(expanded&&order.length){const positions=new Map(order.map((id,i)=>[id,i]));list.sort((a,b)=>(positions.get(a.group_id)??Number.MAX_SAFE_INTEGER)-(positions.get(b.group_id)??Number.MAX_SAFE_INTEGER));}
+ return {rows:list.slice(0,limit),matching:list.length,ids:list.map(a=>a.group_id)};
+}
+function processMetric(a,key){const field=key==="mem"?"mem_mb":key,v=a[field],complete=a[(key==="mem"?"mem":key)+"_complete"]!==false;
+ if(typeof v!=="number"||!Number.isFinite(v)||(!complete&&v===0))return "–";
+ return (complete?"":"≥ ")+(key==="mem"?mb(v):n1(v)+"%");}
+async function loadApps(){const generation=++appsGeneration;lastAppsRequest=Date.now();try{const value=await api("/api/processes"+(appsExpanded?"?all_limit=512":""));if(generation!==appsGeneration)return;apps=value;appsError="";renderApps();}catch{if(generation!==appsGeneration)return;appsError="Refresh failed. Showing the last available sample.";renderApps();}}
+$("apps-seg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;appsKey=b.dataset.k;$("apps-seg").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));appsLimit=40;appsOrder=[];renderApps();});
+$("apps-more").addEventListener("click",()=>{appsExpanded=!appsExpanded;appsLimit=40;appsOrder=[];$("apps-more").textContent=appsExpanded?"Show top apps":"Show all apps";$("apps-more").setAttribute("aria-pressed",appsExpanded);$("apps-search").hidden=!appsExpanded;renderApps();loadApps();});
+$("apps-search").addEventListener("input",()=>{appsLimit=40;appsOrder=[];renderApps();});$("apps-page-more").addEventListener("click",()=>{appsLimit+=40;renderApps();});
+function renderApps(){
+ const box=$("apps");box.classList.toggle("expanded",appsExpanded);
+ if(!apps){$("apps-note").textContent=appsError||"Waiting for a process sample…";return;}
+ if(appsExpanded&&!apps.all_included){$("apps-note").textContent="Loading the full grouped list…";return;}
+ const result=processRows(apps,appsKey,appsExpanded,appsExpanded?$("apps-search").value:"",appsExpanded?appsLimit:8,appsOrder),list=result.rows;
+ if(appsExpanded)appsOrder=result.ids;
+ $("apps-page-more").hidden=!appsExpanded||result.matching<=appsLimit;
+ const age=Math.max(0,(Date.now()/1000-(apps.observed_at||Date.now()/1000)));
+ $("apps-note").textContent=appsError||(age>10?"Sample is "+n0(age)+" seconds old. ":"")+(appsExpanded?`${list.length} shown · ${result.matching} matching groups · ${apps.total_processes} processes${apps.truncated?" · limited to 512 groups":""}. Order is held while reading; change CPU/GPU/Memory sorting to reorder. Select a group for details.`:appsKey==="mem"?"Largest process working sets, including idle apps. Shared pages can be counted in multiple processes.":`Confirmed ${appsKey.toUpperCase()} use at or above 0.5%. CPU percentages use total machine capacity. Show all apps for lower activity and pending readings.`);
+ const signature=JSON.stringify([appsKey,appsExpanded,list.map(a=>[a.group_id,a.display_name,a.explanation,a.count])]);
+ if(box.dataset.sig!==signature){
+  const scrollTop=box.scrollTop;
+  const open=new Set([...box.querySelectorAll("details[open]")].map(x=>x.dataset.group)),focus=document.activeElement?.closest?.(".process-group")?.dataset.group;
+  box.dataset.sig=signature;box.innerHTML=list.map(a=>{const id=a.group_id,name=a.display_name||a.name||"Unknown process",explanation=a.explanation||"Role not identified. The executable filename is shown.";
+   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}</span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}<br>${esc(explanation)}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
+  if(focus)[...box.querySelectorAll(".process-group")].find(n=>n.dataset.group===focus)?.querySelector("summary")?.focus({preventScroll:true});
+  box.scrollTop=scrollTop;
+ }
+ const field=appsKey==="mem"?"mem_mb":appsKey,max=Math.max(1,...list.map(a=>a[field]||0));
+ list.forEach((a,i)=>{const row=box.children[i];if(!row?.querySelector)return;row.querySelector(".vv").textContent=processMetric(a,appsKey);row.querySelector(".bar i").style.width=Math.max(0,Math.min(100,appsKey==="mem"?(a[field]||0)/max*100:a[field]||0))+"%";if(row.open)loadProcessDetails(row,false);});
+ if(appsKey==="gpu"&&!apps.gpu_available){box.dataset.sig="";box.innerHTML='<div class="empty">Per-process GPU readings are unavailable. Missing readings are not zero.</div>';}
+}
+async function loadProcessDetails(target,force){
+ const id=target.dataset.group,box=target.querySelector(".process-pids");if(!id||!box)return;
+ let state=processDetails.get(id);if(state?.loading)return;if(state&&!force&&Date.now()-state.at<10000){box.innerHTML=state.html;return;}
+ state={loading:true,at:Date.now(),html:state?.html||"Loading PID details…"};processDetails.set(id,state);box.textContent="Loading PID details…";
+ try{const result=await api("/api/processes/"+encodeURIComponent(id)),group=result.group,children=group.processes||[];
+  const metric=(p,k)=>processMetric({...p,cpu_complete:p.cpu_sample_status==="sampled"},k);
+  state.html=`<p>Snapshot: ${esc(new Date(result.observed_at*1000).toLocaleTimeString())}. CPU uses total machine capacity; memory is working set. ≥ means a known subtotal with incomplete coverage.</p><div class="process-detail-table"><table><thead><tr><th scope="col">PID</th><th scope="col">CPU</th><th scope="col">Memory</th><th scope="col">GPU</th></tr></thead><tbody>${children.map(p=>`<tr><td>${esc(String(p.pid))}</td><td>${esc(metric(p,"cpu"))}</td><td>${esc(metric(p,"mem"))}</td><td>${esc(metric(p,"gpu"))}</td></tr>`).join("")}</tbody></table></div>`;
+ }catch(e){state.html=`<p>${esc(e.message||"PID details are unavailable.")}</p>`;}
+ finally{state.loading=false;state.at=Date.now();const current=[...$("apps").querySelectorAll(".process-group")].find(n=>n.dataset.group===id);if(current?.isConnected)current.querySelector(".process-pids").innerHTML=state.html;else if(target.isConnected)box.innerHTML=state.html;while(processDetails.size>32){const first=processDetails.keys().next().value;if(first===id)break;processDetails.delete(first);}}
+}
+$("apps").addEventListener("toggle",e=>{if(e.target.matches(".process-group")&&e.target.open)loadProcessDetails(e.target,false);},true);
+$("apps").addEventListener("click",e=>{const b=e.target.closest("[data-refresh-process]");if(b)loadProcessDetails(b.closest(".process-group"),true);});
 
 /* ---------- power ---------- */
 let plans = null, disps = null;
@@ -824,7 +864,7 @@ function prepareReport(input, includeIdentifiers=false){
   if(includeIdentifiers)return report;
   const hostname=report.snapshot?.hardware?.device?.hostname;
   delete report.apps;
-  const identifier=/^(?:hostname|computer_?name|serial(?:_?number)?|serial_number_raw|uuid|unique_?id|canonical_exe|exe|(?:.*_)?path|(?:.*_)?ip(?:_address)?|mac(?:_address)?|address|host)$/i;
+  const identifier=/^(?:hostname|computer_?name|serial(?:_?number)?|serial_number_raw|uuid|unique_?id|canonical_exe|group_id|exe|(?:.*_)?path|(?:.*_)?ip(?:_address)?|mac(?:_address)?|address|host)$/i;
   const scrub=(value,key="")=>{
     if(identifier.test(key)&&value!=null)return "[redacted]";
     if(typeof value==="string"){
@@ -912,7 +952,7 @@ function onSnap(d){ snap = d; lastMsg = Date.now(); const s = d.hardware.summary
 function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`); ws.onopen = () => { retry = 0; };
   ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
 setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && snap.hardware.level !== "basic"; $("live").innerHTML = `<span class="dot ${fresh ? (full ? "good" : "warning") : "critical"}"></span>${fresh ? (snap ? `Live · ${snap.hardware.sensor_count} sensors` : "Live") : "Reconnecting…"}`; }, 1000);
-setInterval(() => { if (page === "overview" && !document.hidden) loadApps(); }, 2500);
+setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
 go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); checkUpdate(false); connect();
 </script>
 </body>

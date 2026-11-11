@@ -55,6 +55,7 @@ class Pdh:
     def __init__(self, paths: List[str]):
         self.ok = False
         self.counters = {}
+        self.last_status = {}
         if not IS_WIN:
             return
         self.pdh = ctypes.WinDLL("pdh")
@@ -69,24 +70,37 @@ class Pdh:
         self.ok = bool(self.counters)
 
     def collect(self) -> Dict[str, Dict[str, float]]:
+        import math
         out = {}
+        self.last_status = {p: "unavailable" for p in self.counters}
         if not self.ok or self.pdh.PdhCollectQueryData(self.q) != 0:
             return out
         for p, h in self.counters.items():
             size, count = wintypes.DWORD(0), wintypes.DWORD(0)
             r = self.pdh.PdhGetFormattedCounterArrayW(h, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, ctypes.byref(size), ctypes.byref(count), None)
+            if r == 0 and size.value == 0 and count.value == 0:
+                out[p] = {}
+                self.last_status[p] = "complete"
+                continue
             if (r & 0xFFFFFFFF) != PDH_MORE_DATA or size.value == 0:  # status codes arrive as signed ints
+                continue
+            if size.value > 32 * 1024 * 1024 or count.value > 100000 or count.value * ctypes.sizeof(_ITEM) > size.value:
+                self.last_status[p] = "invalid_size"
                 continue
             buf = ctypes.create_string_buffer(size.value)
             if self.pdh.PdhGetFormattedCounterArrayW(h, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, ctypes.byref(size), ctypes.byref(count), buf) != 0:
+                continue
+            if size.value > len(buf) or count.value > 100000 or count.value * ctypes.sizeof(_ITEM) > len(buf):
+                self.last_status[p] = "invalid_size"
                 continue
             items = ctypes.cast(buf, ctypes.POINTER(_ITEM))
             vals = {}
             for i in range(count.value):
                 it = items[i]
-                if it.FmtValue.CStatus in (0, 1):  # valid data
+                if it.FmtValue.CStatus in (0, 1) and math.isfinite(it.FmtValue.doubleValue):  # valid data
                     vals[it.szName] = it.FmtValue.doubleValue
             out[p] = vals
+            self.last_status[p] = "complete" if len(vals) == count.value else "partial"
         return out
 
 
