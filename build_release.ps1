@@ -40,21 +40,25 @@ $t = [IO.File]::ReadAllText($cargo) -replace '(?m)^version = "[^"]+"', ('version
 [IO.File]::WriteAllText($cargo, $t, (New-Object Text.UTF8Encoding($false)))
 
 Write-Host "[2/3] Building ultrasuite-core.exe" -ForegroundColor Cyan
+# Package only the files listed in tools\package_manifest.json, copied into a checked stage with a SHA-256 inventory.
+# PyInstaller reads the stage, never the working folders, so local logs, backups, caches and data cannot ship.
+$Stage = "$R\build\stage"
+$StageTool = "$R\tools\package_stage.py"
+Invoke-Native -Step "package stage" -FilePath $PythonExe -ArgumentList @("-I", $StageTool, "--repo", $R,
+    "--manifest", "$R\tools\package_manifest.json", "--stage", $Stage)
 $cs = "fastapi starlette anyio h11 httpcore httpx pydantic pydantic_core sniffio uvicorn websockets pycaw comtypes idna certifi" -split " " | ForEach-Object { "--collect-submodules"; $_ }
 $coreArgs = @("-m", "PyInstaller", "--noconfirm", "--clean", "--noconsole", "--log-level", "WARN", "--name", "ultrasuite-core",
     "--distpath", "$R\build\dist", "--workpath", "$R\build\work", "--specpath", "$R\build",
-    "--add-data", "$R\code_red_alarm\backend;code_red_alarm\backend",
-    "--add-data", "$R\code_red_alarm\frontend;code_red_alarm\frontend",
-    "--add-data", "$R\pc_sentinel\backend;pc_sentinel\backend",
-    "--add-data", "$R\pc_sentinel\frontend;pc_sentinel\frontend",
-    "--add-data", "$R\insights;insights", "--add-data", "$R\core\feedback.py;core",
-    "--add-data", "$R\core\devtools.py;core", "--add-data", "$R\core\static;core\static", "--add-data", "$R\VERSION;.",
+    "--add-data", "$Stage\payload;.",
     "--collect-all", "_sounddevice_data", "--collect-data", "certifi", "--hidden-import", "sounddevice", "--hidden-import", "psutil") +
     $cs + @("--hidden-import", "xml.etree.ElementTree", "--hidden-import", "importlib.util", "--hidden-import", "tempfile",
     "$R\core\suite_core.py")
 $coreStarted = [DateTime]::UtcNow
 Invoke-Native -Step "PyInstaller core" -FilePath $PythonExe -ArgumentList $coreArgs
 $null = Assert-FreshFile -Path "$R\build\dist\ultrasuite-core\ultrasuite-core.exe" -NotBeforeUtc $coreStarted -What "The background service (ultrasuite-core.exe)"
+# The packaged app folders must hold exactly the staged files, byte for byte (names only are reported on failure).
+Invoke-Native -Step "packaged file check" -FilePath $PythonExe -ArgumentList @("-I", $StageTool, "--stage", $Stage,
+    "--verify-output", "$R\build\dist\ultrasuite-core\_internal")
 
 Write-Host "[3/3] Building the installer" -ForegroundColor Cyan
 Set-Location "$R\ultra_dock"
