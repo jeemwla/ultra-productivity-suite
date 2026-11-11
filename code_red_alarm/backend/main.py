@@ -284,6 +284,7 @@ app = FastAPI(title="Code Red Alarm API", lifespan=lifespan)
 
 
 def fetch_all_alarms() -> List[dict]:
+    now = local_now()
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT * FROM alarms ORDER BY time_hhmm ASC").fetchall()
@@ -294,6 +295,8 @@ def fetch_all_alarms() -> List[dict]:
             item["recurring"] = bool(item["recurring"])
             item["enabled"] = bool(item["enabled"])
             item["code_red"] = bool(item["code_red"])
+            upcoming = next_ring(item, now)
+            item["next_ring_local"] = upcoming.isoformat() if upcoming else None
             result.append(item)
         return result
 

@@ -387,14 +387,26 @@ let alarms = [], editingId = null;
 /* Alarms ring by the engine's clock. engineSkew = engine time minus this device's time, in ms. */
 let engineSkew = 0;
 const engineNow = () => new Date(Date.now() + engineSkew);
-const dateKey = (d) => d.toLocaleDateString("en-CA");
+const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 function nextRing(a, now = engineNow()){
   if (!a.enabled) return null;
+  // Use the engine's occurrence decision. The value is expressed in its local
+  // wall clock, matching engineNow() and the clock shown at the top of the page.
+  if (Object.prototype.hasOwnProperty.call(a, "next_ring_local")) {
+    const at = a.next_ring_local && new Date(a.next_ring_local);
+    return at && Number.isFinite(+at) && at > now ? at : null;
+  }
+  // Compatibility with an older engine during an update.
   const [h,m] = a.time_hhmm.split(":").map(Number);
+  if (a.target_date) {
+    const at = new Date(`${a.target_date}T${a.time_hhmm}:00`);
+    return at > now && dateKey(at) !== a.last_triggered_date ? at : null;
+  }
   for (let i = 0; i < 8; i++) {
     const d = new Date(now); d.setDate(now.getDate()+i); d.setHours(h,m,0,0);
     if (d <= now) continue;
-    const ok = a.target_date ? dateKey(d) === a.target_date : (a.weekdays||[]).includes(DAYS[(d.getDay()+6)%7]);
+    if (dateKey(d) === a.last_triggered_date) continue;
+    const ok = !(a.weekdays||[]).length || a.weekdays.includes(DAYS[(d.getDay()+6)%7]);
     if (ok) return d;
   }
   return null;
@@ -658,7 +670,7 @@ function connect(){
   ws.onerror = () => ws.close();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadAudio(); if (ws && ws.readyState > 1) connect(); } });
-setInterval(() => { const n = nextAlarmText(); $("next").hidden = !n; $("next").textContent = n; }, 30000);
+setInterval(() => { if (!document.hidden) loadAlarms(); }, 30000);
 setInterval(loadAudio, 30000);
 syncDate(); loadAlarms(); loadAudio(); connect();
 </script>

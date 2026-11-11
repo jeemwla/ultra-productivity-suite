@@ -39,17 +39,29 @@ def next_ring(alarm: dict, now: datetime.datetime):
         return None
     try:
         hh, mm = (int(x) for x in str(alarm["time_hhmm"]).split(":"))
+        alarm_time = datetime.time(hh, mm)
     except (KeyError, ValueError):
         return None
     weekdays = alarm.get("weekdays") or []
+    target = alarm.get("target_date")
+    if target:
+        try:
+            day = datetime.date.fromisoformat(target)
+        except (TypeError, ValueError):
+            return None
+        at = datetime.datetime.combine(day, alarm_time)
+        if weekdays and WEEKDAYS[day.weekday()] not in weekdays:
+            return None
+        if at > now and alarm.get("last_triggered_date") != day.isoformat():
+            return at
+        return None
     for i in range(8):
-        day = now.date() + datetime.timedelta(days=i)
-        at = datetime.datetime.combine(day, datetime.time(hh, mm))
+        try:
+            day = now.date() + datetime.timedelta(days=i)
+        except OverflowError:
+            return None
+        at = datetime.datetime.combine(day, alarm_time)
         if at <= now or alarm.get("last_triggered_date") == day.isoformat():
-            continue
-        if alarm.get("target_date"):
-            if alarm["target_date"] == day.isoformat():
-                return at
             continue
         if not weekdays or WEEKDAYS[day.weekday()] in weekdays:
             return at

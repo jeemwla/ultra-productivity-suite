@@ -135,6 +135,20 @@ class AlarmSchedule(unittest.TestCase):
         if "TZ" not in os.environ:
             self.assertLess(gap, 5)
 
+    def test_next_one_time_has_no_eight_day_horizon(self):
+        base = {"enabled": True, "time_hhmm": "07:15", "weekdays": []}
+        now = self.dt(2026, 11, 11, 6)
+        for target in ("2026-11-20", "2027-01-01", "2028-02-29", "2099-12-31"):
+            with self.subTest(target=target):
+                alarm = dict(base, target_date=target)
+                self.assertEqual(self.m.next_ring(alarm, now), self.dt.fromisoformat(target + "T07:15:00"))
+                self.assertIsNone(self.m.next_ring(dict(alarm, last_triggered_date=target), now))
+        for bad in ("2027-02-29", "bad"):
+            self.assertIsNone(self.m.next_ring(dict(base, target_date=bad), now))
+        for bad in ("25:00", "12:60", "bad"):
+            self.assertIsNone(self.m.next_ring(dict(base, time_hhmm=bad), now))
+        self.assertIsNone(self.m.next_ring(dict(base, target_date=None), self.dt.max))
+
 
 class AlarmApi(unittest.TestCase):
     """Create, edit and validate alarms through the real routes, on a throwaway database."""
@@ -218,6 +232,19 @@ class AlarmApi(unittest.TestCase):
         for origin in ("http://127.0.0.1:8081", "http://localhost:8081", "http://tauri.localhost"):
             with self.c.websocket_connect("ws://127.0.0.1:8081/ws", headers={"Origin": origin}) as ws:
                 self.assertIsInstance(ws.receive_json(), dict)
+
+    def test_far_future_occurrence_shared_by_list_and_wake_api(self):
+        from unittest.mock import patch
+        import datetime
+        with patch.object(self.m, "local_now", return_value=datetime.datetime(2026, 11, 11, 6)):
+            response = self.c.post("/api/alarms", json=self.body(weekdays=[], recurring=False, target_date="2028-02-29"))
+            self.assertEqual(response.status_code, 200)
+            aid = response.json()["id"]
+            row = next(a for a in response.json()["alarms"] if a["id"] == aid)
+            self.assertEqual(row["next_ring_local"], "2028-02-29T07:15:00")
+            # Ignore other test alarms when checking the wake API's selected occurrence.
+            with patch.object(self.m, "fetch_all_alarms", return_value=[row]):
+                self.assertGreater(self.c.get("/api/next").json()["in_sec"], 8 * 86400)
 
 
 class InsightsChart(unittest.TestCase):
