@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
+<title>PC Sentinel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='3' width='26' height='26' rx='7' fill='%232a78d6'/><path d='M8 18h4l2-6 4 10 2-4h4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#fcfcfb; --surface-2:#f0f1f3; --line:#e4e6ea; --line-strong:#d2d6dc;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7d7c78;
+  --series:#2a78d6; --series-track:#dbe8f9; --grid:#e9eaec;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --good-soft:#e5f5e5; --warning-soft:#fff4dc; --critical-soft:#fbe9e9;
+  --accent:#2a78d6; --accent-soft:#e3eefb;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  --font:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+  --font-display:"Segoe UI Variable Display","Segoe UI",-apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#111110; --surface:#1a1a19; --surface-2:#222220; --line:#2a2a28; --line-strong:#383835;
+  --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+  --series:#3987e5; --series-track:#1d3557; --grid:#2a2a28;
+  --good-soft:#15291a; --warning-soft:#33280f; --critical-soft:#371919;
+  --accent:#3987e5; --accent-soft:#1b2c45; --shadow:0 1px 2px rgba(0,0,0,.4);
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--font);min-height:100vh;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1520px;margin:0 auto;padding:28px 32px 48px}
+
+header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--series);display:grid;place-items:center}
+.brand h1{font:600 19px/1.2 var(--font-display);letter-spacing:-.01em}
+.brand p{font-size:13px;color:var(--ink-3)}
+.right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.dot.good{background:var(--good)} .dot.critical{background:var(--critical)} .dot.warning{background:var(--warning)}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;height:30px;padding:0 14px;border-radius:7px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.card-h h2{font:600 15px/1.3 var(--font-display)}
+.card-h .sub{font-size:12.5px;color:var(--ink-3)}
+.card-b{padding:14px 18px 18px}
+
+.health{display:flex;align-items:center;gap:14px;padding:14px 18px;margin-bottom:16px}
+.health .icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:700;color:#fff}
+.health.good .icon{background:var(--good)} .health.warning .icon{background:var(--warning);color:#000} .health.critical .icon{background:var(--critical)}
+.health .t{font-weight:600}
+.health .s{font-size:13px;color:var(--ink-2)}
+.offline{padding:16px 18px;margin-bottom:16px;border-color:color-mix(in srgb,var(--warning) 60%,var(--line));background:var(--warning-soft)}
+.offline b{display:block;margin-bottom:2px}
+.offline code{font:12px ui-monospace,Consolas,monospace}
+
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.tile{padding:16px 18px}
+.tile .label{font-size:13px;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
+.tile .label span:last-child{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.tile .value{font:600 34px/1.1 var(--font-display);letter-spacing:-.02em;margin-top:8px;font-variant-numeric:tabular-nums}
+.tile .value small{font-size:15px;color:var(--ink-3);font-weight:600;margin-left:3px}
+.tile .meta{font-size:12.5px;color:var(--ink-3);margin-top:4px;font-variant-numeric:tabular-nums;min-height:19px}
+.meter{height:6px;border-radius:999px;background:var(--series-track);margin-top:12px;overflow:hidden}
+.meter i{display:block;height:100%;border-radius:999px;background:var(--series);transition:width .5s ease}
+.meter.warning i{background:var(--warning)} .meter.critical i{background:var(--critical)}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;margin-top:10px}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.status.good{color:var(--good)} .status.warning{color:#b37c00} .status.critical{color:var(--critical)}
+@media (prefers-color-scheme: dark){.status.warning{color:var(--warning)}}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
+.stack{display:grid;gap:16px}
+
+.pings{display:grid;gap:10px}
+.ping{display:grid;grid-template-columns:minmax(0,1fr) 140px 80px;gap:14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.ping .n{font-weight:600;font-size:13.5px}
+.ping .h{font-size:12px;color:var(--ink-3)}
+.ping .v{text-align:right;font:600 18px/1 var(--font-display);font-variant-numeric:tabular-nums}
+.ping .v small{font-size:12px;color:var(--ink-3);font-weight:600}
+.spark{width:140px;height:34px;display:block;overflow:visible}
+.spark-wrap{position:relative}
+.tip{position:absolute;bottom:100%;transform:translate(-50%,-6px);background:var(--ink);color:var(--surface);font-size:11.5px;padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
+.netstats{display:flex;gap:18px;margin-top:12px;font-size:12.5px;color:var(--ink-3)}
+.netstats b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13.5px;transition:background .12s;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.block{width:100%}
+.speed{display:flex;align-items:baseline;gap:6px;margin:4px 0 14px}
+.speed .num{font:600 40px/1 var(--font-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.speed .u{color:var(--ink-3);font-weight:600}
+.muted{font-size:12.5px;color:var(--ink-3)}
+.vpn-state{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
+.pill.on{background:var(--good-soft);color:var(--good)}
+.pill.err{background:var(--critical-soft);color:var(--critical)}
+.msg{font-size:12.5px;color:var(--ink-2);margin-bottom:12px;overflow-wrap:anywhere;min-height:19px}
+
+/* Detailed */
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.search{flex:1;min-width:200px;height:38px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);padding:0 12px}
+.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.f{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.f[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+details.grp{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface)}
+details.grp summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-right:8px}
+details.grp summary .c{font-size:12.5px;color:var(--ink-3);font-weight:500}
+details.grp summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);margin-left:6px;transition:transform .15s}
+details.grp[open] summary::after{transform:rotate(-135deg)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;font-weight:600;color:var(--ink-3);padding:6px 14px;border-top:1px solid var(--line)}
+td{padding:7px 14px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+td.num,th.num{text-align:right;white-space:nowrap}
+tr.hid td{opacity:.4}
+td.cb{width:36px}
+td.type{color:var(--ink-3);white-space:nowrap}
+.empty{padding:28px;text-align:center;color:var(--ink-3)}
+
+@media (max-width:1200px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
+@media (max-width:640px){
+  .wrap{padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
+  .tiles{grid-template-columns:1fr 1fr;gap:10px}
+  .tile{padding:14px}
+  .tile .value{font-size:28px}
+  .ping{grid-template-columns:minmax(0,1fr) 70px}
+  .ping .spark-wrap{display:none}
+  .btn{min-height:48px} .seg button{height:40px}
+  td.type{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2-6 4 12 2-6h6"/></svg></div>
+      <div><h1>PC Sentinel</h1><p id="machine">Hardware health and network, live</p></div>
+    </div>
+    <div class="right">
+      <span class="chip" id="live" role="status"><span class="dot"></span>Connecting…</span>
+      <div class="seg" role="group" aria-label="View">
+        <button type="button" id="m-simple" aria-pressed="true">Simple</button>
+        <button type="button" id="m-detail" aria-pressed="false">Detailed</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="card offline" id="offline" hidden>
+    <b>Hardware sensors are offline</b>
+    <span id="offline-msg">Start LibreHardwareMonitor and turn on Options &gt; Remote Web Server (port 8085). Running <code>start_all_windows.ps1</code> does this for you.</span>
+  </div>
+
+  <section id="simple">
+    <div class="card health good" id="health" hidden>
+      <div class="icon" id="health-icon" aria-hidden="true">✓</div>
+      <div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section id="detail" hidden>
+    <div class="card"><div class="card-b">
+      <div class="tools">
+        <input class="search" id="q" type="search" placeholder="Search sensors (e.g. fan, core, hot spot)" aria-label="Search sensors" />
+        <div class="filters" id="filters" role="group" aria-label="Sensor types"></div>
+        <button type="button" class="btn" id="show-all">Show hidden</button>
+      </div>
+      <div id="groups"></div>
+    </div></div>
+  </section>
+
+  <div class="grid2" style="margin-top:16px">
+    <section class="card">
+      <div class="card-h"><h2>Connection</h2><span class="sub" id="net-sub">Checks every 2 s, uses almost no data</span></div>
+      <div class="card-b">
+        <div class="pings" id="pings"></div>
+        <div class="netstats" id="netstats"></div>
+      </div>
+    </section>
+    <div class="stack">
+      <section class="card">
+        <div class="card-h"><h2>Speed test</h2><span class="sub">Runs only when you press it</span></div>
+        <div class="card-b">
+          <div class="speed"><span class="num" id="speed">–</span><span class="u">Mbps down</span></div>
+          <div class="muted" id="speed-meta" style="margin:-8px 0 14px">About 8 seconds, up to 25 MB</div>
+          <button type="button" class="btn primary block" id="speed-btn">Run speed test</button>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div>
+        <div class="card-b">
+          <div class="vpn-state"><span class="muted">Router VPN via your OneScript</span><span class="pill" id="vpn-pill">Unknown</span></div>
+          <div class="msg" id="vpn-msg"></div>
+          <button type="button" class="btn block" id="vpn-btn">Toggle VPN</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = { get(k,d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
+const n1 = (v) => v == null ? "–" : (Math.round(v*10)/10).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1});
+let snap = null, mode = store.get("mode","simple");
+let hidden = new Set(store.get("hiddenSensors", []));
+let types = new Set(store.get("types", ["Temperature","Load","Fan","Power","Clock","Voltage"]));
+const ALL_TYPES = ["Temperature","Load","Fan","Power","Clock","Voltage","Data","Throughput","Control","Level","Other"];
+const KIND_LABEL = {cpu:"CPU",gpu:"GPU",memory:"Memory",storage:"Drive",motherboard:"Motherboard",network:"Network",battery:"Battery",psu:"Power supply",other:"Other"};
+
+function setMode(m){
+  mode = m; store.set("mode", m);
+  $("m-simple").setAttribute("aria-pressed", m === "simple"); $("m-detail").setAttribute("aria-pressed", m === "detail");
+  $("simple").hidden = m !== "simple"; $("detail").hidden = m !== "detail";
+  render();
+}
+$("m-simple").onclick = () => setMode("simple"); $("m-detail").onclick = () => setMode("detail");
+
+function level(v, warn, crit){ return v == null ? "good" : v >= crit ? "critical" : v >= warn ? "warning" : "good"; }
+const STATUS_TEXT = {good:"Normal", warning:"Warm", critical:"Hot"};
+function tile({label, sub, value, unit, meta, pct, lvl, statusText}){
+  return `<div class="card tile">
+    <div class="label"><span>${esc(label)}</span><span title="${esc(sub||"")}">${esc(sub||"")}</span></div>
+    <div class="value">${value}<small>${esc(unit||"")}</small></div>
+    <div class="meta">${meta || ""}</div>
+    ${pct == null ? "" : `<div class="meter ${lvl}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}" aria-label="${esc(label)}"><i style="width:${Math.max(2,Math.min(100,pct))}%"></i></div>`}
+    ${lvl ? `<div class="status ${lvl}">${esc(statusText || STATUS_TEXT[lvl])}</div>` : ""}
+  </div>`;
+}
+
+function renderSimple(){
+  const hw = snap.hardware, s = hw.summary || {};
+  if (!hw.live) { $("tiles").innerHTML = ""; $("health").hidden = true; return; }
+  const h = s.health || {score:100,label:"All good",notes:[]};
+  const hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
+  $("health").hidden = false; $("health").className = `card health ${hl}`;
+  $("health-icon").textContent = hl === "good" ? "✓" : "!";
+  $("health-t").textContent = h.label; $("health-s").textContent = h.notes.join(" · ");
+  const cpuL = level(s.cpu_temp, 80, 90), gpuT = s.gpu_hotspot ?? s.gpu_temp, gpuL = level(gpuT, 85, 100), ramL = level(s.ram_load, 80, 92);
+  const fans = s.fans || [];
+  $("tiles").innerHTML = [
+    tile({label:"CPU", sub:s.cpu_name, value:n0(s.cpu_temp), unit:"°C", lvl:cpuL, pct:s.cpu_load,
+          meta:`${n0(s.cpu_load)}% busy${s.cpu_power != null ? ` · ${n0(s.cpu_power)} W` : ""}`}),
+    tile({label:"Graphics", sub:s.gpu_name, value:n0(s.gpu_temp), unit:"°C", lvl:s.gpu_name ? gpuL : null, pct:s.gpu_load,
+          meta:s.gpu_name ? `${n0(s.gpu_load)}% busy${s.gpu_hotspot != null ? ` · hot spot ${n0(s.gpu_hotspot)}°C` : ""}` : "No GPU sensors"}),
+    tile({label:"Memory", sub:s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : "", value:n0(s.ram_load), unit:"%", pct:s.ram_load, lvl:ramL,
+          statusText:{good:"Plenty free",warning:"Getting full",critical:"Almost full"}[ramL],
+          meta:s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : ""}),
+    tile({label:"Cooling", sub:`${fans.length} fan${fans.length === 1 ? "" : "s"}`, value:n0(s.fan_max_rpm), unit:"RPM",
+          meta:fans.length ? `Fastest fan${s.storage_max_temp != null ? ` · drives ${n0(s.storage_max_temp)}°C` : ""}` : "No fan sensors reported"}),
+  ].join("");
+}
+
+function renderDetail(){
+  const hw = snap.hardware;
+  $("filters").innerHTML = ALL_TYPES.filter(t => (hw.groups||[]).some(g => g.sensors.some(x => x.type === t)))
+    .map(t => `<button type="button" class="f" data-t="${t}" aria-pressed="${types.has(t)}">${t === "Temperature" ? "Temps" : t}</button>`).join("");
+  if (!hw.live) { $("groups").innerHTML = `<div class="empty">No sensor data. LibreHardwareMonitor is offline.</div>`; return; }
+  const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1";
+  const open = new Set(store.get("openGroups", ["cpu","gpu"]));
+  const html = hw.groups.map(g => {
+    const rows = g.sensors.filter(x => types.has(x.type) && (!q || (g.name + " " + x.name + " " + x.type).toLowerCase().includes(q)) && (showAll || !hidden.has(x.id)));
+    if (!rows.length) return "";
+    const key = g.kind + ":" + g.name;
+    return `<details class="grp" data-key="${esc(key)}" ${open.has(key) || open.has(g.kind) || q ? "open" : ""}>
+      <summary><span><span class="k">${KIND_LABEL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary>
+      <table><thead><tr><th></th><th>Sensor</th><th class="type">Type</th><th class="num">Now</th><th class="num">Min</th><th class="num">Max</th></tr></thead><tbody>
+      ${rows.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}">
+        <td class="cb"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td>
+        <td>${esc(x.name)}</td><td class="type">${esc(x.type)}</td>
+        <td class="num"><b>${n1(x.value)}</b> ${esc(x.unit)}</td><td class="num">${n1(x.min)}</td><td class="num">${n1(x.max)}</td></tr>`).join("")}
+      </tbody></table></details>`;
+  }).join("");
+  $("groups").innerHTML = html || `<div class="empty">No sensors match.</div>`;
+}
+$("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; types.has(b.dataset.t) ? types.delete(b.dataset.t) : types.add(b.dataset.t); store.set("types", [...types]); renderDetail(); });
+$("groups").addEventListener("change", (e) => { const id = e.target.dataset.id; if (!id) return; e.target.checked ? hidden.delete(id) : hidden.add(id); store.set("hiddenSensors", [...hidden]); renderDetail(); });
+$("groups").addEventListener("toggle", (e) => { const d = e.target; if (!d.dataset || !d.dataset.key) return; const o = new Set(store.get("openGroups", ["cpu","gpu"])); d.open ? o.add(d.dataset.key) : (o.delete(d.dataset.key), o.delete(d.dataset.key.split(":")[0])); store.set("openGroups", [...o]); }, true);
+$("q").addEventListener("input", () => renderDetail());
+$("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; renderDetail(); };
+
+/* Sparkline: single series, 2px line, endpoint marker, hover readout */
+function sparkSVG(hist){
+  const W = 140, H = 34, vals = hist.map(v => v == null ? null : v), ok = vals.filter(v => v != null);
+  if (ok.length < 2) return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" y1="${H-2}" x2="${W}" y2="${H-2}" stroke="var(--grid)" stroke-width="1"/></svg>`;
+  const max = Math.max(...ok) * 1.15, min = 0, n = vals.length;
+  const x = (i) => (i / Math.max(1, n - 1)) * (W - 6) + 3, y = (v) => H - 3 - ((v - min) / (max - min || 1)) * (H - 8);
+  let d = "", pen = false;
+  vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`; pen = true; });
+  const li = vals.length - 1 - [...vals].reverse().findIndex(v => v != null), lv = vals[li];
+  const drops = vals.map((v, i) => v == null ? `<line x1="${x(i)}" y1="4" x2="${x(i)}" y2="${H-2}" stroke="var(--critical)" stroke-width="2" stroke-linecap="round"/>` : "").join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" data-vals='${JSON.stringify(vals)}' role="img" aria-label="Recent latency">
+    <line x1="0" y1="${H-2}" x2="${W}" y2="${H-2}" stroke="var(--grid)" stroke-width="1"/>${drops}
+    <path d="${d}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(li)}" cy="${y(lv)}" r="4" fill="var(--series)" stroke="var(--surface)" stroke-width="2"/></svg>`;
+}
+$("pings").addEventListener("mousemove", (e) => {
+  const svg = e.target.closest("svg.spark"); document.querySelectorAll(".tip").forEach(t => t.remove());
+  if (!svg || !svg.dataset.vals) return;
+  const vals = JSON.parse(svg.dataset.vals), r = svg.getBoundingClientRect(), i = Math.round(((e.clientX - r.left) / r.width) * (vals.length - 1));
+  const v = vals[Math.max(0, Math.min(vals.length - 1, i))], ago = (vals.length - 1 - i) * 2;
+  const tip = document.createElement("div"); tip.className = "tip";
+  tip.textContent = `${v == null ? "no reply" : n1(v) + " ms"} · ${ago ? ago + " s ago" : "now"}`;
+  tip.style.left = `${e.clientX - r.left}px`; svg.parentElement.appendChild(tip);
+});
+$("pings").addEventListener("mouseleave", () => document.querySelectorAll(".tip").forEach(t => t.remove()));
+
+function renderNet(){
+  const net = snap.network || {};
+  const t = net.targets || [];
+  $("pings").innerHTML = t.length ? t.map(p => {
+    const lv = p.latency_ms == null ? "critical" : p.latency_ms > 120 ? "warning" : "good";
+    return `<div class="ping">
+      <div><div class="n">${esc(p.name)}</div><div class="h">${esc(p.host)} · <span class="status ${lv}" style="margin:0">${p.latency_ms == null ? "No reply" : lv === "warning" ? "Slow" : "OK"}</span>${p.loss_pct ? ` · ${p.loss_pct}% lost` : ""}</div></div>
+      <div class="spark-wrap">${sparkSVG(p.history || [])}</div>
+      <div class="v">${p.latency_ms == null ? "–" : n0(p.latency_ms)}<small> ms</small></div></div>`;
+  }).join("") : `<div class="empty">Measuring…</div>`;
+  const avg = t[0] && t[0].avg_ms;
+  $("netstats").innerHTML = `<span>Jitter <b>${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}</b></span><span>Average <b>${avg == null ? "–" : n0(avg) + " ms"}</b></span><span>Internet <b>${net.online ? "Online" : "Offline"}</b></span>`;
+}
+function renderVPN(){
+  const v = snap.vpn || {};
+  $("vpn-router").textContent = v.router_ip ? `Router ${v.router_ip}` : "";
+  const pill = $("vpn-pill");
+  pill.className = "pill" + (v.last_ok === false ? " err" : v.vpn_enabled ? " on" : "");
+  pill.textContent = v.last_ok === false ? "Failed" : v.last_ok == null ? "Not used yet" : v.vpn_enabled ? "On" : "Off";
+  $("vpn-msg").textContent = v.message || "";
+}
+
+function render(){
+  if (!snap) return;
+  const hw = snap.hardware;
+  $("offline").hidden = !!hw.live || hw.source === "starting";
+  if (hw.help) $("offline-msg").textContent = hw.help;
+  const s = hw.summary || {};
+  $("machine").textContent = s.cpu_name ? [s.cpu_name, s.gpu_name].filter(Boolean).join(" · ") : "Hardware health and network, live";
+  if (mode === "simple") renderSimple(); else if (!document.activeElement || !$("groups").contains(document.activeElement)) renderDetail();
+  renderNet(); renderVPN();
+}
+
+$("speed-btn").onclick = async () => {
+  const b = $("speed-btn"); b.disabled = true; b.textContent = "Testing…"; $("speed").textContent = "…";
+  try {
+    const r = await fetch("/api/speedtest", {method:"POST"}).then(r => r.json());
+    if (r.ok) { $("speed").textContent = n0(r.download_mbps); $("speed-meta").textContent = `${n1(r.megabytes)} MB in ${n1(r.seconds)} s from ${r.server} · ${new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}`; }
+    else { $("speed").textContent = "–"; $("speed-meta").textContent = r.error || "Speed test failed"; }
+  } catch { $("speed").textContent = "–"; $("speed-meta").textContent = "Couldn't reach the Sentinel server"; }
+  b.disabled = false; b.textContent = "Run again";
+};
+$("vpn-btn").onclick = async () => {
+  const b = $("vpn-btn"); b.disabled = true; b.textContent = "Working…";
+  try { snap.vpn = await fetch("/api/vpn/toggle", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}).then(r => r.json()); renderVPN(); }
+  catch { $("vpn-msg").textContent = "Couldn't reach the Sentinel server"; }
+  b.disabled = false; b.textContent = "Toggle VPN";
+};
+
+let retry = 0, lastMsg = 0;
+function connect(){
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`);
+  ws.onopen = () => { retry = 0; };
+  ws.onmessage = (ev) => { try { snap = JSON.parse(ev.data); lastMsg = Date.now(); render(); } catch {} };
+  ws.onclose = () => { setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); };
+  ws.onerror = () => ws.close();
+}
+setInterval(() => {
+  const fresh = Date.now() - lastMsg < 6000, live = snap && snap.hardware && snap.hardware.live;
+  $("live").innerHTML = `<span class="dot ${fresh ? (live ? "good" : "warning") : "critical"}"></span>${fresh ? (live ? `Live · ${snap.hardware.sensor_count} sensors` : "Live · sensors offline") : "Reconnecting…"}`;
+}, 1000);
+setMode(mode); connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Private, per-PC
+.env
+**/device_config.json
+**/data/
+logs/
+*.log
+*.orig
+_progress/
+
+# Generated
+**/code_red_siren.wav
+**/__pycache__/
+*.pyc
+02_translucent_taskbar_dock/src-tauri/target/
+02_translucent_taskbar_dock/src-tauri/gen/
+node_modules/
+03_deck_deck_config/*_backup_*/
+
+# Vendored runtime for the deck plugin (deck Studio has no npm)
+!03_deck_deck_config/com.ultrasuite.knobs.deckPlugin/node_modules/

@@ -1,0 +1,64 @@
+# Ultra Productivity Suite stack (fixed during setup 2026-11-10)
+# - Tailscale sidecar moved behind a profile: host Tailscale + 'tailscale serve' is used instead.
+#   Start it only with:  docker compose --profile tailscale-sidecar up -d   (needs TS_AUTHKEY)
+# - TZ passed to containers so alarms fire at local time, not UTC.
+# - BRIDGE_TOKEN authenticates calls to the host bridge on :8091.
+
+services:
+  tailscale-gateway:
+    profiles: ["tailscale-sidecar"]
+    image: tailscale/tailscale:latest
+    container_name: ultra_suite_tailscale
+    hostname: ultra-desktop-suite
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+    restart: unless-stopped
+
+  pebble-alarm-app:
+    build:
+      context: ./01_pebble_code_red_alarm
+      dockerfile: Dockerfile
+    container_name: pebble_code_red_alarm
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      - TZ=${TZ:-America/Los_Angeles}
+      - ALARM_PORT=8081
+      - HOST_AUDIO_BRIDGE_URL=http://host.docker.internal:8091
+      - BRIDGE_TOKEN=${BRIDGE_TOKEN:-}
+      - PEBBLE_DEVICE_MATCH=${PEBBLE_DEVICE_MATCH:-Pebble}
+      - DEFAULT_RING_DURATION_SEC=${DEFAULT_RING_DURATION_SEC:-600}
+    volumes:
+      - ./01_pebble_code_red_alarm/data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  hardware-net-sentinel:
+    build:
+      context: ./04_hardware_net_sentinel
+      dockerfile: Dockerfile
+    container_name: hardware_net_sentinel
+    ports:
+      - "127.0.0.1:8084:8084"
+    environment:
+      - TZ=${TZ:-America/Los_Angeles}
+      - SENTINEL_PORT=8084
+      - LHM_REMOTE_URL=${LHM_REMOTE_URL:-http://host.docker.internal:8085/data.json}
+      - GLINET_ROUTER_IP=${GLINET_ROUTER_IP:-192.168.8.1}
+      - GLINET_VPN_TYPE=${GLINET_VPN_TYPE:-wireguard}
+      - ONESCRIPT_WEBHOOK_URL=http://host.docker.internal:8091/run-onescript
+      - ONESCRIPT_PATH=${ONESCRIPT_PATH:-}
+      - BRIDGE_TOKEN=${BRIDGE_TOKEN:-}
+    volumes:
+      - ./04_hardware_net_sentinel/data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  tailscale_state:
