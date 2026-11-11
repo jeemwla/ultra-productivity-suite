@@ -443,3 +443,12 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         if ws in ws_clients:
             ws_clients.remove(ws)
+
+# Send feedback (forwards to the owner's collector)
+try:
+    import sys as _s, os as _o
+    _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), "..", "..", "core"))
+    from feedback import add_feedback_route as _afr
+    _afr(app, "alarm")
+except Exception as _exc:  # feedback is optional
+    print(f"[feedback] disabled: {_exc}")

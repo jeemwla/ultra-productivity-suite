@@ -102,13 +102,9 @@ $dockDir = Join-Path $env:LOCALAPPDATA "UltraSuite"; New-Item -ItemType Director
 $dockDst = Join-Path $dockDir "ultra-dock.exe"
 $local = "$Root\02_translucent_taskbar_dock\src-tauri\target\release\ultra-dock.exe"
 Get-Process ultra-dock -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-if (Test-Path $local) { Copy-Item $local $dockDst -Force; Ok "Installed from local build" }
-elseif ($Repo -notlike "OWNER/*") {
-    try {
-        Invoke-WebRequest -UseBasicParsing "https://github.com/$Repo/releases/latest/download/ultra-dock.exe" -OutFile $dockDst
-        Ok "Downloaded from github.com/$Repo"
-    } catch { Warn "Couldn't download the dock ($($_.Exception.Message)). The rest of the suite still works." }
-} else { Warn "No dock build found; skipping." }
+$suite = "$Root\02_translucent_taskbar_dock\src-tauri\target\release\Ultra Suite.exe"
+if (Test-Path $suite) { Ok "Local build found. For the full desktop app, run the installer from build_release.ps1." }
+else { Warn "For the taskbar app and app windows, install Ultra Suite from https://github.com/$Repo/releases/latest" }
 if (Test-Path "$env:APPDATA\deck\deckDeck") {
     python -I "$Root\03_deck_deck_config\generate_deck_profile.py" --restart
     Ok "deck deck: pick the 'Ultra Suite' profile in deck Studio"

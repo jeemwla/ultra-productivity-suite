@@ -111,3 +111,12 @@ async def telemetry_ws(ws: WebSocket):
             await asyncio.sleep(0.25)
     except (WebSocketDisconnect, RuntimeError):
         pass
+
+# Send feedback (forwards to the owner's collector)
+try:
+    import sys as _s, os as _o
+    _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), "..", "..", "core"))
+    from feedback import add_feedback_route as _afr
+    _afr(app, "sentinel")
+except Exception as _exc:  # feedback is optional
+    print(f"[feedback] disabled: {_exc}")

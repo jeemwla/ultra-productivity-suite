@@ -3,48 +3,54 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ultra Suite</title>
+<title>Ultra Dock</title>
 <style>
+/* Matches the Windows 11 taskbar: 40px buttons, 4px corners, soft hover, small running bar */
 :root{
-  --ink:#f5f6f7; --ink-2:rgba(245,246,247,.7); --ink-3:rgba(245,246,247,.45);
-  --hover:rgba(255,255,255,.075); --press:rgba(255,255,255,.045); --active:rgba(255,255,255,.12); --line:rgba(255,255,255,.14);
-  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
-  --ease:cubic-bezier(.22,1,.36,1);
+  --ink:#ffffff; --ink-2:rgba(255,255,255,.72); --ink-3:rgba(255,255,255,.46);
+  --hover:rgba(255,255,255,.075); --press:rgba(255,255,255,.04); --open:rgba(255,255,255,.1);
+  --bar:rgba(255,255,255,.55); --bar-active:#60cdff; --line:rgba(255,255,255,.12);
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; --ease:cubic-bezier(.2,.9,.25,1);
 }
-@media (prefers-color-scheme: light){:root{ --ink:#111; --ink-2:rgba(0,0,0,.66); --ink-3:rgba(0,0,0,.42);
-  --hover:rgba(0,0,0,.055); --press:rgba(0,0,0,.035); --active:rgba(0,0,0,.08); --line:rgba(0,0,0,.12); }}
+@media (prefers-color-scheme: light){:root{ --ink:#000; --ink-2:rgba(0,0,0,.66); --ink-3:rgba(0,0,0,.42);
+  --hover:rgba(0,0,0,.05); --press:rgba(0,0,0,.03); --open:rgba(0,0,0,.07); --bar:rgba(0,0,0,.42); --bar-active:#005fb8; --line:rgba(0,0,0,.1); }}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:transparent;overflow:hidden}
 body{font:12px/1 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
-button{font:inherit;color:inherit;border:0;background:none;cursor:default}
+button{font:inherit;color:inherit;border:0;background:none;cursor:default;outline:none}
 
-/* ---------- Taskbar strip ---------- */
-.strip{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center;gap:2px;padding:0 2px;white-space:nowrap}
+.strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap}
 .group{display:flex;align-items:center;height:100%}
-.pill{display:flex;align-items:center;gap:7px;height:40px;padding:0 10px 0 8px;border-radius:5px;transition:background .15s}
-.pill:hover{background:var(--hover)} .pill:active{background:var(--press)}
-.pill[aria-expanded=true]{background:var(--active)}
-.pill .sw{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font:700 10px var(--font);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
-.pill .lb{font-size:12.5px;font-weight:600;letter-spacing:.01em}
-.pill .ct{font-size:10.5px;color:var(--ink-3);font-weight:600;font-variant-numeric:tabular-nums}
-.pill .chev{width:8px;height:8px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(-45deg);margin-left:1px;transition:transform .3s var(--ease)}
-.pill[aria-expanded=true] .chev{transform:rotate(135deg)}
-.tray{display:flex;align-items:center;gap:1px;height:100%;width:0;overflow:hidden;transition:width .38s var(--ease),opacity .25s;opacity:0}
-.tray.open{opacity:1}
-.tray .inner{display:flex;align-items:center;gap:1px;padding:0 4px 0 2px;border-left:1px solid transparent}
-.app{width:40px;height:40px;border-radius:5px;display:grid;place-items:center;flex:none;transition:background .15s,transform .2s var(--ease)}
-.app:hover{background:var(--hover)} .app:active{background:var(--press);transform:scale(.94)}
-.app img{width:24px;height:24px;display:block;image-rendering:auto}
-.app .mono{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;font:700 10px var(--font);color:#fff}
-.app.busy{opacity:.5}
-.sep{width:1px;height:20px;background:var(--line);margin:0 3px;flex:none}
-.more{width:32px;height:40px;border-radius:5px;display:grid;place-items:center;color:var(--ink-2)}
-.more:hover{background:var(--hover)}
-.act{display:flex;align-items:center;gap:6px;height:40px;padding:0 10px;border-radius:5px;font-weight:600;font-size:12px}
-.act:hover{background:var(--hover)}
-.act svg{width:16px;height:16px}
-.toast{position:fixed;right:4px;top:50%;transform:translateY(-50%);background:#c62f2f;color:#fff;font-size:11.5px;padding:5px 8px;border-radius:5px;opacity:0;transition:opacity .2s;pointer-events:none}
-.toast.show{opacity:1}
+.grp{position:relative;height:40px;min-width:40px;padding:0 6px;border-radius:4px;display:flex;align-items:center;gap:6px;transition:background .12s}
+.grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
+.grp[aria-expanded=true]{background:var(--open)}
+.stack{position:relative;width:28px;height:24px}
+.stack img,.stack .ph{position:absolute;top:50%;width:20px;height:20px;border-radius:5px;transform:translateY(-50%);box-shadow:0 0 0 1.5px rgba(0,0,0,.25)}
+.stack img:nth-child(1),.stack .ph:nth-child(1){left:0;z-index:3}
+.stack img:nth-child(2),.stack .ph:nth-child(2){left:5px;z-index:2;opacity:.85;transform:translateY(-50%) scale(.9)}
+.stack img:nth-child(3),.stack .ph:nth-child(3){left:10px;z-index:1;opacity:.6;transform:translateY(-50%) scale(.8)}
+.stack.single{width:22px}
+.ph{background:var(--line)}
+.cnt{font-size:11px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:8px}
+.grp .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease),background .2s}
+.grp.has-active .runbar{width:14px;background:var(--bar-active)}
+.tray{display:flex;align-items:center;height:100%;width:0;overflow:hidden;transition:width .32s var(--ease)}
+.tray .inner{display:flex;align-items:center;gap:0;padding:0 2px}
+.win{position:relative;width:40px;height:40px;border-radius:4px;display:grid;place-items:center;flex:none;transition:background .12s,transform .15s var(--ease);opacity:0;transform:translateX(-6px)}
+.tray.open .win{opacity:1;transform:none;transition:background .12s,opacity .25s var(--ease),transform .3s var(--ease)}
+.win:hover{background:var(--hover)} .win:active{background:var(--press);transform:scale(.94)}
+.win img{width:24px;height:24px;display:block}
+.win .ph{width:24px;height:24px;border-radius:6px}
+.win .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease)}
+.win.active .runbar{width:16px;background:var(--bar-active)}
+.more{width:28px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-3);transition:background .12s,color .12s}
+.more:hover{background:var(--hover);color:var(--ink-2)}
+.more svg{width:14px;height:14px;transition:transform .3s var(--ease)}
+.more[aria-expanded=true] svg{transform:rotate(180deg)}
+.act{height:40px;padding:0 10px;border-radius:4px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.act:hover{background:var(--hover);color:var(--ink)}
+.act.on{color:var(--bar-active)}
+.empty-hint{font-size:11px;color:var(--ink-3);padding:0 6px}
 
 /* ---------- Uninstall survey ---------- */
 body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-height:1.5}
@@ -52,7 +58,7 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
 .sv{max-width:480px;margin:0 auto;padding:28px 26px}
 .sv h1{font:600 20px/1.3 "Segoe UI Variable Display","Segoe UI",sans-serif;margin-bottom:6px}
 .sv p{opacity:.72;margin-bottom:18px}
-.sv label{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(127,127,127,.25);border-radius:10px;margin-bottom:8px;cursor:pointer;user-select:none}
+.sv label{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(127,127,127,.25);border-radius:10px;margin-bottom:8px;cursor:pointer}
 .sv label:has(input:checked){border-color:#2a78d6;background:rgba(42,120,214,.08)}
 .sv textarea{width:100%;min-height:80px;margin-top:6px;border-radius:10px;border:1px solid rgba(127,127,127,.35);padding:10px;font:inherit;background:transparent;color:inherit;resize:vertical}
 .sv .row{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
@@ -62,8 +68,7 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
 </style>
 </head>
 <body>
-<div class="strip" id="strip" hidden></div>
-<div class="toast" id="toast"></div>
+<div class="strip" id="strip"></div>
 <div class="sv" id="survey" hidden>
   <h1>Sorry to see you go</h1>
   <p>Before Ultra Suite is removed, would you tell us why? It takes five seconds and helps make it better for everyone.</p>
@@ -88,7 +93,7 @@ const $ = (id) => document.getElementById(id);
 
 /* ---------------- Uninstall survey ---------------- */
 if (view === "survey") {
-  document.body.className = "survey"; $("survey").hidden = false;
+  document.body.className = "survey"; $("survey").hidden = false; $("strip").hidden = true;
   const done = () => invoke && invoke("quit");
   $("skip").onclick = async () => { if (invoke) await invoke("send_event", { kind: "uninstall", reason: null, message: null }).catch(() => {}); done(); };
   $("sf").onsubmit = async (e) => {
@@ -99,93 +104,89 @@ if (view === "survey") {
   };
 }
 
-/* ---------------- Taskbar strip ---------------- */
-let cfg = null, open = null, closeTimer = 0;
-const ICON = {
-  alarm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 1.5M5 4 3 6M19 4l2 2"/></svg>',
-  sentinel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2-6 4 12 2-6h6"/></svg>',
-  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
-  reload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2 5.3M20 5v6h-6"/></svg>',
-  quit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
-};
-const avail = (c) => (c.apps || []).filter(a => a.available);
-const initials = (n) => n.split(/[\s.]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-function toast(m){ const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+/* ---------------- Taskbar organizer ---------------- */
+const icons = new Map();          // exe path -> data url
+let state = { windows: [], organize: true, order: [] }, open = null, sig = "", closeTimer = 0;
+const CHEV = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>';
 
-async function load(){
-  try { cfg = invoke ? await invoke("get_config") : await fetch("../config/categories.json").then(r => r.json()); }
-  catch { cfg = { categories: [] }; }
-  if (!invoke) cfg.categories.forEach(c => c.apps.forEach(a => a.available = true));
-  build();
+function iconFor(exe, hwnd){
+  if (icons.has(exe)) return icons.get(exe);
+  icons.set(exe, null);
+  if (invoke) invoke("get_icon", { target: exe, hwnd: hwnd ?? null }).then(u => { if (u) { icons.set(exe, u); document.querySelectorAll(`img[data-exe="${CSS.escape(exe)}"]`).forEach(i => i.src = u);
+    document.querySelectorAll(`.ph[data-exe="${CSS.escape(exe)}"]`).forEach(p => { const i = document.createElement("img"); i.dataset.exe = exe; i.src = u; i.alt = ""; p.replaceWith(i); }); } }).catch(() => {});
+  return null;
 }
-function build(){
-  const cats = (cfg.categories || []).filter(c => avail(c).length);
-  const strip = $("strip"); strip.hidden = false;
-  strip.innerHTML = cats.map(c => `<div class="group" data-cat="${esc(c.id)}">
-      <button class="pill" data-cat="${esc(c.id)}" aria-expanded="false" title="${esc(c.name)}: ${avail(c).length} apps">
-        <span class="sw" style="background:${esc(c.color || "#777")}">${esc(c.name[0])}</span><span class="lb">${esc(c.name)}</span><span class="chev"></span></button>
-      <div class="tray"><div class="inner">${avail(c).map((a, i) => `<button class="app" data-cat="${esc(c.id)}" data-i="${i}" title="${esc(a.name)}">
-        <span class="mono" style="background:${esc(c.color || "#777")}">${esc(initials(a.name))}</span></button>`).join("")}</div></div></div>`).join("")
-    + `<span class="sep"></span><div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="false" title="Ultra Suite">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
-      <div class="tray"><div class="inner">
-        <button class="act" data-act="alarm">${ICON.alarm}Alarm</button><button class="act" data-act="sentinel">${ICON.sentinel}Sentinel</button>
-        <button class="act" data-act="edit">${ICON.edit}Edit</button><button class="act" data-act="reload">${ICON.reload}Reload</button>
-        <button class="act" data-act="quit">${ICON.quit}Quit</button></div></div></div>`;
-  // real app icons (Windows shell), filled in as they arrive
-  cats.forEach(c => avail(c).forEach((a, i) => {
-    const target = a.icon || a.resolved; if (!target || !invoke) return;
-    invoke("get_icon", { target }).then(url => {
-      if (!url) return;
-      const b = strip.querySelector(`.app[data-cat="${CSS.escape(c.id)}"][data-i="${i}"]`);
-      if (b) b.innerHTML = `<img src="${url}" alt="">`;
-    }).catch(() => {});
-  }));
-  requestAnimationFrame(() => report(false));
+const hwndOf = (exe) => (state.windows.find(w => w.exe === exe) || {}).hwnd;
+const img = (exe) => { const u = iconFor(exe, hwndOf(exe)); return u ? `<img data-exe="${esc(exe)}" src="${u}" alt="">` : `<span class="ph" data-exe="${esc(exe)}"></span>`; };
+
+function groups(){
+  const by = new Map();
+  for (const w of state.windows) { if (!by.has(w.category)) by.set(w.category, []); by.get(w.category).push(w); }
+  const order = state.order.length ? state.order : [...by.keys()];
+  return [...by.entries()].sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99));
 }
-function collapsedWidth(){ let w = 4; $("strip").querySelectorAll(".pill,.more,.sep").forEach(el => w += el.getBoundingClientRect().width + (el.classList.contains("sep") ? 6 : 2)); return Math.ceil(w); }
-function report(expandedTo){
-  const base = collapsedWidth();
-  const extra = expandedTo ? expandedTo : 0;
-  if (invoke) invoke("set_strip_width", { width: base + extra + 2 });
+
+function render(){
+  const gs = groups();
+  const html = gs.map(([cat, ws]) => {
+    const uniq = []; const seen = new Set(); for (const w of ws) if (!seen.has(w.exe)) { seen.add(w.exe); uniq.push(w); }
+    const active = ws.some(w => w.active);
+    return `<div class="group" data-cat="${esc(cat)}">
+      <button class="grp ${active ? "has-active" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" title="${esc(cat)}: ${ws.map(w => w.title).slice(0, 6).map(esc).join(" · ")}">
+        <span class="stack ${uniq.length === 1 ? "single" : ""}">${uniq.slice(0, 3).map(w => img(w.exe)).join("")}</span>${ws.length > 1 ? `<span class="cnt">${ws.length}</span>` : ""}<span class="runbar"></span></button>
+      <div class="tray ${open === cat ? "open" : ""}"><div class="inner">${ws.map(w => `<button class="win ${w.active ? "active" : ""}" data-h="${w.hwnd}" title="${esc(w.title)}">${img(w.exe)}<span class="runbar"></span></button>`).join("")}</div></div></div>`;
+  }).join("");
+  const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="Ultra Dock">${CHEV}</button>
+    <div class="tray ${open === "__menu" ? "open" : ""}"><div class="inner">
+      <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
+      <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
+      <button class="act" data-act="edit">Edit</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
+  $("strip").innerHTML = html + menu;
+  // keep any open tray at its natural width
+  $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
+  requestAnimationFrame(report);
 }
-function setOpen(id){
-  const strip = $("strip");
-  strip.querySelectorAll(".group").forEach(g => {
-    const isOpen = g.dataset.cat === id, tray = g.querySelector(".tray"), btn = g.querySelector(".pill,.more");
-    btn.setAttribute("aria-expanded", isOpen);
-    const inner = tray.querySelector(".inner"), w = isOpen ? inner.scrollWidth : 0;
-    tray.classList.toggle("open", isOpen); tray.style.width = w + "px";
+function report(){ if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth) + 2 }); }
+
+function setOpen(cat){
+  const prev = open; open = cat;
+  $("strip").querySelectorAll(".group").forEach(g => {
+    const isOpen = g.dataset.cat === cat, tray = g.querySelector(".tray"), b = g.querySelector(".grp,.more");
+    b.setAttribute("aria-expanded", isOpen);
+    if (isOpen) { // grow the window first, then slide in
+      const w = tray.querySelector(".inner").scrollWidth;
+      if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth + w) + 4 });
+      requestAnimationFrame(() => { tray.style.width = w + "px"; tray.classList.add("open"); });
+    } else { tray.style.width = "0px"; tray.classList.remove("open"); }
   });
-  const g = id ? strip.querySelector(`.group[data-cat="${CSS.escape(id)}"] .inner`) : null;
-  const target = g ? g.scrollWidth : 0;
-  if (target) report(target); // grow the window first, then slide the icons in
-  else setTimeout(() => { if (!open) report(false); }, 400); // slide out, then shrink
-  open = id;
+  if (!cat || prev) setTimeout(report, 340); // shrink after sliding closed
 }
+
 $("strip").addEventListener("click", async (e) => {
-  const p = e.target.closest(".pill,.more"), a = e.target.closest(".app"), act = e.target.closest(".act");
-  if (p) { setOpen(open === p.dataset.cat ? null : p.dataset.cat); return; }
+  const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), a = e.target.closest(".act");
+  if (g) { setOpen(open === g.dataset.cat ? null : g.dataset.cat); return; }
+  if (w) { if (invoke) await invoke("activate", { hwnd: +w.dataset.h }); setTimeout(() => setOpen(null), 220); return; }
   if (a) {
-    const c = cfg.categories.find(x => x.id === a.dataset.cat), app = avail(c)[+a.dataset.i];
-    a.classList.add("busy");
-    try { if (invoke) await invoke("launch", { path: app.resolved || null, args: app.args || null, url: app.url || null }); setTimeout(() => setOpen(null), 250); }
-    catch (err) { toast(String(err)); }
-    a.classList.remove("busy"); return;
-  }
-  if (act) {
-    const k = act.dataset.act;
-    if (k === "alarm" || k === "sentinel") invoke && invoke("open_app_view", { name: k });
+    const k = a.dataset.act;
+    if (k === "showall") { state.organize = !state.organize; if (invoke) await invoke("set_organize", { on: state.organize }); sig = ""; }
+    if (k === "sentinel" || k === "alarm") invoke && invoke("open_app_view", { name: k });
     if (k === "edit") invoke && invoke("open_config");
-    if (k === "reload") { setOpen(null); await load(); }
     if (k === "quit") invoke && invoke("quit");
-    setTimeout(() => setOpen(null), 200);
+    setTimeout(() => setOpen(null), 150);
   }
 });
-// Slide closed shortly after the mouse leaves, like a taskbar flyout
-$("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(() => setOpen(null), 1400); });
+$("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(() => { if (open) setOpen(null); }, 1200); });
 $("strip").addEventListener("mouseenter", () => clearTimeout(closeTimer));
-if (view === "strip") load();
+
+async function poll(){
+  try {
+    const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
+    const nsig = JSON.stringify([s.organize, s.windows.map(w => [w.hwnd, w.category, w.active, w.title])]);
+    state = s;
+    if (nsig !== sig) { sig = nsig; render(); }
+  } catch {}
+}
+if (view === "strip") { poll(); setInterval(poll, 700); }
 </script>
 </body>
 </html>

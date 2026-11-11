@@ -76,15 +76,19 @@ def load_settings():
                     f"GLINET_ROUTER_IP={_gateway()}\n"
                     "GLINET_ADMIN_PASSWORD=\nONESCRIPT_PATH=\nPEBBLE_DEVICE_MATCH=\nDEFAULT_RING_DURATION_SEC=600\n"
                     "TELEMETRY=ask\n")
-    for line in open(path, encoding="utf-8"):
+    values = {}
+    for line in open(path, encoding="utf-8-sig"):
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+            values[k.strip()] = v.strip()  # a later line wins over an earlier one
+    for k, v in values.items():
+        os.environ.setdefault(k, v)
     os.environ.setdefault("ULTRASUITE_DATA", DATA_DIR)
     os.environ["HOST_AUDIO_BRIDGE_URL"] = "http://127.0.0.1:8091"
     os.environ["ONESCRIPT_WEBHOOK_URL"] = "http://127.0.0.1:8091/run-onescript"
     os.environ["LHM_REMOTE_URL"] = os.environ.get("LHM_REMOTE_URL_OVERRIDE", "http://127.0.0.1:8085/data.json")
     os.environ["ULTRASUITE_SETTINGS"] = path
+    os.environ.setdefault("ULTRASUITE_COLLECTOR", "https://jimpc.tail95b9d9.ts.net:10000/ultrasuite/v1/event")
     return path
 
 
@@ -130,8 +134,19 @@ def run_services():
     alarm_app = importlib.import_module("alarm_backend.main").app
     sentinel_app = importlib.import_module("sentinel_backend.main").app
 
+    insights = None
+    if os.environ.get("ULTRASUITE_OWNER") == "1":  # only on the owner's PC
+        try:
+            insights = load_module("ultra_insights", os.path.join(ROOT, "05_insights", "insights.py"))
+        except Exception as exc:
+            print(f"[core] insights not loaded: {exc}")
+
     async def main():
         servers = []
+        if insights:
+            for app_, port in ((insights.collector, 8300), (insights.dashboard, 8301)):
+                if not port_busy(port):
+                    servers.append(uvicorn.Server(uvicorn.Config(app_, host="127.0.0.1", port=port, log_level="warning", log_config=None)))
         for app, port in ((alarm_app, 8081), (sentinel_app, 8084)):
             if port_busy(port):
                 continue

@@ -7,6 +7,8 @@
 #>
 $ErrorActionPreference = "Stop"
 $R = $PSScriptRoot
+# pick up tools installed since this window opened (Node, Rust)
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.cargo\bin"
 Set-Location $R
 Get-Process "Ultra Suite", ultrasuite-core -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item "$R\build\dist\ultrasuite-core" -Recurse -Force -ErrorAction SilentlyContinue
@@ -20,6 +22,7 @@ python -m PyInstaller --noconfirm --clean --noconsole --log-level WARN --name ul
   --add-data "$R\04_hardware_net_sentinel\backend;04_hardware_net_sentinel\backend" `
   --add-data "$R\04_hardware_net_sentinel\frontend;04_hardware_net_sentinel\frontend" `
   --add-data "$R\03_deck_deck_config\generate_deck_profile.py;03_deck_deck_config" `
+  --add-data "$R\05_insights;05_insights" --add-data "$R\core\feedback.py;core" `
   --add-data "$R\03_deck_deck_config\plugin\volume_knob_daemon.py;03_deck_deck_config\plugin" `
   --add-data "$R\03_deck_deck_config\com.ultrasuite.knobs.deckPlugin;03_deck_deck_config\com.ultrasuite.knobs.deckPlugin" `
   --collect-all _sounddevice_data --collect-data certifi --hidden-import sounddevice --hidden-import psutil @cs `
@@ -32,3 +35,4 @@ Write-Host "[3/3] Building the installer" -ForegroundColor Cyan
 Set-Location "$R\02_translucent_taskbar_dock"
 npx -y @tauri-apps/cli@2 build
 Get-ChildItem "$R\02_translucent_taskbar_dock\src-tauri\target\release\bundle\nsis\*.exe" | Select-Object Name, @{n="MB";e={[math]::Round($_.Length/1MB,1)}}
+

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ultra Suite Insights</title>
+<style>
+:root{--bg:#f4f5f7;--surface:#fcfcfb;--surface-2:#eff0f2;--line:#e3e5e9;--line-strong:#d0d4da;--ink:#0b0b0b;--ink-2:#52514e;--ink-3:#7d7c78;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--grid:#e8e9ec;--good:#0ca30c;--critical:#d03b3b;--accent:#2a78d6;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  --font:"Segoe UI Variable Text","Segoe UI",-apple-system,system-ui,sans-serif;--fd:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;--ease:cubic-bezier(.22,1,.36,1)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1012;--surface:#17181b;--surface-2:#1f2024;--line:#26282d;--line-strong:#34363c;--ink:#f0efec;--ink-2:#c3c2b7;--ink-3:#8f8e86;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--grid:#26282d;--shadow:0 1px 2px rgba(0,0,0,.45)}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14.5px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1440px;margin:0 auto;padding:26px 32px 48px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+h1{font:600 20px/1.2 var(--fd)} header p{color:var(--ink-3);font-size:13px}
+.right{display:flex;gap:10px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--good)}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;height:30px;padding:0 13px;border-radius:7px;font:600 13px var(--font);color:var(--ink-2);cursor:pointer;transition:all .2s}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);animation:rise .45s var(--ease) both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.kpi{padding:14px 16px}.kpi .l{font-size:12.5px;color:var(--ink-2)}.kpi .v{font:600 32px/1.15 var(--fd);letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--ink-3)}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.ch{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 0}.ch h2{font:600 15px var(--fd)}.ch span{font-size:12.5px;color:var(--ink-3)}
+.cb{padding:12px 16px 16px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:6px}.legend i{width:14px;height:2px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle}
+.chart{position:relative}.chart svg{width:100%;height:220px;display:block}
+.tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
+.bars{display:grid;gap:8px}.bar{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:13px}
+.bar .t{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}.bar .t i{display:block;height:100%;border-radius:99px;background:var(--s2);transition:width .8s var(--ease)}
+.bar span:last-child{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.fb{display:grid;gap:8px;max-height:340px;overflow:auto}.fb div{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.fb small{display:block;color:var(--ink-3);font-size:12px;margin-bottom:2px}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:var(--ink-3);font-size:12px;font-weight:600;padding:6px 8px}td{padding:6px 8px;border-top:1px solid var(--line)}
+.pill{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--surface-2)}
+.pill.install{color:var(--good)}.pill.uninstall{color:var(--critical)}.pill.feedback{color:var(--s1)}
+.gh{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.gh div{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.gh b{display:block;font:600 22px var(--fd);font-variant-numeric:tabular-nums}
+.gh span{font-size:12px;color:var(--ink-3)}
+.empty{color:var(--ink-3);padding:18px 0;text-align:center}
+.note{font-size:12.5px;color:var(--ink-3);margin-top:10px}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Ultra Suite Insights</h1><p>Installs, uninstalls, feedback and GitHub, live</p></div>
+    <div class="right"><span class="chip" id="live"><span class="dot"></span>Loading…</span>
+      <div class="seg" id="seg"><button data-r="day">Day</button><button data-r="week">Week</button><button data-r="month" aria-pressed="true">Month</button><button data-r="year">Year</button></div></div>
+  </header>
+  <div class="kpis">
+    <div class="card kpi"><div class="l">Installs</div><div class="v" id="k-in">–</div><div class="s" id="k-in-s"></div></div>
+    <div class="card kpi"><div class="l">Uninstalls</div><div class="v" id="k-un">–</div><div class="s" id="k-un-s"></div></div>
+    <div class="card kpi"><div class="l">Active (7 days)</div><div class="v" id="k-act">–</div><div class="s">PCs seen this week</div></div>
+    <div class="card kpi"><div class="l">Downloads</div><div class="v" id="k-dl">–</div><div class="s">all GitHub releases</div></div>
+    <div class="card kpi"><div class="l">Feedback</div><div class="v" id="k-fb">–</div><div class="s" id="k-fb-s"></div></div>
+    <div class="card kpi"><div class="l">Stars</div><div class="v" id="k-st">–</div><div class="s" id="k-st-s"></div></div>
+  </div>
+  <div class="grid">
+    <section class="card"><div class="ch"><h2>Installs vs uninstalls</h2><span id="ch-sub"></span></div>
+      <div class="cb"><div class="legend"><span><i style="background:var(--s1)"></i>Installs</span><span><i style="background:var(--s2)"></i>Uninstalls</span><span><i style="background:var(--s3)"></i>Feedback</span></div>
+      <div class="chart" id="chart"><svg id="svg" viewBox="0 0 800 220" preserveAspectRatio="none"></svg></div></div></section>
+    <section class="card"><div class="ch"><h2>Why people uninstall</h2><span id="rs-sub"></span></div><div class="cb"><div class="bars" id="reasons"></div></div></section>
+  </div>
+  <div class="grid">
+    <section class="card"><div class="ch"><h2>Feedback inbox</h2><span>newest first</span></div><div class="cb"><div class="fb" id="fb"></div></div></section>
+    <section class="card"><div class="ch"><h2>GitHub</h2><span id="gh-sub"></span></div><div class="cb"><div class="gh" id="gh"></div><div class="note" id="gh-note"></div></div></section>
+  </div>
+  <section class="card"><div class="ch"><h2>Recent activity</h2><span>anonymous</span></div><div class="cb"><table><thead><tr><th>When</th><th>Event</th><th>Version</th><th>Reason</th></tr></thead><tbody id="recent"></tbody></table></div></section>
+</div>
+<script>
+const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const n0=v=>v==null?"–":Math.round(v).toLocaleString(); let range="month", data=null;
+const TW=new Map(); let raf=0;
+function tween(el,to){ if(!el) return; const from=el._c==null?0:el._c; TW.set(el,{from,to,st:performance.now()}); if(!raf) raf=requestAnimationFrame(step); }
+function step(t){ raf=0; for(const[el,s] of TW){ const k=Math.min(1,(t-s.st)/900), e=1-Math.pow(1-k,3); el._c=s.from+(s.to-s.from)*e; el.textContent=n0(el._c); if(k>=1) TW.delete(el);} if(TW.size) raf=requestAnimationFrame(step); }
+const when=ts=>new Date(ts*1000).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+function smooth(p){ if(p.length<2) return ""; let d=`M${p[0][0]},${p[0][1]}`; for(let i=0;i<p.length-1;i++){const a=p[i-1]||p[i],b=p[i],c=p[i+1],e=p[i+2]||c; d+=` C${b[0]+(c[0]-a[0])/6},${b[1]+(c[1]-a[1])/6} ${c[0]-(e[0]-b[0])/6},${c[1]-(e[1]-b[1])/6} ${c[0]},${c[1]}`;} return d; }
+function chart(hover){
+  const s=data.series, W=800, H=220, max=Math.max(3,...s.map(x=>Math.max(x.install,x.uninstall,x.feedback)))*1.15;
+  const x=i=>8+i/(Math.max(1,s.length-1))*(W-16), y=v=>H-14-v/max*(H-30);
+  const line=(k,c)=>`<path d="${smooth(s.map((p,i)=>[x(i),y(p[k])]))}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  const grid=[.33,.66,1].map(f=>`<line x1="0" x2="${W}" y1="${y(max/1.15*f)}" y2="${y(max/1.15*f)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("");
+  const cross=hover!=null?`<line x1="${x(hover)}" x2="${x(hover)}" y1="0" y2="${H}" stroke="var(--ink-3)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`:"";
+  $("svg").innerHTML=grid+`<line x1="0" x2="${W}" y1="${H-14}" y2="${H-14}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>`+line("install","var(--s1)")+line("uninstall","var(--s2)")+line("feedback","var(--s3)")+cross;
+}
+$("chart").addEventListener("mousemove",e=>{ if(!data) return; const r=$("chart").getBoundingClientRect(), n=data.series.length, i=Math.max(0,Math.min(n-1,Math.round((e.clientX-r.left)/r.width*(n-1))));
+  document.querySelectorAll(".tip").forEach(t=>t.remove()); chart(i); const p=data.series[i], t=document.createElement("div"); t.className="tip"; t.style.left=(e.clientX-r.left)+"px";
+  t.textContent=`${p.t} · ${p.install} installs · ${p.uninstall} uninstalls · ${p.feedback} feedback`; $("chart").appendChild(t); });
+$("chart").addEventListener("mouseleave",()=>{document.querySelectorAll(".tip").forEach(t=>t.remove()); if(data) chart();});
+function render(){
+  const c=data.counts||{}, g=data.github||{};
+  tween($("k-in"),c.install||0); $("k-in-s").textContent=`${n0((data.alltime||{}).install||0)} all time`;
+  tween($("k-un"),c.uninstall||0); $("k-un-s").textContent=`net ${n0(data.net_installs)} installed`;
+  tween($("k-act"),data.active_7d||0); tween($("k-dl"),g.downloads_total||0); tween($("k-fb"),c.feedback||0);
+  $("k-fb-s").textContent=`${n0((data.alltime||{}).feedback||0)} all time`; tween($("k-st"),g.stars||0); $("k-st-s").textContent=`${n0(g.forks)} forks · ${n0(g.watchers)} watching`;
+  $("ch-sub").textContent={day:"last 24 hours",week:"last 7 days",month:"last 30 days",year:"last 12 months"}[range]; chart();
+  const rs=data.reasons||[], rmax=Math.max(1,...rs.map(r=>r[1]));
+  $("rs-sub").textContent=`${n0(c.uninstall||0)} uninstalls`;
+  $("reasons").innerHTML=rs.length?rs.map(([k,v])=>`<div class="bar"><span>${esc(k.replace(/-/g," "))}</span><span class="t"><i style="width:${v/rmax*100}%"></i></span><span>${v}</span></div>`).join(""):`<div class="empty">No uninstalls in this period</div>`;
+  $("fb").innerHTML=(data.feedback||[]).length?data.feedback.map(f=>`<div><small>${when(f.ts)} · ${esc(f.type)}${f.reason?" · "+esc(f.reason):""}${f.version?" · v"+esc(f.version):""}</small>${esc(f.message)}</div>`).join(""):`<div class="empty">No feedback yet. It appears here the moment someone sends it.</div>`;
+  const tr=g.traffic;
+  $("gh").innerHTML=`<div><b>${n0(g.downloads_total)}</b><span>downloads</span></div><div><b>${n0(g.stars)}</b><span>stars</span></div><div><b>${n0(g.forks)}</b><span>forks</span></div>`+
+    (tr?`<div><b>${n0(tr.views)}</b><span>page views (14 d)</span></div><div><b>${n0(tr.visitors)}</b><span>unique visitors (14 d)</span></div><div><b>${n0(tr.clones)}</b><span>clones (14 d)</span></div>`:"")+
+    (g.releases||[]).slice(0,3).map(r=>`<div><b>${n0(r.downloads)}</b><span>${esc(r.tag)} downloads</span></div>`).join("");
+  $("gh-sub").textContent=g.repo||""; $("gh-note").textContent=tr?(tr.referrers&&tr.referrers.length?"Top sources: "+tr.referrers.slice(0,4).map(r=>`${r.referrer} (${r.count})`).join(", "):""):"Add GITHUB_TOKEN to settings.env to see page views, visitors and clones (GitHub keeps 14 days).";
+  $("recent").innerHTML=(data.recent||[]).length?data.recent.map(r=>`<tr><td>${when(r.ts)}</td><td><span class="pill ${esc(r.type)}">${esc(r.type)}</span></td><td>${esc(r.version||"")}</td><td>${esc(r.reason||"")}</td></tr>`).join(""):`<tr><td colspan="4" class="empty">Nothing yet</td></tr>`;
+}
+async function load(){ try{ data=await fetch(`/api/stats?range=${range}`).then(r=>r.json()); render(); $("live").innerHTML=`<span class="dot"></span>Live · updated ${new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit",second:"2-digit"})}`; }
+  catch{ $("live").innerHTML=`<span class="dot" style="background:var(--critical)"></span>Offline`; } }
+$("seg").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return; range=b.dataset.r; $("seg").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b)); load();});
+load(); setInterval(load,15000);
+</script>
+</body>
+</html>
