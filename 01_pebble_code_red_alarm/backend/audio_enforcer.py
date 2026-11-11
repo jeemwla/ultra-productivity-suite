@@ -59,7 +59,7 @@ if IS_WINDOWS:
 
 BRIDGE_TOKEN = os.getenv("BRIDGE_TOKEN", "")
 ONESCRIPT_PATH = os.getenv("ONESCRIPT_PATH", "")
-CONFIG_PATH = os.path.join(HERE, "device_config.json")
+CONFIG_PATH = os.path.join(os.environ.get("ULTRASUITE_DATA") or HERE, "device_config.json")
 DEFAULT_DURATION = int(os.getenv("DEFAULT_RING_DURATION_SEC", "600"))
 
 

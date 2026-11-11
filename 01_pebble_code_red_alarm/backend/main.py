@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "alarms.db")
+DB_PATH = os.path.join(os.environ.get("ULTRASUITE_DATA") or os.path.join(os.path.dirname(__file__), "..", "data"), "alarms.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 HOST_AUDIO_BRIDGE_URL = os.getenv("HOST_AUDIO_BRIDGE_URL", "http://host.docker.internal:8091")
 BRIDGE_HEADERS = {"X-Bridge-Token": os.getenv("BRIDGE_TOKEN", "")}
@@ -272,6 +272,12 @@ def fetch_all_alarms() -> List[dict]:
 async def serve_ui():
     frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
     return FileResponse(frontend_path)
+
+
+@app.get("/api/ring")
+async def ring_status():
+    """Tiny status for the desktop app: is anything ringing right now?"""
+    return {"is_ringing": ring_state.is_ringing, "alarm": (ring_state.alarm or {}).get("label")}
 
 
 @app.get("/api/alarms")

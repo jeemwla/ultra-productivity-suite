@@ -1,0 +1,4 @@
+{
+  "_help": "Opt-in stats and feedback go here. Leave collector_url empty to turn it off in your own builds.",
+  "collector_url": "https://jimpc.tail95b9d9.ts.net:10000/ultrasuite/v1/event"
+}

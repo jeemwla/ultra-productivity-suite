@@ -18,3 +18,7 @@ node_modules/
 
 # Vendored runtime for the deck plugin (deck Studio has no npm)
 !03_deck_deck_config/com.ultrasuite.knobs.deckPlugin/node_modules/
+
+# Build output
+build/
+02_translucent_taskbar_dock/src-tauri/appicons/

@@ -1,11 +1,12 @@
 [package]
-name = "ultra-dock"
-version = "1.1.0"
-description = "Translucent Windows 11 category dock"
+name = "ultra-suite"
+version = "2.0.0"
+description = "Ultra Suite: in-taskbar app groups, Code Red Alarm, PC Sentinel"
 edition = "2021"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+serde_json = "1.0"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -13,9 +14,14 @@ tauri-plugin-single-instance = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 window-vibrancy = "0.6"
+png = "0.17"
+base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+windows = { version = "0.61", features = [
+  "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Shell", "Win32_UI_Accessibility", "Win32_System_Com", "Win32_System_Variant", "Win32_System_Ole",
+] }
 
 [profile.release]
 opt-level = "s"
