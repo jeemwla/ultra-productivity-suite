@@ -783,12 +783,63 @@ fn http_get(port: u16, path: &str) -> Option<String> {
     buf.split("\r\n\r\n").nth(1).map(|b| b.to_string())
 }
 
+/// Keep the background services running 24/7: if the core ever stops (crash, killed), start it again.
+fn core_supervisor(app: AppHandle) {
+    std::thread::sleep(Duration::from_secs(20));
+    loop {
+        if !(port_open(8081) && port_open(8084)) {
+            println!("[supervisor] background services not answering: restarting them");
+            ensure_core(&app);
+        }
+        std::thread::sleep(Duration::from_secs(15));
+    }
+}
+
+/// Wake a sleeping PC in time for the next alarm. A wake timer (allowed by Windows' "Allow wake timers" power
+/// setting, on by default) is set for one minute before the alarm; the alarm engine catches up on wake and rings.
+#[cfg(windows)]
+fn alarm_wake_timer() {
+    use windows::Win32::System::Threading::{CancelWaitableTimer, CreateWaitableTimerW, SetWaitableTimer};
+    let Ok(timer) = (unsafe { CreateWaitableTimerW(None, true, None) }) else { return };
+    let mut armed: Option<i64> = None;
+    loop {
+        let next = http_get(8081, "/api/next")
+            .and_then(|b| serde_json::from_str::<Value>(&b).ok())
+            .and_then(|v| v["in_sec"].as_i64());
+        match next {
+            Some(secs) if secs > 90 => {
+                let wake_in = secs - 60;
+                let target = now_secs() as i64 + wake_in;
+                if armed.map(|a| (a - target).abs() > 30).unwrap_or(true) {
+                    let due = -(wake_in * 10_000_000);  // negative = relative, in 100 ns units
+                    if unsafe { SetWaitableTimer(timer, &due, 0, None, None, true) }.is_ok() {
+                        armed = Some(target);
+                        println!("[wake] PC will wake in {wake_in} s for the next alarm");
+                    }
+                }
+            }
+            _ => { if armed.take().is_some() { unsafe { let _ = CancelWaitableTimer(timer); } } }
+        }
+        std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+/// While an alarm rings, the PC must not drift back to sleep (after a timer wake Windows sleeps again within
+/// about two minutes if nobody touches it) and the screen should stay on.
+#[cfg(windows)]
+fn keep_awake(on: bool) {
+    use windows::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED};
+    unsafe { SetThreadExecutionState(if on { ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED } else { ES_CONTINUOUS }); }
+}
+
 /// When an alarm rings, bring the alarm window in front of everything.
 fn alarm_watch(app: AppHandle) {
     let mut ringing = false;
     loop {
         std::thread::sleep(Duration::from_millis(1000));
         let now = http_get(8081, "/api/ring").map(|b| b.replace(' ', "").contains("\"is_ringing\":true")).unwrap_or(false);
+        #[cfg(windows)]
+        if now != ringing { keep_awake(now); }
         if now && !ringing {
             let a = app.clone();
             let _ = app.run_on_main_thread(move || {
@@ -1049,6 +1100,10 @@ fn main() {
             }
             let h3 = handle.clone();
             std::thread::spawn(move || alarm_watch(h3));
+            let h4 = handle.clone();
+            std::thread::spawn(move || core_supervisor(h4));
+            #[cfg(windows)]
+            std::thread::spawn(alarm_wake_timer);
             std::thread::spawn(|| loop {
                 let stamp = appdata("last_heartbeat.txt");
                 let now = SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);

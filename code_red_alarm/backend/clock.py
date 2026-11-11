@@ -33,6 +33,29 @@ else:
         return datetime.datetime.now()
 
 
+def next_ring(alarm: dict, now: datetime.datetime):
+    """When an enabled alarm rings next (local time), or None. Used to wake the PC from sleep in time."""
+    if not alarm.get("enabled"):
+        return None
+    try:
+        hh, mm = (int(x) for x in str(alarm["time_hhmm"]).split(":"))
+    except (KeyError, ValueError):
+        return None
+    weekdays = alarm.get("weekdays") or []
+    for i in range(8):
+        day = now.date() + datetime.timedelta(days=i)
+        at = datetime.datetime.combine(day, datetime.time(hh, mm))
+        if at <= now or alarm.get("last_triggered_date") == day.isoformat():
+            continue
+        if alarm.get("target_date"):
+            if alarm["target_date"] == day.isoformat():
+                return at
+            continue
+        if not weekdays or WEEKDAYS[day.weekday()] in weekdays:
+            return at
+    return None
+
+
 def due_day(alarm: dict, prev: datetime.datetime, now: datetime.datetime):
     """Return the ISO date the alarm is ringing for, or None.
 

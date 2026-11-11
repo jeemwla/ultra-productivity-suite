@@ -107,6 +107,18 @@ class AlarmSchedule(unittest.TestCase):
         late = {"time_hhmm": "23:55", "target_date": None, "weekdays": [], "last_triggered_date": None}
         self.assertEqual(self.due(late, "2026-11-10 23:50:00", "2026-11-11 00:10:00"), "2026-11-10")
 
+    def test_next_ring_for_wake_timer(self):
+        nxt = lambda a, now: self.m.next_ring(a, self.dt.fromisoformat(now))
+        weekday = {"enabled": True, "time_hhmm": "07:15", "target_date": None, "weekdays": ["Mon", "Wed", "Fri"]}
+        self.assertEqual(nxt(weekday, "2026-11-11 05:00:00"), self.dt.fromisoformat("2026-11-11 07:15:00"))  # Wed
+        self.assertEqual(nxt(weekday, "2026-11-11 08:00:00"), self.dt.fromisoformat("2026-11-13 07:15:00"))  # Fri
+        once = {"enabled": True, "time_hhmm": "02:20", "target_date": "2026-11-12", "weekdays": []}
+        self.assertEqual(nxt(once, "2026-11-11 23:00:00"), self.dt.fromisoformat("2026-11-12 02:20:00"))
+        self.assertIsNone(nxt(dict(once, enabled=False), "2026-11-11 23:00:00"))
+        self.assertIsNone(nxt(once, "2026-11-12 03:00:00"), "a one-time alarm in the past never comes back")
+        rang = dict(weekday, last_triggered_date="2026-11-11")
+        self.assertEqual(nxt(rang, "2026-11-11 07:15:30"), self.dt.fromisoformat("2026-11-13 07:15:00"))
+
     def test_local_now_matches_system_clock(self):
         import datetime
         gap = abs((self.m.local_now() - datetime.datetime.now()).total_seconds())

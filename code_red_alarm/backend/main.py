@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .clock import due_day, local_now
+from .clock import due_day, local_now, next_ring
 
 DB_PATH = os.path.join(os.environ.get("ULTRASUITE_DATA") or os.path.join(os.path.dirname(__file__), "..", "data"), "alarms.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -276,6 +276,18 @@ async def serve_ui():
 async def ring_status():
     """Tiny status for the desktop app: is anything ringing right now?"""
     return {"is_ringing": ring_state.is_ringing, "alarm": (ring_state.alarm or {}).get("label")}
+
+
+@app.get("/api/next")
+async def next_alarm():
+    """Seconds until the next alarm rings. The desktop app sets a wake timer from this, so a sleeping PC wakes
+    up a minute early and the alarm still rings."""
+    now = local_now()
+    times = [t for t in (next_ring(a, now) for a in fetch_all_alarms()) if t]
+    if not times:
+        return {"in_sec": None}
+    at = min(times)
+    return {"in_sec": int((at - now).total_seconds()), "at": at.strftime("%Y-%m-%dT%H:%M:%S")}
 
 
 @app.get("/api/alarms")
