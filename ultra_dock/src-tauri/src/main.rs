@@ -10,9 +10,10 @@
 //! CLI: --open alarm|sentinel|insights  --background  --show-dock  --quit  --uninstall-survey  --event <kind>
 
 use base64::Engine;
+mod recovery;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -29,8 +30,8 @@ static STRIP_W: AtomicU32 = AtomicU32::new(60);
 static STRIP_HIDDEN: AtomicBool = AtomicBool::new(false);
 static ORGANIZE: AtomicBool = AtomicBool::new(true);
 static CORE: Mutex<Option<Child>> = Mutex::new(None);
+static GUARD: Mutex<Option<Child>> = Mutex::new(None);
 static ICONS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
-static HIDDEN: Mutex<Option<HashSet<isize>>> = Mutex::new(None);
 static SNAPSHOT: Mutex<Vec<WinInfo>> = Mutex::new(Vec::new());
 
 #[derive(Serialize, Clone, PartialEq)]
@@ -321,23 +322,20 @@ fn taskbar_list() -> Option<windows::Win32::UI::Shell::ITaskbarList> {
 /// Put every taskbar button we tucked away back where it was.
 #[cfg(windows)]
 fn restore_all() {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Com::*;
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
-    let ids: Vec<isize> = HIDDEN.lock().ok().and_then(|mut g| g.as_mut().map(|s| s.drain().collect())).unwrap_or_default();
-    if let Some(t) = taskbar_list() { for h in ids { unsafe { let _ = t.AddTab(HWND(h as _)); } } }
-    let _ = std::fs::remove_file(appdata("hidden_tabs.txt"));
+    if let Some(t) = taskbar_list() { recovery::restore_all(&t); }
 }
 
 #[cfg(windows)]
 fn organizer_loop() {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Com::*;
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsWindow};
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
     restore_from_last_run();
     let Some(tbl) = taskbar_list() else { return };
     let mut last_reapply = Instant::now();
+    let mut last_guard_retry = Instant::now();
     loop {
         std::thread::sleep(Duration::from_millis(700));
         let cfg = org_config();
@@ -345,29 +343,28 @@ fn organizer_loop() {
         let wins = enum_app_windows();
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
-        let on = ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed);
+        let guarded = guard_running();
+        let on = guarded && ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed);
         let mut snap = vec![];
-        {
-            let mut g = HIDDEN.lock().unwrap();
-            let hidden = g.get_or_insert_with(HashSet::new);
-            hidden.retain(|h| unsafe { IsWindow(Some(HWND(*h as _))).as_bool() });
-            let reapply = last_reapply.elapsed() > Duration::from_secs(4);
-            for (h, title, exe) in &wins {
-                let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
-                let hw = HWND(*h as _);
-                if on && !kept {
-                    // apps re-add their own button when they re-show a window, so re-apply now and then
-                    if !hidden.contains(h) || reapply { unsafe { let _ = tbl.DeleteTab(hw); } hidden.insert(*h); }
+        let reapply = last_reapply.elapsed() > Duration::from_secs(4);
+        for (h, title, exe) in &wins {
+            let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
+            if on && !kept {
+                // A failed journal write or DeleteTab leaves the native button visible.
+                if recovery::hide_window(*h, reapply, &tbl) {
                     snap.push(WinInfo { hwnd: *h, title: title.clone(), exe: exe.clone(), name: pretty_name(exe),
                                         category: categorize(exe, &cfg), active: *h == fg });
-                } else if hidden.remove(h) {
-                    unsafe { let _ = tbl.AddTab(hw); }
                 }
+            } else {
+                recovery::restore_window(*h, &tbl);
             }
-            if !on { for h in hidden.drain() { unsafe { let _ = tbl.AddTab(HWND(h as _)); } } }
-            if reapply { last_reapply = Instant::now(); }
         }
-        save_hidden_list();
+        if !on { recovery::restore_all(&tbl); }
+        if !guarded && last_guard_retry.elapsed() > Duration::from_secs(10) {
+            spawn_guard();
+            last_guard_retry = Instant::now();
+        }
+        if reapply { recovery::prune_closed(); last_reapply = Instant::now(); }
         let order = &cfg.order;
         snap.sort_by(|a, b| (order.iter().position(|o| *o == a.category).unwrap_or(98), &a.name).cmp(&(order.iter().position(|o| *o == b.category).unwrap_or(98), &b.name)));
         if let Ok(mut s) = SNAPSHOT.lock() { *s = snap; }
@@ -439,34 +436,65 @@ fn restart_frozen_dock() {
 }
 
 /// `--guard <pid>`: a tiny separate process that outlives the dock. When the dock exits for any reason (quit,
-/// crash, killed from Task Manager), it puts back every taskbar button still listed in hidden_tabs.txt. The
+/// crash, killed from Task Manager), it restores that owner's versioned recovery journal. The
 /// in-process watchdog covers a frozen dock; this covers a dead one. No window framework, just Win32.
 #[cfg(windows)]
-fn run_guard(pid: u32) {
-    use windows::Win32::Foundation::{CloseHandle, HWND};
+fn run_guard(owner: recovery::Owner) {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows::Win32::System::Com::*;
-    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, INFINITE, PROCESS_SYNCHRONIZE};
-    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    use windows::Win32::System::Threading::{OpenEventW, OpenProcess, SetEvent, WaitForSingleObject, EVENT_MODIFY_STATE, INFINITE, PROCESS_SYNCHRONIZE};
+    use windows::core::PCWSTR;
     unsafe {
-        let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) else { return };
-        let _ = WaitForSingleObject(h, INFINITE);
-        let _ = CloseHandle(h);
-        let Ok(list) = std::fs::read_to_string(appdata("hidden_tabs.txt")) else { return };  // clean quit removes it
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        if let Some(t) = taskbar_list() {
-            for hw in list.lines().filter_map(|l| l.trim().parse::<isize>().ok()) {
-                if IsWindow(Some(HWND(hw as _))).as_bool() { let _ = t.AddTab(HWND(hw as _)); }
+        if recovery::process_owner(owner.pid) == Some(owner) {
+            if let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, owner.pid) {
+                let name = guard_event_name(owner);
+                if let Ok(event) = OpenEventW(EVENT_MODIFY_STATE, false, PCWSTR(name.as_ptr())) {
+                    let _ = SetEvent(event);
+                    let _ = CloseHandle(event);
+                }
+                let result = WaitForSingleObject(h, INFINITE);
+                let _ = CloseHandle(h);
+                if result != WAIT_OBJECT_0 { return; }
             }
         }
-        let _ = std::fs::remove_file(appdata("hidden_tabs.txt"));
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        if let Some(t) = taskbar_list() {
+            for _ in 0..5 {
+                recovery::recover_owner(owner, &t);
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        }
     }
 }
 
 #[cfg(windows)]
 fn spawn_guard() {
-    if let Ok(exe) = std::env::current_exe() {
-        let _ = Command::new(exe).args(["--guard", &std::process::id().to_string()]).spawn();
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+    if guard_running() { return; }
+    if let (Ok(exe), Some(owner)) = (std::env::current_exe(), recovery::process_owner(std::process::id())) {
+        let name = guard_event_name(owner);
+        let Ok(event) = (unsafe { CreateEventW(None, true, false, PCWSTR(name.as_ptr())) }) else { return; };
+        if let Ok(mut child) = Command::new(exe).args(["--guard", &owner.pid.to_string(), &owner.started.to_string()]).spawn() {
+            let ready = unsafe { WaitForSingleObject(event, 2_000) } == WAIT_OBJECT_0;
+            if ready {
+                if let Ok(mut guard) = GUARD.lock() { *guard = Some(child); }
+                else { let _ = child.kill(); let _ = child.wait(); }
+            } else { let _ = child.kill(); let _ = child.wait(); }
+        }
+        unsafe { let _ = CloseHandle(event); }
     }
+}
+
+#[cfg(windows)]
+fn guard_event_name(owner: recovery::Owner) -> Vec<u16> {
+    format!("Local\\UltraSuite.DockGuard.{}.{}\0", owner.pid, owner.started).encode_utf16().collect()
+}
+
+#[cfg(windows)]
+fn guard_running() -> bool {
+    GUARD.lock().ok().and_then(|mut guard| guard.as_mut().map(|child| matches!(child.try_wait(), Ok(None)))).unwrap_or(false)
 }
 
 /// `--restart-wait <pid>`: wait (up to 15 s) for the frozen copy to exit before starting.
@@ -1117,28 +1145,11 @@ fn handle_args(app: &AppHandle, args: &[String]) {
     }
 }
 
-/// Crash safety: remember which taskbar buttons we tucked away, so a restart can put them back
-/// even if the previous run was killed before it could restore them.
-fn save_hidden_list() {
-    if let Ok(g) = HIDDEN.lock() {
-        let ids: Vec<String> = g.as_ref().map(|s| s.iter().map(|h| h.to_string()).collect()).unwrap_or_default();
-        let _ = std::fs::write(appdata("hidden_tabs.txt"), ids.join("\n"));
-    }
-}
-
 #[cfg(windows)]
 fn restore_from_last_run() {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Com::*;
-    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
-    let Ok(s) = std::fs::read_to_string(appdata("hidden_tabs.txt")) else { return };
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
-    if let Some(t) = taskbar_list() {
-        for h in s.lines().filter_map(|l| l.trim().parse::<isize>().ok()) {
-            if unsafe { IsWindow(Some(HWND(h as _))).as_bool() } { unsafe { let _ = t.AddTab(HWND(h as _)); } }
-        }
-    }
-    let _ = std::fs::remove_file(appdata("hidden_tabs.txt"));
+    if let Some(t) = taskbar_list() { recovery::recover_previous(&t); }
 }
 
 fn run_survey() {
@@ -1157,8 +1168,10 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--uninstall-survey") { run_survey(); return; }
     #[cfg(windows)]
-    if let Some(pid) = args.iter().position(|a| a == "--guard").and_then(|i| args.get(i + 1)).and_then(|p| p.parse::<u32>().ok()) {
-        run_guard(pid);
+    if let Some(i) = args.iter().position(|a| a == "--guard") {
+        if let (Some(pid), Some(started)) = (args.get(i + 1).and_then(|p| p.parse().ok()), args.get(i + 2).and_then(|p| p.parse().ok())) {
+            run_guard(recovery::Owner { pid, started });
+        }
         return;
     }
     #[cfg(windows)]
@@ -1188,9 +1201,9 @@ fn main() {
             {
                 let h2 = handle.clone();
                 std::thread::spawn(move || taskbar_tracker(h2));
+                spawn_guard();
                 std::thread::spawn(organizer_loop);
                 std::thread::spawn(watchdog);
-                spawn_guard();
             }
             let h3 = handle.clone();
             std::thread::spawn(move || alarm_watch(h3));
