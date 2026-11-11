@@ -2,7 +2,7 @@
 
 Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
 
-[Download the Windows installer, v2.2.7 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.7/UltraSuite-Setup-2.2.7-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
+[Download the Windows installer, v2.2.9 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.9/UltraSuite-Setup-2.2.9-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
 This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
 
@@ -29,7 +29,7 @@ Uninstall through Windows Settings > Apps. Back up any alarm schedules you need 
 
 ## What the apps show
 
-PC Sentinel includes CPU, GPU and memory readings; grouped process usage; cooling sensors; drive information; network latency; an on-demand speed test; Windows power/display controls; sensor tables; and a diagnostic export. Battery information is shown when a battery is detected.
+PC Sentinel includes CPU, GPU and memory readings; grouped process usage; cooling sensors; drive information; network latency; an on-demand speed test; Windows power/display controls; sensor tables; and a diagnostic export. Battery information is shown when a battery is detected. Desktop users can search an offline PSU catalog by brand, wattage, form factor and model, or enter details manually. See the [catalog sources and limitations](docs/PSU_CATALOG.md).
 
 Sensor availability depends on the hardware, Windows permissions and the data source. Missing readings must remain unavailable. Component power estimates are not a wall-power measurement. A PSU rating describes capacity, not current consumption.
 
@@ -41,7 +41,7 @@ Ultra Dock keeps pinned/selected apps on the native taskbar and groups other ope
 
 Main now includes tested source changes for WebSocket origin checks, conservative drive matching, write-ahead Dock recovery, far-future alarm occurrences, absolute UTC wake deadlines, clearer storage capacity, and stricter Dock visibility gating.
 
-The v2.2.7 installer is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
+The v2.2.9 installer includes launch recovery, keyboard-accessible Appearance dismissal and the optional offline PSU picker. It is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
 
 The [roadmap](ROADMAP.md) contains 24 public phases and 288 detailed engineering and acceptance tasks. Candidate features remain proposals. Stress-test parity, universal hardware support and best-in-category claims have not been established.
 
