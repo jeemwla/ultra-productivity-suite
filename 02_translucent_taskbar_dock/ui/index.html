@@ -49,6 +49,11 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:default;outlin
 .more:hover{background:var(--hover);color:var(--ink-2)}
 .more svg{width:14px;height:14px;transition:transform .3s var(--ease)}
 .more[aria-expanded=true] svg{transform:rotate(180deg)}
+.more{position:relative}
+.more .udot{position:absolute;right:5px;top:10px;width:7px;height:7px;border-radius:50%;background:var(--bar-active);box-shadow:0 0 0 2px rgba(0,0,0,.25);animation:upulse 2.4s var(--ease) infinite}
+@keyframes upulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+.act.upd{color:var(--bar-active)}
+@media (prefers-reduced-motion:reduce){.more .udot{animation:none}}
 .act{height:40px;padding:0 10px;border-radius:4px;font-size:12px;font-weight:600;color:var(--ink-2)}
 .act:hover{background:var(--hover);color:var(--ink)}
 .act.on{color:var(--bar-active)}
@@ -138,8 +143,9 @@ function render(){
         <span class="folder ${uniq.length === 1 ? "n1" : ""}">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="runbar"></span></button>
       <div class="tray ${open === cat ? "open" : ""}"><div class="inner">${ws.map(w => `<button class="win ${w.active ? "active" : ""}" data-h="${w.hwnd}" title="${esc(w.title)}">${img(w.exe)}<span class="runbar"></span></button>`).join("")}</div></div></div>`;
   }).join("");
-  const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="Ultra Dock">${CHEV}</button>
-    <div class="tray ${open === "__menu" ? "open" : ""}"><div class="inner">
+  const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
+  const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${update ? `Ultra Dock: version ${esc(update.latest)} is available` : "Ultra Dock"}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
+    <div class="tray ${open === "__menu" ? "open" : ""}"><div class="inner">${upAct}
       <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
       <button class="act" data-act="edit">Edit</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
@@ -174,6 +180,7 @@ $("strip").addEventListener("click", async (e) => {
     if (k === "sentinel" || k === "alarm") invoke && invoke("open_app_view", { name: k });
     if (k === "edit") invoke && invoke("open_config");
     if (k === "quit") invoke && invoke("quit");
+    if (k === "update") { installUpdate(); return; }  // keep the menu open so the progress text stays visible
     setTimeout(() => setOpen(null), 150);
   }
 });
@@ -188,7 +195,32 @@ async function poll(){
     if (nsig !== sig) { sig = nsig; render(); }
   } catch {}
 }
-if (view === "strip") { poll(); setInterval(poll, 700); }
+/* ---------------- Update dot ----------------
+   The core checks GitHub (cached for 6 hours); a dot on the menu chevron says a new version is out. */
+const CORE = "http://127.0.0.1:8081";
+let update = null;
+async function checkUpdate(){
+  try {
+    const u = await (await fetch(`${CORE}/api/update`, { cache: "no-store" })).json();
+    const next = u && u.available && u.asset ? { latest: u.latest, current: u.current, label: update && update.latest === u.latest ? update.label : null } : null;
+    if (JSON.stringify(next) !== JSON.stringify(update)) { update = next; render(); }
+  } catch {}
+}
+function setUpdateLabel(text){
+  if (!update) return; update.label = text;
+  const b = $("strip").querySelector('[data-act="update"]'); if (!b) return;
+  b.textContent = text;
+  const tray = b.closest(".tray"); if (tray && tray.classList.contains("open")) { const w = tray.querySelector(".inner").scrollWidth; tray.style.width = w + "px"; report(); }
+}
+async function installUpdate(){
+  if (!update || update.busy) return; update.busy = true; setUpdateLabel("Downloading…");
+  try {
+    const r = await fetch(`${CORE}/api/update/install`, { method: "POST" });
+    if (!r.ok) throw new Error();
+    setUpdateLabel("Installing…");  // the installer closes Ultra Suite, updates it and opens it again
+  } catch { update.busy = false; setUpdateLabel("Update failed, try again"); }
+}
+if (view === "strip") { poll(); setInterval(poll, 700); setTimeout(checkUpdate, 8000); setInterval(checkUpdate, 30 * 60 * 1000); }
 </script>
 </body>
 </html>
