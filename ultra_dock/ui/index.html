@@ -26,6 +26,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:default;outlin
 /* A folder that is re-drawn while already open appears at full width at once (no slide), so the strip can
    measure its real width in the same frame. */
 .tray.now{transition:none}
+/* A category with a single app shows that app directly, always visible */
+.solo .win{opacity:1;transform:none}
 .group{display:flex;align-items:center;height:100%}
 .grp{position:relative;height:40px;min-width:44px;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .12s}
 .grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
@@ -172,6 +174,8 @@ function render(){
   const html = gs.map(([cat, ws]) => {
     const uniq = []; const seen = new Set(); for (const w of ws) if (!seen.has(w.exe)) { seen.add(w.exe); uniq.push(w); }
     const active = ws.some(w => w.active);
+    // One app in a category: a folder would only add a click, so show the app itself
+    if (uniq.length === 1) return `<div class="group solo" data-cat="${esc(cat)}">${appButton(uniq[0].exe, ws)}</div>`;
     return `<div class="group" data-cat="${esc(cat)}">
       <button class="grp ${active ? "has-active" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" title="${esc(cat)}: ${ws.map(w => w.title).slice(0, 6).map(esc).join(" · ")}">
         <span class="folder ${uniq.length === 1 ? "n1" : ""}">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="runbar"></span></button>
@@ -193,7 +197,7 @@ function report(){ if (invoke) invoke("set_strip_width", { width: Math.ceil($("s
 function setOpen(cat){
   const prev = open; open = cat;
   if (pick && prev !== cat) { pick = null; render(); }  // a window list never outlives its folder
-  $("strip").querySelectorAll(".group").forEach(g => {
+  $("strip").querySelectorAll(".group:not(.solo)").forEach(g => {
     const isOpen = g.dataset.cat === cat, tray = g.querySelector(".tray"), b = g.querySelector(".grp,.more");
     b.setAttribute("aria-expanded", isOpen);
     tray.classList.remove("now");  // opening and closing by click slide as usual
@@ -209,7 +213,7 @@ function setOpen(cat){
 $("strip").addEventListener("click", async (e) => {
   const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), t = e.target.closest(".wt"), a = e.target.closest(".act");
   if (g) { setOpen(open === g.dataset.cat ? null : g.dataset.cat); return; }
-  if (t) { if (invoke) await invoke("activate", { hwnd: +t.dataset.h }); setTimeout(() => setOpen(null), 220); return; }  // setOpen clears the list
+  if (t) { if (invoke) await invoke("activate", { hwnd: +t.dataset.h }); setTimeout(closeAll, 220); return; }
   if (w) {
     if (w.hasAttribute("aria-expanded")) { pick = pick === w.dataset.exe ? null : w.dataset.exe; render(); return; }  // several windows: show or hide the list
     if (invoke) await invoke("activate", { hwnd: +w.dataset.h }); setTimeout(() => setOpen(null), 220); return;
@@ -224,7 +228,12 @@ $("strip").addEventListener("click", async (e) => {
     setTimeout(() => setOpen(null), 150);
   }
 });
-$("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(() => { if (open) setOpen(null); }, 1200); });
+/* Close any open folder and window list (a single app's list lives outside any folder) */
+function closeAll(){
+  if (open) { setOpen(null); return; }  // setOpen also clears a list inside the folder
+  if (pick) { pick = null; render(); }
+}
+$("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 1200); });
 $("strip").addEventListener("mouseenter", () => clearTimeout(closeTimer));
 
 async function poll(){

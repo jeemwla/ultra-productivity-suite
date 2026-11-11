@@ -545,13 +545,41 @@ fn window_icon_png(hwnd: isize) -> Option<Vec<u8>> {
     }
 }
 
+/// Microsoft Store (MSIX) apps keep their icon in the app package, not in the program file, so the file gives
+/// a blank. Their identity (e.g. "OpenAI.Codex_2p2nqsd0c76g0!App") points at the Start menu entry, which has it.
+#[cfg(windows)]
+fn package_aumid(hwnd: isize) -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::{CloseHandle, HWND};
+    use windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    unsafe {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(HWND(hwnd as _), Some(&mut pid));
+        let ph = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = vec![0u16; 512];
+        let mut len = buf.len() as u32;
+        let r = GetApplicationUserModelId(ph, &mut len, Some(PWSTR(buf.as_mut_ptr())));
+        let _ = CloseHandle(ph);
+        if r.0 != 0 { return None; }
+        let n = buf.iter().position(|&c| c == 0).unwrap_or(0);
+        if n == 0 { None } else { Some(String::from_utf16_lossy(&buf[..n])) }
+    }
+}
+
 #[tauri::command]
 async fn get_icon(target: String, hwnd: Option<isize>) -> Option<String> {
     if let Some(c) = ICONS.lock().ok().and_then(|m| m.as_ref().and_then(|m| m.get(&target).cloned())) { return Some(c); }
     let t = target.clone();
     #[cfg(windows)]
-    let png = tauri::async_runtime::spawn_blocking(move || icon_png(&expand_env(&t), 64).or_else(|| hwnd.and_then(window_icon_png)))
-        .await.ok().flatten()?;
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        let store_app = t.to_lowercase().contains("\\windowsapps\\");
+        let from_package = || hwnd.and_then(package_aumid).and_then(|id| icon_png(&format!("shell:AppsFolder\\{id}"), 64));
+        (if store_app { from_package() } else { None })
+            .or_else(|| icon_png(&expand_env(&t), 64))
+            .or_else(|| hwnd.and_then(window_icon_png))
+    }).await.ok().flatten()?;
     #[cfg(not(windows))]
     let png: Vec<u8> = { let _ = t; return None; };
     let url = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png));
@@ -896,11 +924,53 @@ fn set_autostart() {
     }
 }
 
+// ----------------------------------------------------------------------------- dock on/off (tray icon)
+/// The "Ultra Dock" switch in the tray icon's menu (Windows' hidden-icons area). Off: every app goes back to the
+/// normal taskbar and the strip disappears. On: folders come back. Remembered in %APPDATA%\UltraSuite\dock.txt.
+static DOCK_ITEM: Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>> = Mutex::new(None);
+
+fn dock_saved_on() -> bool {
+    std::fs::read_to_string(appdata("dock.txt")).map(|s| s.trim() != "off").unwrap_or(true)
+}
+
+fn set_dock_enabled(on: bool) {
+    ORGANIZE.store(on, Ordering::Relaxed);    // off: the organizer gives every button back
+    STRIP_HIDDEN.store(!on, Ordering::Relaxed);
+    let _ = std::fs::write(appdata("dock.txt"), if on { "on" } else { "off" });
+    if let Ok(g) = DOCK_ITEM.lock() { if let Some(item) = g.as_ref() { let _ = item.set_checked(on); } }
+}
+
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+    let dock = CheckMenuItem::with_id(app, "dock", "Ultra Dock", true, dock_saved_on(), None::<&str>)?;
+    let sentinel = MenuItem::with_id(app, "sentinel", "Open PC Sentinel", true, None::<&str>)?;
+    let alarm = MenuItem::with_id(app, "alarm", "Open Code Red Alarm", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Ultra Suite", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&dock, &PredefinedMenuItem::separator(app)?, &sentinel, &alarm,
+                                       &PredefinedMenuItem::separator(app)?, &quit_item])?;
+    if let Ok(mut g) = DOCK_ITEM.lock() { *g = Some(dock); }
+    TrayIconBuilder::with_id("ultra-suite")
+        .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/apps/dock.png"))?)
+        .tooltip("Ultra Suite")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "dock" => set_dock_enabled(STRIP_HIDDEN.load(Ordering::Relaxed)),  // hidden now: turn it on, and the reverse
+            "sentinel" => open_view(app, "sentinel"),
+            "alarm" => open_view(app, "alarm"),
+            "quit" => quit(app.clone()),
+            _ => {}
+        })
+        .build(app)?;
+    Ok(())
+}
+
 fn handle_args(app: &AppHandle, args: &[String]) {
     let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
     if let Some(v) = get("--open") { open_view(app, &v); }
     if let Some(k) = get("--event") { std::thread::spawn(move || { post_event(&k, None, None); }); }
-    if args.iter().any(|a| a == "--show-dock") { STRIP_HIDDEN.store(false, Ordering::Relaxed); ORGANIZE.store(true, Ordering::Relaxed); }
+    if args.iter().any(|a| a == "--show-dock") { set_dock_enabled(true); }
     if args.iter().any(|a| a == "--quit") {
         // clean shutdown (puts every tucked-away taskbar button back first)
         #[cfg(windows)]
@@ -962,6 +1032,8 @@ fn main() {
             #[cfg(windows)]
             make_noactivate(&strip);
             if let Ok(h) = strip.hwnd() { STRIP_HWND.store(h.0 as isize, Ordering::Relaxed); }
+            if !dock_saved_on() { ORGANIZE.store(false, Ordering::Relaxed); STRIP_HIDDEN.store(true, Ordering::Relaxed); }
+            if let Err(e) = build_tray(app) { println!("[tray] not available: {e}"); }
             // only the installed app registers itself to start with Windows (a dev build must never take over that entry)
             if !cfg!(debug_assertions) { set_autostart(); }
             #[cfg(windows)]
