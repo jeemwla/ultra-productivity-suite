@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from .lhm_collector import collect_hardware_telemetry
 from .net_monitor import get_live_ping_snapshot, run_on_demand_speedtest
 from .glinet_vpn import vpn_controller
+from . import speedtest
 
 latest = {"hardware": {"live": False, "source": "starting", "groups": [], "summary": {}},
           "network": {"online": False, "targets": []}, "vpn": vpn_controller.status(), "ts": 0}
@@ -76,6 +77,26 @@ async def toggle_glinet_vpn(payload: VPNTogglePayload):
     result = await vpn_controller.toggle_vpn(payload.enable)
     latest["vpn"] = result
     return result
+
+
+@app.websocket("/ws/speedtest")
+async def speedtest_ws(ws: WebSocket):
+    """Runs one full speed test and streams every reading to the page."""
+    await ws.accept()
+
+    async def send(msg):
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            pass
+
+    try:
+        await speedtest.run(send)
+    finally:
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 @app.websocket("/ws")

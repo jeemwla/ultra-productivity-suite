@@ -11,7 +11,7 @@
 :root{
   --bg:#f5f6f8; --surface:#fcfcfb; --surface-2:#f0f1f3; --line:#e4e6ea; --line-strong:#d2d6dc;
   --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7d7c78;
-  --series:#2a78d6; --series-track:#dbe8f9; --grid:#e9eaec;
+  --series:#2a78d6; --series-track:#dbe8f9; --grid:#e9eaec; --series-2:#eb6834;
   --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
   --good-soft:#e5f5e5; --warning-soft:#fff4dc; --critical-soft:#fbe9e9;
   --accent:#2a78d6; --accent-soft:#e3eefb;
@@ -22,7 +22,7 @@
 @media (prefers-color-scheme: dark){:root{
   --bg:#111110; --surface:#1a1a19; --surface-2:#222220; --line:#2a2a28; --line-strong:#383835;
   --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86;
-  --series:#3987e5; --series-track:#1d3557; --grid:#2a2a28;
+  --series:#3987e5; --series-track:#1d3557; --grid:#2a2a28; --series-2:#d95926;
   --good-soft:#15291a; --warning-soft:#33280f; --critical-soft:#371919;
   --accent:#3987e5; --accent-soft:#1b2c45; --shadow:0 1px 2px rgba(0,0,0,.4);
 }}
@@ -130,7 +130,46 @@ td.cb{width:36px}
 td.type{color:var(--ink-3);white-space:nowrap}
 .empty{padding:28px;text-align:center;color:var(--ink-3)}
 
-@media (max-width:1200px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
+/* Speed test */
+.st{display:grid;grid-template-columns:300px minmax(0,1fr);gap:28px;align-items:center}
+.gauge-wrap{position:relative;width:280px;height:250px;margin:0 auto}
+.gauge-wrap svg{width:280px;height:230px;display:block;overflow:visible}
+.g-center{position:absolute;left:0;right:0;top:78px;text-align:center;pointer-events:none}
+.g-val{font:600 52px/1 var(--font-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.g-unit{font-size:13px;color:var(--ink-3);font-weight:600;margin-top:2px}
+.g-phase{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface-2);padding:4px 10px;border-radius:999px}
+.g-phase .pd{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+.g-phase.on .pd{background:var(--series);animation:blink 1s ease-in-out infinite}
+.g-phase.up .pd{background:var(--series-2)}
+@keyframes blink{50%{opacity:.25}}
+.go{position:absolute;left:50%;bottom:0;transform:translateX(-50%);min-width:150px;height:44px;border-radius:999px;font-size:15px}
+.g-tick{font-size:10.5px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.res{border:1px solid var(--line);border-radius:12px;padding:12px 14px;transition:border-color .2s,background .2s}
+.res .l{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+.res .l i{width:10px;height:3px;border-radius:2px;display:inline-block}
+.res .v{font:600 26px/1.15 var(--font-display);font-variant-numeric:tabular-nums;margin-top:4px}
+.res .v small{font-size:12.5px;color:var(--ink-3);font-weight:600;margin-left:3px}
+.res.active{border-color:var(--accent);background:var(--accent-soft)}
+.chart-wrap{position:relative}
+.chart-wrap svg{width:100%;height:150px;display:block}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin:2px 0 6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:2px;border-radius:2px;display:inline-block}
+.xtip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
+.st-meta{font-size:12.5px;color:var(--ink-3);margin-top:8px;min-height:19px}
+
+/* Detailed: organized sub-sections */
+.subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;padding:4px 14px 14px}
+.subsec{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.subsec h4{display:flex;justify-content:space-between;align-items:center;font:600 12.5px var(--font);padding:9px 12px;background:var(--surface-2);color:var(--ink)}
+.subsec h4 span{font-weight:500;color:var(--ink-3)}
+.subsec table td,.subsec table th{padding:6px 12px}
+.subsec table tr:first-child td{border-top:0}
+.hint{font-size:12.5px;color:var(--ink-3);margin:-6px 0 12px}
+
+@media (max-width:1200px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.st{grid-template-columns:1fr}}
+@media (max-width:640px){.results{grid-template-columns:1fr 1fr}.subgrid{grid-template-columns:1fr;padding:4px 8px 10px}}
 @media (max-width:640px){
   .wrap{padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
   .tiles{grid-template-columns:1fr 1fr;gap:10px}
@@ -180,8 +219,31 @@ td.type{color:var(--ink-3);white-space:nowrap}
         <div class="filters" id="filters" role="group" aria-label="Sensor types"></div>
         <button type="button" class="btn" id="show-all">Show hidden</button>
       </div>
+      <p class="hint">Each part of your PC is split into sections (temperatures, power, clocks, usage, fans, voltages). Untick a sensor to hide it; "Show hidden" brings it back.</p>
       <div id="groups"></div>
     </div></div>
+  </section>
+
+  <section class="card" style="margin-top:16px" aria-labelledby="h-st">
+    <div class="card-h"><h2 id="h-st">Speed test</h2><span class="sub" id="st-sub">About 25 seconds · ping, download, upload</span></div>
+    <div class="card-b st">
+      <div class="gauge-wrap">
+        <svg id="gauge" viewBox="0 0 280 230" role="img" aria-label="Speed gauge"></svg>
+        <div class="g-center"><div class="g-val" id="g-val">0</div><div class="g-unit">Mbps</div><div class="g-phase" id="g-phase"><span class="pd"></span><span id="g-phase-t">Ready</span></div></div>
+        <button type="button" class="btn primary go" id="st-go">Start</button>
+      </div>
+      <div>
+        <div class="results">
+          <div class="res" id="r-ping"><div class="l">Ping</div><div class="v"><span>–</span><small>ms</small></div></div>
+          <div class="res" id="r-jitter"><div class="l">Jitter</div><div class="v"><span>–</span><small>ms</small></div></div>
+          <div class="res" id="r-down"><div class="l"><i style="background:var(--series)"></i>Download</div><div class="v"><span>–</span><small>Mbps</small></div></div>
+          <div class="res" id="r-up"><div class="l"><i style="background:var(--series-2)"></i>Upload</div><div class="v"><span>–</span><small>Mbps</small></div></div>
+        </div>
+        <div class="legend"><span><i style="background:var(--series)"></i>Download</span><span><i style="background:var(--series-2)"></i>Upload</span><span style="color:var(--ink-3)">Mbps over each 10-second phase</span></div>
+        <div class="chart-wrap" id="chart-wrap"><svg id="st-chart" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Throughput during the test"></svg></div>
+        <div class="st-meta" id="st-meta"></div>
+      </div>
+    </div>
   </section>
 
   <div class="grid2" style="margin-top:16px">
@@ -193,14 +255,6 @@ td.type{color:var(--ink-3);white-space:nowrap}
       </div>
     </section>
     <div class="stack">
-      <section class="card">
-        <div class="card-h"><h2>Speed test</h2><span class="sub">Runs only when you press it</span></div>
-        <div class="card-b">
-          <div class="speed"><span class="num" id="speed">–</span><span class="u">Mbps down</span></div>
-          <div class="muted" id="speed-meta" style="margin:-8px 0 14px">About 8 seconds, up to 25 MB</div>
-          <button type="button" class="btn primary block" id="speed-btn">Run speed test</button>
-        </div>
-      </section>
       <section class="card">
         <div class="card-h"><h2>VPN</h2><span class="sub" id="vpn-router"></span></div>
         <div class="card-b">
@@ -219,6 +273,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":
 const store = { get(k,d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
 const n1 = (v) => v == null ? "–" : (Math.round(v*10)/10).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1});
+const fmtRate = (b) => b == null ? "–" : b >= 1e6 ? `${n1(b/1e6)} MB/s` : b >= 1e3 ? `${n0(b/1e3)} KB/s` : `${n0(b)} B/s`;
 let snap = null, mode = store.get("mode","simple");
 let hidden = new Set(store.get("hiddenSensors", []));
 let types = new Set(store.get("types", ["Temperature","Load","Fan","Power","Clock","Voltage"]));
@@ -275,18 +330,30 @@ function renderDetail(){
   if (!hw.live) { $("groups").innerHTML = `<div class="empty">No sensor data. LibreHardwareMonitor is offline.</div>`; return; }
   const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1";
   const open = new Set(store.get("openGroups", ["cpu","gpu"]));
+  const SECTION = [["Temperature","Temperatures","°C"],["Power","Power draw","W"],["Load","Usage","%"],["Clock","Clock speeds","MHz"],
+    ["Fan","Fan speeds","RPM"],["Control","Fan control","%"],["Voltage","Voltages","V"],["Current","Current","A"],["Level","Levels","%"],
+    ["Data","Data","GB"],["SmallData","Memory","MB"],["Throughput","Throughput","B/s"],["Timing","Timings","ns"],["Factor","Factors",""],["Energy","Energy","mWh"],["Other","Other",""]];
+  const fmtV = (x) => x.type === "Throughput" ? fmtRate(x.value) : n1(x.value);
   const html = hw.groups.map(g => {
     const rows = g.sensors.filter(x => types.has(x.type) && (!q || (g.name + " " + x.name + " " + x.type).toLowerCase().includes(q)) && (showAll || !hidden.has(x.id)));
     if (!rows.length) return "";
     const key = g.kind + ":" + g.name;
+    const sections = SECTION.map(([t, title, unit]) => {
+      const list = rows.filter(x => x.type === t || (t === "Other" && !SECTION.some(s => s[0] === x.type)));
+      if (!list.length) return "";
+      const peak = list.reduce((m, x) => Math.max(m, x.value), -Infinity);
+      const summary = t === "Temperature" ? `hottest ${n0(peak)}°C` : t === "Power" ? `max ${n1(peak)} W` : t === "Fan" ? `fastest ${n0(peak)} RPM` : `${list.length}`;
+      return `<div class="subsec"><h4>${title}${unit && t !== "Throughput" ? ` <small style="font-weight:500;color:var(--ink-3)">(${unit})</small>` : ""}<span>${summary}</span></h4>
+        <table><thead><tr><th></th><th>Sensor</th><th class="num">Now</th><th class="num">Min</th><th class="num">Max</th></tr></thead><tbody>
+        ${list.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}">
+          <td class="cb"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td>
+          <td>${esc(x.name)}</td>
+          <td class="num"><b>${fmtV(x)}</b></td><td class="num">${x.type === "Throughput" ? fmtRate(x.min) : n1(x.min)}</td><td class="num">${x.type === "Throughput" ? fmtRate(x.max) : n1(x.max)}</td></tr>`).join("")}
+        </tbody></table></div>`;
+    }).join("");
     return `<details class="grp" data-key="${esc(key)}" ${open.has(key) || open.has(g.kind) || q ? "open" : ""}>
       <summary><span><span class="k">${KIND_LABEL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary>
-      <table><thead><tr><th></th><th>Sensor</th><th class="type">Type</th><th class="num">Now</th><th class="num">Min</th><th class="num">Max</th></tr></thead><tbody>
-      ${rows.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}">
-        <td class="cb"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td>
-        <td>${esc(x.name)}</td><td class="type">${esc(x.type)}</td>
-        <td class="num"><b>${n1(x.value)}</b> ${esc(x.unit)}</td><td class="num">${n1(x.min)}</td><td class="num">${n1(x.max)}</td></tr>`).join("")}
-      </tbody></table></details>`;
+      <div class="subgrid">${sections}</div></details>`;
   }).join("");
   $("groups").innerHTML = html || `<div class="empty">No sensors match.</div>`;
 }
@@ -355,15 +422,100 @@ function render(){
   renderNet(); renderVPN();
 }
 
-$("speed-btn").onclick = async () => {
-  const b = $("speed-btn"); b.disabled = true; b.textContent = "Testing…"; $("speed").textContent = "…";
-  try {
-    const r = await fetch("/api/speedtest", {method:"POST"}).then(r => r.json());
-    if (r.ok) { $("speed").textContent = n0(r.download_mbps); $("speed-meta").textContent = `${n1(r.megabytes)} MB in ${n1(r.seconds)} s from ${r.server} · ${new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}`; }
-    else { $("speed").textContent = "–"; $("speed-meta").textContent = r.error || "Speed test failed"; }
-  } catch { $("speed").textContent = "–"; $("speed-meta").textContent = "Couldn't reach the Sentinel server"; }
-  b.disabled = false; b.textContent = "Run again";
-};
+/* ---------- Speed test ---------- */
+const SVGNS = "http://www.w3.org/2000/svg";
+const G = { cx:140, cy:132, r:104, start:135, sweep:270 };
+let STOPS = [0, 5, 10, 50, 100, 250, 500, 1000];
+const st = { running:false, phase:null, target:0, shown:0, down:[], up:[], ws:null };
+const polar = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [G.cx + r * Math.cos(a), G.cy + r * Math.sin(a)]; };
+function arcPath(f){ const end = G.start + G.sweep * Math.max(0.0001, Math.min(1, f)); const [x1,y1] = polar(G.start, G.r), [x2,y2] = polar(end, G.r);
+  return `M${x1.toFixed(1)},${y1.toFixed(1)} A${G.r},${G.r} 0 ${end - G.start > 180 ? 1 : 0} 1 ${x2.toFixed(1)},${y2.toFixed(1)}`; }
+function frac(v){ const n = STOPS.length - 1; if (v <= 0) return 0; for (let i = 0; i < n; i++) if (v <= STOPS[i+1]) return (i + (v - STOPS[i]) / (STOPS[i+1] - STOPS[i])) / n; return 1; }
+function drawGauge(){
+  const ticks = STOPS.map((s, i) => { const [x,y] = polar(G.start + G.sweep * i / (STOPS.length - 1), G.r - 24);
+    return `<text class="g-tick" x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${s >= 1000 ? s/1000 + "k" : s}</text>`; }).join("");
+  $("gauge").innerHTML = `<path d="${arcPath(1)}" fill="none" stroke="var(--series-track)" stroke-width="14" stroke-linecap="round"/>
+    <path id="g-arc" d="${arcPath(0)}" fill="none" stroke="var(--series)" stroke-width="14" stroke-linecap="round"/>${ticks}`;
+}
+function animate(){
+  st.shown += (st.target - st.shown) * 0.12;
+  if (Math.abs(st.target - st.shown) < 0.05) st.shown = st.target;
+  const arc = $("g-arc"); if (arc) { arc.setAttribute("d", arcPath(frac(st.shown))); arc.setAttribute("stroke", st.phase === "upload" ? "var(--series-2)" : "var(--series)"); }
+  $("g-val").textContent = st.phase === "ping" ? n0(st.target) : (st.shown >= 100 ? n0(st.shown) : n1(st.shown));
+  if (st.running || st.shown !== st.target) requestAnimationFrame(animate);
+}
+function setPhase(label, mode){ const p = $("g-phase"); p.className = "g-phase" + (mode ? " on" : "") + (mode === "up" ? " up" : ""); $("g-phase-t").textContent = label; }
+function setRes(id, val, active){ const el = $(id); el.querySelector(".v span").textContent = val == null ? "–" : (val >= 100 ? n0(val) : n1(val)); el.classList.toggle("active", !!active); }
+function drawChart(hover){
+  const W = 600, H = 150, pad = 6, n = 50; // 50 samples per 10-second phase
+  const max = Math.max(10, ...st.down, ...st.up) * 1.1;
+  const x = (i) => pad + (i / (n - 1)) * (W - pad * 2), y = (v) => H - 4 - (v / max) * (H - 18);
+  const line = (arr, color) => arr.length > 1 ? `<path d="${arr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : "";
+  const grid = [0.5, 1].map(f => `<line x1="0" x2="${W}" y1="${y(max/1.1*f)}" y2="${y(max/1.1*f)}" stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("");
+  let cross = "";
+  if (hover != null) cross = `<line x1="${x(hover)}" x2="${x(hover)}" y1="0" y2="${H}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`;
+  $("st-chart").innerHTML = grid + `<line x1="0" x2="${W}" y1="${H-4}" y2="${H-4}" stroke="var(--line-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>` + line(st.down, "var(--series)") + line(st.up, "var(--series-2)") + cross;
+}
+$("chart-wrap").addEventListener("mousemove", (e) => {
+  const r = $("chart-wrap").getBoundingClientRect(), i = Math.max(0, Math.min(49, Math.round(((e.clientX - r.left) / r.width) * 49)));
+  document.querySelectorAll(".xtip").forEach(t => t.remove());
+  if (!st.down.length && !st.up.length) return;
+  drawChart(i);
+  const t = document.createElement("div"); t.className = "xtip"; t.style.left = `${e.clientX - r.left}px`;
+  t.textContent = `${(i * 0.2).toFixed(1)} s · down ${st.down[i] == null ? "–" : n0(st.down[i])} · up ${st.up[i] == null ? "–" : n0(st.up[i])} Mbps`;
+  $("chart-wrap").appendChild(t);
+});
+$("chart-wrap").addEventListener("mouseleave", () => { document.querySelectorAll(".xtip").forEach(t => t.remove()); drawChart(); });
+
+function showLast(){
+  const last = store.get("lastSpeed", null);
+  if (!last) { $("st-meta").textContent = "Press Start to measure ping, download and upload through Cloudflare."; return; }
+  setRes("r-ping", last.ping_ms); setRes("r-jitter", last.jitter_ms); setRes("r-down", last.download_mbps); setRes("r-up", last.upload_mbps);
+  $("st-meta").textContent = `Last test ${new Date(last.at * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})} · server ${last.server}`;
+}
+function startTest(){
+  if (st.running) { if (st.ws) st.ws.close(); return; }
+  st.running = true; st.down = []; st.up = []; st.target = 0; st.shown = 0; STOPS = [0, 5, 10, 50, 100, 250, 500, 1000]; drawGauge(); drawChart();
+  ["r-ping","r-jitter","r-down","r-up"].forEach(id => setRes(id, null, false));
+  $("st-go").textContent = "Stop"; $("st-meta").textContent = "Testing… keep other downloads paused for the most accurate result.";
+  requestAnimationFrame(animate);
+  const ws = st.ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/speedtest`);
+  let finished = false;
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === "phase") {
+      st.phase = m.phase; st.target = 0;
+      setPhase({ping:"Measuring ping", download:"Download", upload:"Upload"}[m.phase], m.phase === "upload" ? "up" : "on");
+      setRes({ping:"r-ping", download:"r-down", upload:"r-up"}[m.phase], null, true);
+    } else if (m.type === "progress") {
+      if (m.phase === "ping") { st.target = m.ping_ms; setRes("r-ping", m.ping_ms, true); }
+      else {
+        if (m.mbps > STOPS[STOPS.length - 1] * 0.95 && STOPS[STOPS.length - 1] < 5000) { STOPS = [0, 10, 50, 100, 250, 500, 1000, 2500, 5000]; drawGauge(); }
+        st.target = m.mbps; (m.phase === "download" ? st.down : st.up).push(m.mbps); drawChart();
+        setRes(m.phase === "download" ? "r-down" : "r-up", m.mbps, true);
+      }
+    } else if (m.type === "phase_done") {
+      if (m.phase === "ping") { setRes("r-ping", m.ping_ms); setRes("r-jitter", m.jitter_ms); $("st-sub").textContent = `Server: ${m.server} (Cloudflare)`; }
+      if (m.phase === "download") setRes("r-down", m.mbps);
+      if (m.phase === "upload") setRes("r-up", m.mbps);
+    } else if (m.type === "done") {
+      finished = true; store.set("lastSpeed", m); st.phase = null; st.target = m.download_mbps;
+      setPhase("Done", null);
+      $("st-meta").textContent = `Finished · ${n0(m.download_mbps)} down / ${n1(m.upload_mbps)} up Mbps · ping ${n0(m.ping_ms)} ms · server ${m.server}`;
+    } else if (m.type === "error") {
+      finished = true; setPhase("Failed", null); $("st-meta").textContent = m.error;
+    }
+  };
+  ws.onclose = () => {
+    st.running = false; $("st-go").textContent = "Test again";
+    if (!finished) { setPhase("Stopped", null); st.target = 0; $("st-meta").textContent = "Test stopped."; }
+    ["r-ping","r-jitter","r-down","r-up"].forEach(id => $(id).classList.remove("active"));
+    requestAnimationFrame(animate);
+  };
+  ws.onerror = () => { $("st-meta").textContent = "Couldn't reach the Sentinel server."; };
+}
+$("st-go").onclick = startTest;
+drawGauge(); drawChart(); showLast();
 $("vpn-btn").onclick = async () => {
   const b = $("vpn-btn"); b.disabled = true; b.textContent = "Working…";
   try { snap.vpn = await fetch("/api/vpn/toggle", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}).then(r => r.json()); renderVPN(); }
