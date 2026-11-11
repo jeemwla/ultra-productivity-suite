@@ -346,6 +346,8 @@ fn organizer_loop() {
     let Some(tbl) = taskbar_list() else { return };
     let mut last_reapply = Instant::now();
     let mut last_guard_retry = Instant::now();
+    let started = Instant::now();
+    let mut listing = dock_safety::StripListing::default();
     loop {
         std::thread::sleep(Duration::from_millis(700));
         let cfg = org_config();
@@ -358,20 +360,20 @@ fn organizer_loop() {
         let rendered = RENDERED_WINDOWS.lock().map(|r| r.clone()).unwrap_or_default();
         let mut snap = vec![];
         let reapply = last_reapply.elapsed() > Duration::from_secs(4);
+        let now_ms = started.elapsed().as_millis() as u64;
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
-            if !kept && ORGANIZE.load(Ordering::Relaxed) {
-                // Publish candidates first. Only the next successful DOM report
-                // can authorize hiding them, so a render error cannot lose apps.
+            // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
+            let hidden = on && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
+            if !hidden { recovery::restore_window(*h, &tbl); }
+            // List a window only while its native button is hidden (or briefly while hiding is first tried), so an
+            // app never shows twice: native button plus strip copy.
+            if !kept && ORGANIZE.load(Ordering::Relaxed) && listing.decide(*h, now_ms, on, hidden) {
                 snap.push(WinInfo { hwnd: *h, title: title.clone(), exe: exe.clone(), name: pretty_name(exe),
                                     category: categorize(exe, &cfg), active: *h == fg });
             }
-            if on && !kept && rendered.contains(h) {
-                recovery::hide_window(*h, reapply, &tbl);
-            } else {
-                recovery::restore_window(*h, &tbl);
-            }
         }
+        listing.retain(&wins.iter().map(|w| w.0).collect());
         if !on { recovery::restore_all(&tbl); }
         if !guarded && last_guard_retry.elapsed() > Duration::from_secs(10) {
             spawn_guard();
