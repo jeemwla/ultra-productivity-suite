@@ -45,6 +45,17 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:default;outlin
 .win .ph{width:24px;height:24px;border-radius:6px}
 .win .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease)}
 .win.active .runbar{width:16px;background:var(--bar-active)}
+/* An app with several windows: one icon, a count, and an inline list of its windows */
+.win .wn{position:absolute;right:3px;top:4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#3a3a3a;color:#fff;font:600 9px/14px var(--font);text-align:center;box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
+@media (prefers-color-scheme: light){.win .wn{background:#e8e8e8;color:#000}}
+.win[aria-expanded=true]{background:var(--open)}
+.pick{display:flex;align-items:center;height:40px;padding:0 2px;margin:0 2px;border-left:1px solid var(--line);border-right:1px solid var(--line);animation:pin .25s var(--ease)}
+@keyframes pin{from{opacity:0;transform:translateX(-6px)}}
+.wt{height:32px;max-width:170px;padding:0 10px;border-radius:4px;font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wt:hover{background:var(--hover);color:var(--ink)}
+.wt.active{color:var(--ink);font-weight:600}
+.pick.dense .wt{max-width:104px;padding:0 7px}
+@media (prefers-reduced-motion:reduce){.pick{animation:none}}
 .more{width:28px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-3);transition:background .12s,color .12s}
 .more:hover{background:var(--hover);color:var(--ink-2)}
 .more svg{width:14px;height:14px;transition:transform .3s var(--ease)}
@@ -133,6 +144,23 @@ function groups(){
   return [...by.entries()].sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99));
 }
 
+/* "Inbox (3) - Gmail - Opera" -> "Inbox (3) - Gmail": drop the trailing app name, keep it short */
+function shortTitle(t, n){
+  const parts = String(t || "").split(/ [-–—] /);
+  const s = (parts.length > 1 ? parts.slice(0, -1).join(" - ") : parts[0]).trim() || `Window ${n}`;
+  return s.length > 28 ? s.slice(0, 27).trimEnd() + "…" : s;
+}
+let pick = null;  // exe whose window list is showing
+function appButton(exe, wins){
+  const active = wins.some(w => w.active), many = wins.length > 1, shown = many && pick === exe;
+  const name = exe.split(/[\\/]/).pop().replace(/\.exe$/i, "");
+  const btn = `<button class="win ${active ? "active" : ""}" data-exe="${esc(exe)}" data-h="${wins[0].hwnd}" ${many ? `aria-expanded="${shown}"` : ""}
+    title="${esc(many ? `${name}: ${wins.length} windows` : wins[0].title)}">${img(exe)}${many ? `<span class="wn">${wins.length}</span>` : ""}<span class="runbar"></span></button>`;
+  if (!shown) return btn;
+  return btn + `<span class="pick ${wins.length > 4 ? "dense" : ""}" role="menu" aria-label="${esc(name)} windows">${wins.map((w, i) =>
+    `<button class="wt ${w.active ? "active" : ""}" role="menuitem" data-h="${w.hwnd}" title="${esc(w.title)}">${esc(shortTitle(w.title, i + 1))}</button>`).join("")}</span>`;
+}
+
 function render(){
   const gs = groups();
   const html = gs.map(([cat, ws]) => {
@@ -141,7 +169,7 @@ function render(){
     return `<div class="group" data-cat="${esc(cat)}">
       <button class="grp ${active ? "has-active" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" title="${esc(cat)}: ${ws.map(w => w.title).slice(0, 6).map(esc).join(" · ")}">
         <span class="folder ${uniq.length === 1 ? "n1" : ""}">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="runbar"></span></button>
-      <div class="tray ${open === cat ? "open" : ""}"><div class="inner">${ws.map(w => `<button class="win ${w.active ? "active" : ""}" data-h="${w.hwnd}" title="${esc(w.title)}">${img(w.exe)}<span class="runbar"></span></button>`).join("")}</div></div></div>`;
+      <div class="tray ${open === cat ? "open" : ""}"><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
   const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${update ? `Ultra Dock: version ${esc(update.latest)} is available` : "Ultra Dock"}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
@@ -158,6 +186,7 @@ function report(){ if (invoke) invoke("set_strip_width", { width: Math.ceil($("s
 
 function setOpen(cat){
   const prev = open; open = cat;
+  if (pick && prev !== cat) { pick = null; render(); }  // a window list never outlives its folder
   $("strip").querySelectorAll(".group").forEach(g => {
     const isOpen = g.dataset.cat === cat, tray = g.querySelector(".tray"), b = g.querySelector(".grp,.more");
     b.setAttribute("aria-expanded", isOpen);
@@ -171,9 +200,13 @@ function setOpen(cat){
 }
 
 $("strip").addEventListener("click", async (e) => {
-  const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), a = e.target.closest(".act");
+  const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), t = e.target.closest(".wt"), a = e.target.closest(".act");
   if (g) { setOpen(open === g.dataset.cat ? null : g.dataset.cat); return; }
-  if (w) { if (invoke) await invoke("activate", { hwnd: +w.dataset.h }); setTimeout(() => setOpen(null), 220); return; }
+  if (t) { if (invoke) await invoke("activate", { hwnd: +t.dataset.h }); setTimeout(() => setOpen(null), 220); return; }  // setOpen clears the list
+  if (w) {
+    if (w.hasAttribute("aria-expanded")) { pick = pick === w.dataset.exe ? null : w.dataset.exe; render(); return; }  // several windows: show or hide the list
+    if (invoke) await invoke("activate", { hwnd: +w.dataset.h }); setTimeout(() => setOpen(null), 220); return;
+  }
   if (a) {
     const k = a.dataset.act;
     if (k === "showall") { state.organize = !state.organize; if (invoke) await invoke("set_organize", { on: state.organize }); sig = ""; }
