@@ -199,6 +199,15 @@ class Versions(unittest.TestCase):
         self.assertGreater(devtools._vtuple("v2.1.0"), devtools._vtuple("2.0.1"))
         self.assertEqual(devtools._vtuple("2.1"), devtools._vtuple("2.1.0"))
 
+    def test_update_summary(self):
+        import devtools
+        notes = "## Ultra Suite 2.2.0: title\n\n### Fixed\n- **Alarms could ring hours off.** Long detail here.\n- Other"
+        self.assertEqual(devtools.summarize_notes(notes), "Alarms could ring hours off.")
+        lead = "## Title\n\nAlarms now ring on your PC's clock, and you can edit them.\n\n### Fixed\n- x"
+        self.assertEqual(devtools.summarize_notes(lead), "Alarms now ring on your PC's clock, and you can edit them.")
+        self.assertEqual(devtools.summarize_notes(""), "")
+        self.assertLessEqual(len(devtools.summarize_notes("- " + "word " * 80)), 140)
+
     def test_version_file(self):
         import devtools
         with open(os.path.join(ROOT, "VERSION"), encoding="utf-8") as f:

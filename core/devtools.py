@@ -40,6 +40,20 @@ def version() -> str:
     return "0.0.0"
 
 
+def summarize_notes(notes: str, limit: int = 140) -> str:
+    """One line for the update notice: the first plain sentence after the title, else the first bullet's lead."""
+    def clean(s):
+        return re.sub(r"[*_`#>]+", "", s).strip()
+    lines = [ln.strip() for ln in (notes or "").splitlines() if ln.strip()]
+    plain = [ln for ln in lines if not ln.startswith(("#", "-", "*", "|")) and len(clean(ln)) > 20]
+    bullets = [ln[1:].strip() for ln in lines if ln.startswith(("- ", "* "))]
+    pick = clean(plain[0]) if plain else clean(bullets[0]) if bullets else ""
+    if not plain and pick:
+        m = re.match(r"(.+?[.!?])(\s|$)", pick)  # a bullet's bold lead usually ends at its first full stop
+        pick = m.group(1) if m else pick
+    return pick if len(pick) <= limit else pick[:limit - 1].rsplit(" ", 1)[0] + "…"
+
+
 def _vtuple(v: str):
     out = []
     for part in v.lstrip("vV").split("."):
@@ -131,6 +145,7 @@ def add_shared_routes(app, frontend_dir: str):
             tag = r.get("tag_name") or cur
             asset = next((a for a in r.get("assets", []) if a.get("name", "").lower().endswith(".exe") and "laptop" not in a["name"].lower()), None)
             out.update(latest=tag.lstrip("vV"), available=_vtuple(tag) > _vtuple(cur), notes=(r.get("body") or "")[:4000],
+                       summary=summarize_notes(r.get("body") or ""),
                        url=r.get("html_url"), asset=asset.get("browser_download_url") if asset else None,
                        published=r.get("published_at"))
         except Exception as exc:
