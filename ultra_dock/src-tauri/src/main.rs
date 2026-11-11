@@ -20,7 +20,7 @@ use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 const DEFAULT_ORG: &str = include_str!("../../config/organizer.json");
 const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
@@ -408,11 +408,47 @@ fn watchdog() {
             SendMessageTimeoutW(HWND(h as _), WM_NULL, WPARAM(0), LPARAM(0), SMTO_ABORTIFHUNG, 1500, Some(&mut res)).0 != 0
         };
         missed = if answered { 0 } else { missed + 1 };
+        if missed >= 5 { restart_frozen_dock(); }
         let seen = UI_SEEN.load(Ordering::Relaxed);
         let since = now_secs().saturating_sub(if seen == 0 { started } else { seen });
         let ok = dock_healthy(missed, STRIP_SHOWN.load(Ordering::Relaxed), TB_VISIBLE.load(Ordering::Relaxed), since);
         HEALTHY.store(ok, Ordering::Relaxed);
         if ok != was { println!("[watchdog] dock {}", if ok { "healthy again: organizing" } else { "not responding: taskbar buttons restored" }); was = ok; }
+    }
+}
+
+/// Last resort when the main thread has not answered for about 10 seconds. By then the organizer has already
+/// put every taskbar button back (two missed pings make the dock unhealthy). Start a fresh copy and leave; the
+/// background services are a separate process and keep running, so alarms are unaffected. At most 3 restarts
+/// in 10 minutes, so a dock that keeps freezing settles into "normal taskbar" instead of looping.
+#[cfg(windows)]
+fn restart_frozen_dock() {
+    let log = appdata("dock_restarts.txt");
+    let now = now_secs();
+    let mut recent: Vec<u64> = std::fs::read_to_string(&log).unwrap_or_default().lines()
+        .filter_map(|l| l.trim().parse().ok()).filter(|t| now.saturating_sub(*t) < 600).collect();
+    if recent.len() >= 3 { return; }
+    recent.push(now);
+    let _ = std::fs::write(&log, recent.iter().map(|t| t.to_string()).collect::<Vec<_>>().join("\n"));
+    let Ok(exe) = std::env::current_exe() else { return };
+    println!("[watchdog] main thread frozen: restarting the dock");
+    // the new copy waits for this one to be gone, so the single-instance check doesn't hand it back to us
+    let mut cmd = Command::new(exe);
+    cmd.args(["--background", "--restart-wait", &std::process::id().to_string()]);
+    if cmd.spawn().is_ok() { std::process::exit(0); }
+}
+
+/// `--restart-wait <pid>`: wait (up to 15 s) for the frozen copy to exit before starting.
+#[cfg(windows)]
+fn wait_for_old_copy(args: &[String]) {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+    let Some(pid) = args.iter().position(|a| a == "--restart-wait").and_then(|i| args.get(i + 1)).and_then(|p| p.parse::<u32>().ok()) else { return };
+    unsafe {
+        if let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            let _ = WaitForSingleObject(h, 15_000);
+            let _ = CloseHandle(h);
+        }
     }
 }
 
@@ -840,27 +876,44 @@ fn alarm_watch(app: AppHandle) {
         let now = http_get(8081, "/api/ring").map(|b| b.replace(' ', "").contains("\"is_ringing\":true")).unwrap_or(false);
         #[cfg(windows)]
         if now != ringing { keep_awake(now); }
+        // Window changes always run on the main thread (see taskbar_tracker for why).
         if now && !ringing {
             let a = app.clone();
             let _ = app.run_on_main_thread(move || {
                 open_view(&a, "alarm");
-                if let Some(w) = a.get_webview_window("alarm") { let _ = w.set_always_on_top(true); let _ = w.set_focus(); }
+                if let Some(w) = a.get_webview_window("alarm") {
+                    let _ = w.unminimize();
+                    let _ = w.set_always_on_top(true);  // above everything even if Windows refuses it focus
+                    let _ = w.set_focus();
+                    #[cfg(windows)]
+                    if let Ok(h) = w.hwnd() { activate(h.0 as isize); }  // the Alt-tap route that also wins focus
+                }
             });
         } else if !now && ringing {
-            if let Some(w) = app.get_webview_window("alarm") { let _ = w.set_always_on_top(false); }
+            let a = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Some(w) = a.get_webview_window("alarm") { let _ = w.set_always_on_top(false); }
+            });
         }
         ringing = now;
     }
 }
 
 // ----------------------------------------------------------------------------- strip placement
+/// Keeps the strip next to the last taskbar icon. Runs on its own thread, so it must never wait on the main
+/// thread: it uses only plain Win32 calls that return at once (SWP_ASYNCWINDOWPOS, ShowWindowAsync, DPI and
+/// monitor queries). It used to call the window framework's size/position/monitor functions from here; those
+/// hold the window's internal lock while waiting for the main thread, and when the main thread needed the same
+/// lock (answering a UI Automation request) both waited forever: the 2026-11-11 freezes.
 #[cfg(windows)]
-fn taskbar_tracker(app: AppHandle) {
+fn taskbar_tracker(_app: AppHandle) {
     use windows::core::w;
     use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
     use windows::Win32::System::Com::*;
     use windows::Win32::System::Variant::VARIANT;
     use windows::Win32::UI::Accessibility::*;
+    use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::WindowsAndMessaging::*;
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -870,13 +923,17 @@ fn taskbar_tracker(app: AppHandle) {
         let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false);
         loop {
             std::thread::sleep(Duration::from_millis(80));
-            let Some(strip) = app.get_webview_window("taskbar") else { continue };
+            let sh = STRIP_HWND.load(Ordering::Relaxed);
+            if sh == 0 { continue; }
+            let hwnd = HWND(sh as _);
             let Ok(tb) = FindWindowW(w!("Shell_TrayWnd"), None) else { continue };
             let mut r = RECT::default();
             if GetWindowRect(tb, &mut r).is_err() { continue; }
-            let Some(mon) = strip.primary_monitor().ok().flatten() else { continue };
-            let scale = mon.scale_factor();
-            let mon_bottom = mon.position().y + mon.size().height as i32;
+            let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+            if !GetMonitorInfoW(MonitorFromWindow(tb, MONITOR_DEFAULTTOPRIMARY), &mut mi).as_bool() { continue; }
+            let dpi = GetDpiForWindow(hwnd);
+            let scale = if dpi > 0 { dpi as f64 / 96.0 } else { 1.0 };
+            let mon_bottom = mi.rcMonitor.bottom;
             let tb_visible = r.top < mon_bottom - 6 && (r.bottom - r.top) > 20;
             // Full screen means: the window in front covers the whole monitor the taskbar is on. Windows' own
             // "busy" state can't be used: a full-screen picture on ANY screen (a USB sensor LCD, a second
@@ -917,14 +974,12 @@ fn taskbar_tracker(app: AppHandle) {
             let state = (x, r.top, w, h, show);
             if state == last { continue; }
             last = state;
-            let hwnd: HWND = match strip.hwnd() { Ok(hh) => HWND(hh.0 as _), Err(_) => continue };
             if show {
-                let _ = strip.set_size(PhysicalSize::new(w, h));
-                let _ = strip.set_position(PhysicalPosition::new(x, r.top));
-                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                // ASYNCWINDOWPOS: post the move to the window's own thread instead of waiting for it
+                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, r.top, w as i32, h as i32,
+                                     SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS);
             } else {
-                let _ = ShowWindow(hwnd, SW_HIDE);
+                let _ = ShowWindowAsync(hwnd, SW_HIDE);
             }
         }
     }
@@ -1070,6 +1125,8 @@ fn run_survey() {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--uninstall-survey") { run_survey(); return; }
+    #[cfg(windows)]
+    wait_for_old_copy(&args);
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let rest: Vec<String> = argv.into_iter().skip(1).collect();

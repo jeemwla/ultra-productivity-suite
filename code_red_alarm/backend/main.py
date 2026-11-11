@@ -15,7 +15,6 @@ from typing import List, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -243,12 +242,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Code Red Alarm API", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS and the local-only guard come from core/devtools.add_shared_routes (suite pages only)
 
 
 def fetch_all_alarms() -> List[dict]:

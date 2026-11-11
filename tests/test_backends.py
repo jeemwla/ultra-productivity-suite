@@ -143,7 +143,7 @@ class AlarmApi(unittest.TestCase):
         cls.m = il.import_module("alarm_pkg_test.main")
         cls.m.init_db()
         from fastapi.testclient import TestClient
-        cls.c = TestClient(cls.m.app)  # no "with": the scheduler loop stays off
+        cls.c = TestClient(cls.m.app, base_url="http://127.0.0.1:8081")  # no "with": the scheduler loop stays off
 
     @classmethod
     def tearDownClass(cls):
@@ -166,6 +166,13 @@ class AlarmApi(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         a = next(x for x in r.json()["alarms"] if x["id"] == aid)
         self.assertEqual((a["label"], a["time_hhmm"], a["last_triggered_date"]), ("Gym late", "07:45", None))
+
+    def test_rejects_other_websites_and_rebinding(self):
+        r = self.c.delete("/api/alarms/x", headers={"Origin": "https://evil.example"})
+        self.assertEqual(r.status_code, 403, "a website must not change alarms")
+        r = self.c.get("/api/alarms", headers={"Host": "attacker.example"})
+        self.assertEqual(r.status_code, 403, "DNS rebinding: requests not addressed to this PC are refused")
+        self.assertEqual(self.c.post("/api/alarms", json=self.body(), headers={"Origin": "http://127.0.0.1:8081"}).status_code, 200)
 
     def test_rejects_bad_input(self):
         self.assertEqual(self.c.put("/api/alarms/nope", json=self.body()).status_code, 404)
@@ -219,6 +226,17 @@ class Versions(unittest.TestCase):
         self.assertEqual(devtools.summarize_notes(lead), "Alarms now ring on your PC's clock, and you can edit them.")
         self.assertEqual(devtools.summarize_notes(""), "")
         self.assertLessEqual(len(devtools.summarize_notes("- " + "word " * 80)), 140)
+
+    def test_local_guard_rule(self):
+        import devtools
+        ok = devtools.request_allowed
+        self.assertTrue(ok("GET", "127.0.0.1:8084", None))
+        self.assertTrue(ok("POST", "localhost:8081", "http://127.0.0.1:8081"))
+        self.assertTrue(ok("POST", "127.0.0.1:8081", "http://tauri.localhost"))
+        self.assertTrue(ok("POST", "127.0.0.1:8081", None), "no Origin: a local tool, not a browser page")
+        self.assertFalse(ok("POST", "127.0.0.1:8081", "https://example.com"))
+        self.assertFalse(ok("POST", "127.0.0.1:8081", "http://127.0.0.1.evil.com"))
+        self.assertFalse(ok("GET", "evil.com", None))
 
     def test_version_file(self):
         import devtools

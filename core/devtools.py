@@ -71,8 +71,40 @@ DEV_JS = """(() => { let v = null; const tick = async () => {
   document.addEventListener('DOMContentLoaded', () => document.body.appendChild(b)); })();"""
 
 
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+# The suite's own pages (served by these services) and the desktop app's own UI
+SUITE_ORIGIN = re.compile(r"^(https?://(127\.0\.0\.1|localhost)(:\d+)?|https?://tauri\.localhost|tauri://localhost)$")
+
+
+def host_name(host_header: str) -> str:
+    h = (host_header or "").strip().lower()
+    return h.split("]")[0] + "]" if h.startswith("[") else h.split(":")[0]
+
+
+def request_allowed(method: str, host_header: str, origin) -> bool:
+    """Local services answer only requests addressed to this PC (blocks DNS rebinding), and accept changes only
+    from the suite's own pages: a website open in your browser can't change alarms, power settings or the VPN."""
+    if host_name(host_header) not in LOCAL_HOSTS:
+        return False
+    if method.upper() in ("GET", "HEAD", "OPTIONS") or not origin:
+        return True
+    return bool(SUITE_ORIGIN.match(origin))
+
+
+def add_local_guard(app):
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(CORSMiddleware, allow_origin_regex=SUITE_ORIGIN.pattern, allow_methods=["*"], allow_headers=["*"])
+
+    @app.middleware("http")
+    async def _local_only(request, call_next):
+        if not request_allowed(request.method, request.headers.get("host", ""), request.headers.get("origin")):
+            return JSONResponse({"detail": "Only Ultra Suite's own windows can do this."}, status_code=403)
+        return await call_next(request)
+
+
 def add_shared_routes(app, frontend_dir: str):
     dev = os.environ.get("ULTRASUITE_DEV") == "1"
+    add_local_guard(app)
 
     @app.get("/__ui/icons/{name}")
     async def ui_icon(name: str):
