@@ -43,6 +43,7 @@ python -m PyInstaller --noconfirm --clean --noconsole --log-level WARN --name ul
   --add-data "$R\03_deck_deck_config\plugin\volume_knob_daemon.py;03_deck_deck_config\plugin" `
   --add-data "$R\03_deck_deck_config\com.ultrasuite.knobs.deckPlugin;03_deck_deck_config\com.ultrasuite.knobs.deckPlugin" `
   --collect-all _sounddevice_data --collect-data certifi --hidden-import sounddevice --hidden-import psutil @cs `
+  --hidden-import xml.etree.ElementTree --hidden-import importlib.util --hidden-import tempfile `
   "$R\core\suite_core.py"
 
 Write-Host "[3/3] Building the installer" -ForegroundColor Cyan

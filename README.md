@@ -1,81 +1,63 @@
 # Ultra Productivity Suite
 
-Four small Windows apps that work together: a wake-up alarm you can't ignore, a translucent app dock for the taskbar, deck Stream Deck knobs, and a live hardware and network monitor. Everything runs on your own PC. Nothing is sent to any cloud service.
+A set of Windows desktop apps that work together: a hardware and network monitor, a wake-up alarm you can't ignore,
+a taskbar organizer, deck deck controls, and an optional Laptop Pack. Each app is its own app in Windows, with its
+own window, taskbar button and icon. Everything runs on your PC.
 
-| App | What it does | Opens at |
-|---|---|---|
-| **Code Red Alarm** | Alarms that force your chosen speaker to full volume and, in Code Red mode, only stop when you type a phrase (no pasting). Works from your phone over Tailscale. | http://localhost:8081 |
-| **Ultra Dock** | Your app groups (AI, Chat, Games, Tools) built into the Windows taskbar next to Start. Click a group and its apps slide open right in the taskbar, with their real icons; click again and it slides closed. Hides during fullscreen games. | inside your taskbar |
-| **deck knobs** | Plugin and profile for deck decks: Spotify, Discord and master volume knobs, a PC-stats knob that toggles your VPN on press, and a Gaming folder (Riot, Epic). | inside deck Studio |
-| **PC Sentinel** | CPU, GPU, memory, fan and drive health in plain language (Simple) or every sensor (Detailed), plus live latency, a speed test and a VPN button. | http://localhost:8084 |
-
-## Install (any Windows 10 or 11 PC)
-
-**[Download the installer (UltraSuite-Setup-x64.exe)](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)** and run it. Pick an install folder, click Install, done. It adds **Code Red Alarm**, **PC Sentinel**, **Ultra Dock** and **deck Deck Setup** to your Start menu and starts with Windows. Uninstall from Settings > Apps like any other program.
-
-For hardware sensors, also install the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) and turn on **Options > Remote Web Server** (port 8085).
-
-<details><summary>Developer setup (run from source instead)</summary>
-
-1. Clone this repo, then double-click **`Setup.cmd`** (installs Python packages and LibreHardwareMonitor, configures `.env`).
-2. Double-click **`Start Suite.cmd`** to run the services from source.
-3. Build the installer yourself with `build_release.ps1` (needs Rust, VS Build Tools, Node.js, PyInstaller).
-</details>
-
-### Choose your speakers
-
-Open the alarm app and go to **Sound**. Pick any output (or *System default*), then press **Test**. The alarm locks that speaker at 100% while ringing and puts your volume back afterwards.
-
-### Use it from your phone
-
-Install [Tailscale](https://tailscale.com/download) on the PC and your phone and sign in to the same account. The suite publishes both dashboards to your private tailnet only (never the public internet):
-
-- `https://<your-pc-name>.<your-tailnet>.ts.net:8443`: alarm
-- `https://<your-pc-name>.<your-tailnet>.ts.net:8444`: sentinel
-
-The exact links are printed each time the suite starts.
-
-## Customize
-
-| What | Where |
+| App | What it does |
 |---|---|
-| Dock apps and groups | Dock **⋯ → Edit apps** (edits `%APPDATA%\UltraSuiteDock\apps.json`), then **⋯ → Reload apps** |
-| Dock position | Dock **⋯ → Position** |
-| Ping targets, router IP, VPN script | `.env` in this folder |
-| VPN button | Set `ONESCRIPT_PATH` in `.env` to a PowerShell script that accepts `-State on` or `-State off` and exits 0 on success |
-| Run the web apps in Docker instead | Set `SUITE_MODE=docker` in `.env` (needs Docker Desktop) |
+| PC Sentinel | Your PC at a glance: live CPU, GPU, memory and power tiles, top apps by CPU, GPU and memory, every fan with its RPM and curve, drive health and wear, latency, a 25-second speed test, every sensor organized by part, power plans, the Windows power mode slider, refresh-rate switching, temperature alerts and an exportable report. Works on any PC: it uses LibreHardwareMonitor when installed and Windows' own sensors otherwise. |
+| Code Red Alarm | Alarms that force your chosen speaker to full volume and only stop when you solve a sum or type a phrase (no pasting). Pick any speaker, test it, and get your volume back afterwards. |
+| Ultra Dock | A taskbar organizer: your main apps stay as normal buttons, and every other open app is grouped into phone-style folders (Games, Chat, AI, Web, Create, Tools) on the right of your taskbar icons. Click a folder and its apps slide open. |
+| deck knobs | Plugin and profile for deck decks: Spotify, Discord and master volume knobs, a PC-stats knob and a Gaming folder. |
+| Laptop Pack (add-on) | Adds battery health and wear, charge cycles, charge and discharge watts, time left, battery health history and screen brightness to PC Sentinel. Install it on top of Ultra Suite. |
 
-## Troubleshooting
+## Install (Windows 10 or 11)
 
-| Symptom | Fix |
-|---|---|
-| Alarm page says the speaker helper is offline | Double-click `Start Suite.cmd` |
-| Sentinel says sensors are offline | Open LibreHardwareMonitor, turn on **Options → Remote Web Server**, keep port 8085 |
-| deck knobs don't respond | In deck Studio, select the **Ultra Suite** profile. The suite must be running. |
-| Something else | Look in the `logs` folder, or run `Start Suite.cmd` and read the status list |
+1. Download `UltraSuite-Setup-<version>-x64.exe` from the [latest release](https://github.com/jeemwla/ultra-productivity-suite/releases/latest) and run it. Pick a folder, click Install.
+2. Open PC Sentinel, Code Red Alarm or Ultra Dock from the Start menu. The suite starts with Windows.
+3. On a laptop, also run `UltraSuite-LaptopPack-<version>-x64.exe` from the same release.
 
-## Uninstall
+Updates: when a new version is published, every app shows an update notice with an Update button.
 
-Run `uninstall.ps1` (right-click → Run with PowerShell), then delete this folder.
+Full sensors (temperatures, fans, power) come from the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor).
+PC Sentinel offers a one-click setup for it; without it, Sentinel still shows load, memory, drives, network and battery from Windows itself.
 
-## Privacy and security
+Uninstall from Settings > Apps like any other program.
 
-- All services listen on `127.0.0.1` only. Other devices on your Wi-Fi can't reach them; your phone reaches them only through your own Tailscale network.
-- The speaker helper requires a private token that Setup generates per PC and keeps in `.env`. `.env` is never committed to git.
-- The speed test downloads from Cloudflare only when you press the button. Latency checks send a few bytes every 2 seconds.
+## Appearance
+
+Every app has an Appearance button: System, Light, Dark and eight signature themes (Midnight, Sakura, Matcha, Ember,
+Arctic, Paper, Terminal, Synthwave), plus a Motion setting (Full, Reduced, Off). The choice applies to all apps.
+
+## Use it from your phone
+
+Install [Tailscale](https://tailscale.com/download) on the PC and your phone with the same account. The suite publishes
+the Alarm and Sentinel pages to your private tailnet only (`https://<pc>.<tailnet>.ts.net:8443` and `:8444`).
+
+## Privacy
+
+- All services listen on `127.0.0.1`; other devices reach them only through your own Tailscale network.
+- Network use: the update check reads this repository's public release list; the speed test downloads from Cloudflare or DataPacket only when you press Start.
+- Usage statistics (install, uninstall reason, daily heartbeat) are off unless you agree during setup, and never include personal data. The Feedback button sends only what you type.
 
 ## For developers
 
 ```
-01_pebble_code_red_alarm/   FastAPI app + host audio bridge (speaker picker, volume lock)
-02_translucent_taskbar_dock/ Tauri 2 (Rust) dock; build with: npx @tauri-apps/cli@2 build --no-bundle
-03_deck_deck_config/      deck plugin (Node), profile generator, knob daemon (Python)
-04_hardware_net_sentinel/   FastAPI app reading LibreHardwareMonitor + latency monitor
-start_all_windows.ps1       Starts everything (native by default, -Docker for containers)
-setup.ps1 / Setup.cmd       One-time setup on a new PC
+01_pebble_code_red_alarm/    Code Red Alarm: FastAPI backend, speaker bridge, frontend
+02_translucent_taskbar_dock/ Ultra Suite desktop app (Tauri 2, Rust): app windows, Ultra Dock organizer, installer hooks, icons
+03_deck_deck_config/       deck plugin (Node), profile generator, knob daemon
+04_hardware_net_sentinel/    PC Sentinel: sensors (LibreHardwareMonitor, WMI, Windows counters), drives, power tools, speed test, VPN
+05_insights/                 Owner dashboard for installs, uninstalls and feedback
+06_laptop_pack/              Laptop Pack add-on and its installer script
+core/                        Runs every service; shared themes, live reload, update check, icons
+dev.ps1 / stop_dev.ps1       Dev mode: everything from source with live reload
+build_release.ps1            Builds the Ultra Suite installer (version from VERSION)
+build_laptop_pack.ps1        Builds the Laptop Pack installer
 ```
 
-Requirements for building the dock yourself: Rust (stable, MSVC) and Visual Studio Build Tools with the C++ workload.
+Build requirements: Python 3.11+ (requirements in each app folder, plus PyInstaller and Pillow), Rust (stable, MSVC),
+Visual Studio Build Tools with the C++ workload, Node.js.
 
 ## License
 
