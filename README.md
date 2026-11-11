@@ -1,53 +1,92 @@
 # Ultra Suite
 
-Three Windows desktop apps that work together. Each is its own app in Windows, with its own window, taskbar button
-and icon, and everything runs on your PC.
+Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
 
-| App | What it does |
-|---|---|
-| PC Sentinel | Your PC at a glance: live CPU, GPU, memory and power tiles, top apps by CPU, GPU and memory, every fan with its RPM and curve, drive health and wear, latency, a 25-second speed test, every sensor organized by part, power plans, the Windows power mode slider, refresh-rate switching, temperature alerts and an exportable report. On a laptop it adds a Battery page: health and wear, charge cycles, charge and discharge watts, time left, health history and screen brightness. Works on any PC: it uses LibreHardwareMonitor when installed and Windows' own sensors otherwise. |
-| Code Red Alarm | Alarms that force your chosen speaker or headphones to full volume and only stop when you solve a sum or type a phrase (no pasting). Pick any output, test it, and get your volume back afterwards. |
-| Ultra Dock | A taskbar organizer. Apps you pin to the taskbar, plus the ones you choose to keep, stay as normal buttons; every other open app goes into phone-style folders (Games, Chat, AI, Web, Create, Tools) next to your taskbar icons. Click a folder and its apps slide open; an app with several windows shows them as a list. If the dock ever stops responding, every app goes straight back to the normal taskbar. |
+[Download the Windows installer, v2.2.4 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.4/UltraSuite-Setup-2.2.4-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
-## Install (Windows 10 or 11)
+This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
 
-1. Download `UltraSuite-Setup-<version>-x64.exe` from the [latest release](https://github.com/jeemwla/ultra-productivity-suite/releases/latest) and run it. Pick a folder, click Install.
-2. Open PC Sentinel, Code Red Alarm or Ultra Dock from the Start menu. The suite starts with Windows.
+## Pick what helps you
 
-Updates: when a new version is published, every app (and the Ultra Dock menu) shows an update notice with an Update button.
+| App | Why use it? | Examples |
+|---|---|---|
+| PC Sentinel | See which apps use resources, whether the PC is running hot, drive health, battery information, and network latency. | Students investigating slow coursework software, creators watching render workloads, gamers checking temperatures, or anyone checking a sluggish laptop. |
+| Code Red Alarm | Schedule alarms locally, choose an audio output, and optionally require a typed phrase or arithmetic to dismiss. | Study breaks, personal routines, and reminders while the Windows session is running. |
+| Ultra Dock | Group open apps to reduce taskbar clutter, with a native-taskbar fallback when the strip cannot safely replace buttons. | People who keep many work, chat, browser, or creative apps open. Multi-monitor grouping remains under development. |
 
-Full sensors (temperatures, fans, power) come from the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor).
-PC Sentinel offers a one-click setup for it; without it, Sentinel still shows load, memory, drives, network and battery from Windows itself.
+The apps have separate windows and Start menu entries. Their background services currently share a process. Further process isolation is tracked in the [development roadmap](ROADMAP.md).
 
-Uninstall from Settings > Apps like any other program. Ultra Dock puts every taskbar button back first.
+## Install and get started
 
-## Appearance
+1. Download and run the x64 installer above.
+2. Open PC Sentinel, Code Red Alarm, or Ultra Dock from Start.
+3. For temperatures, fans and additional power sensors, use Sentinel's full-sensor setup or install the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). Windows counters provide a smaller set of readings when it is absent.
+4. Choose the features you need. Dock grouping can be switched off in the Ultra Suite tray menu.
 
-Every app has an Appearance button: System, Light, Dark and eight signature themes (Midnight, Sakura, Matcha, Ember,
-Arctic, Paper, Terminal, Synthwave), plus a Motion setting (Full, Reduced, Off). The choice applies to all apps.
+Python, Rust and Docker are not end-user prerequisites for the bundled desktop installer. Windows' WebView2 runtime is needed for the windows; initial [runtime setup](https://v2.tauri.app/distribute/windows-installer/#webview2-installation-options) can require a download.
 
-## Privacy
+Uninstall through Windows Settings > Apps. Back up any alarm schedules you need before removing app data.
 
-- All services listen on `127.0.0.1` only.
-- Network use: the update check reads this repository's public release list; the speed test downloads from Cloudflare or DataPacket only when you press Start.
-- Usage statistics (install, uninstall reason, daily heartbeat) are off unless you agree during setup, and never include personal data. The Feedback button sends only what you type.
+## What the apps show
+
+PC Sentinel includes CPU, GPU and memory readings; grouped process usage; cooling sensors; drive information; network latency; an on-demand speed test; Windows power/display controls; sensor tables; and a diagnostic export. Battery information is shown when a battery is detected.
+
+Sensor availability depends on the hardware, Windows permissions and the data source. Missing readings must remain unavailable. Component power estimates are not a wall-power measurement. A PSU rating describes capacity, not current consumption.
+
+Code Red Alarm runs on the local PC. It needs the PC and alarm service available. Speaker delivery, wake-from-sleep support and foreground behavior need validation on the intended machine. Do not rely on an untested installation for a critical reminder.
+
+Ultra Dock keeps pinned/selected apps on the native taskbar and groups other open apps. Recovery and visibility work is active. A folder should never be the only route to an app unless its replacement is actually available.
+
+## Development status
+
+Main now includes tested source changes for WebSocket origin checks, conservative drive matching, write-ahead Dock recovery, far-future alarm occurrences, absolute UTC wake deadlines, clearer storage capacity, and stricter Dock visibility gating.
+
+These source changes are not a claim that the v2.2.4 installer contains them. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
+
+The [roadmap](ROADMAP.md) contains 24 public phases and 288 detailed engineering and acceptance tasks. Candidate features remain proposals. Stress-test parity, universal hardware support and best-in-category claims have not been established.
+
+## Appearance and accessibility
+
+The apps provide light/dark appearance options and additional themes, with motion preferences. Work on collapsible navigation, theme-matched scrolling, keyboard access, compact layouts and larger process lists is tracked in the roadmap.
+
+## Privacy and optional connections
+
+Core services bind to loopback and run locally. Alarm scheduling and local hardware monitoring do not require a hosted account.
+
+Network-dependent features include update checks, optional sensor setup downloads, latency probes, the on-demand speed test, configured VPN controls, optional usage reporting and submitted feedback.
+
+Usage reporting is opt-in. Feedback sends the entered message and category with app/version information, Windows version and a random local identifier to the configured maintainer collector. Feedback and reporting are not required to use the local apps. The identifier is pseudonymous; it should not be described as proving anonymity.
+
+Router-specific VPN controls, owner analytics and personal peripherals are optional configuration. They are not general hardware prerequisites.
 
 ## For developers
 
-```
-pc_sentinel/        PC Sentinel: sensors (LibreHardwareMonitor, WMI, Windows counters), drives, battery, power tools, speed test, VPN
-code_red_alarm/     Code Red Alarm: alarm engine, speaker helper, page
-ultra_dock/         The desktop app (Tauri 2, Rust): Ultra Dock organizer, the app windows, installer hooks, icons
-insights/           Optional dashboard for the maintainer (installs, uninstalls, feedback); off unless ULTRASUITE_OWNER=1
-core/               Runs every service; shared themes, live reload, update check, icons
-tests/              Unit tests:  python -m unittest discover -s tests
-dev.ps1 / stop_dev.ps1   Dev mode: everything from source with live reload
-build_release.ps1   Builds the installer (version from VERSION)
-```
+| Path | Purpose |
+|---|---|
+| pc_sentinel/ | Hardware, storage, battery, network and system tools |
+| code_red_alarm/ | Alarm scheduling, audio helper and frontend |
+| ultra_dock/ | Tauri desktop windows, taskbar organizer and installer |
+| core/ | Shared backend startup, themes, local API guard and update routes |
+| insights/ | Optional maintainer dashboard |
+| tests/ | Backend, native-policy and frontend-helper regression tests |
 
-Build requirements: Python 3.11+ (`requirements.txt`, plus PyInstaller and Pillow), Rust (stable, MSVC),
-Visual Studio Build Tools with the C++ workload, Node.js.
+Run backend tests from the repository root:
+
+~~~powershell
+python -W ignore -m unittest discover -s tests
+node --test tests/*.test.cjs
+~~~
+
+Run native tests in ultra_dock/src-tauri:
+
+~~~powershell
+cargo test --release
+~~~
+
+Tests use isolated data and must never reach the real audio helper. Check the next alarm before installs or disruptive work and preserve a 30-minute protection window. Development and production alarm databases must remain separate.
+
+Build tools: Python with requirements.txt and the packaging tools, Rust/MSVC, Visual Studio C++ Build Tools, and Node.js. build_release.ps1 builds the installer from VERSION. Building and installing are separate actions.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). Third-party integrations retain their own licenses.
