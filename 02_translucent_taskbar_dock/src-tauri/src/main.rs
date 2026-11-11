@@ -521,6 +521,9 @@ fn ensure_core(app: &AppHandle) {
         if let Some(exe) = core_exe(app) {
             let mut cmd = Command::new(&exe);
             if let Some(d) = exe.parent() { cmd.current_dir(d); }
+            // An inherited IANA TZ ("America/Los_Angeles") makes the Windows C runtime fall back to UTC,
+            // which once made an alarm ring 8 hours off. The core should follow the Windows time zone.
+            cmd.env_remove("TZ");
             #[cfg(windows)]
             no_window(&mut cmd);
             if let Ok(ch) = cmd.spawn() { *g = Some(ch); }

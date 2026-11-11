@@ -128,6 +128,19 @@ async def page():
     return FileResponse(os.path.join(HERE, "dashboard.html"))
 
 
+def bucket_keys(now: float, days: int):
+    """Chart slots in LOCAL time, oldest first, ending with the current hour (day view) or today.
+
+    Slots used to step through UTC midnights while events were labelled by local date, so west of UTC
+    the newest slot was yesterday and today's events never reached the chart.
+    """
+    if days == 1:
+        end = dt.datetime.fromtimestamp(now).replace(minute=0, second=0, microsecond=0)
+        return [(end - dt.timedelta(hours=i)).strftime("%Y-%m-%d %H:00") for i in range(23, -1, -1)]
+    end = dt.date.fromtimestamp(now)
+    return [(end - dt.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
+
+
 @dashboard.get("/api/stats")
 async def stats(range: str = "month"):
     days = {"day": 1, "week": 7, "month": 30, "year": 365}.get(range, 30)
@@ -155,13 +168,7 @@ async def stats(range: str = "month"):
         if kind in ("feedback", "uninstall") and msg:
             feedback.append({"ts": ts, "type": kind, "reason": reason, "message": msg, "version": ver})
     # fill empty buckets so the chart is continuous
-    pts = []
-    step = 3600 if days == 1 else 86400
-    t = since - (since % step) + step
-    while t <= now + 1:
-        k = dt.datetime.fromtimestamp(t).strftime(bucket)
-        pts.append({"t": k, **series.get(k, {"install": 0, "uninstall": 0, "feedback": 0})})
-        t += step
+    pts = [{"t": k, **series.get(k, {"install": 0, "uninstall": 0, "feedback": 0})} for k in bucket_keys(now, days)]
     return JSONResponse({
         "range": range, "counts": counts, "alltime": alltime, "active_7d": active_ids,
         "net_installs": alltime.get("install", 0) - alltime.get("uninstall", 0),

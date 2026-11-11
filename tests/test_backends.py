@@ -73,6 +73,125 @@ class LaptopPack(unittest.TestCase):
         self.assertIsNone(self.m._sum([], "A"))
 
 
+class AlarmSchedule(unittest.TestCase):
+    def setUp(self):
+        import datetime
+        self.dt = datetime.datetime
+        self.m = load("01_pebble_code_red_alarm/backend/clock.py", "alarm_clock")
+        self.one_time = {"time_hhmm": "02:20", "target_date": "2026-11-11", "weekdays": [], "last_triggered_date": None}
+
+    def due(self, alarm, prev, now):
+        return self.m.due_day(alarm, self.dt.fromisoformat(prev), self.dt.fromisoformat(now))
+
+    def test_rings_in_its_minute(self):
+        self.assertEqual(self.due(self.one_time, "2026-11-11 02:19:59", "2026-11-11 02:20:00"), "2026-11-11")
+        self.assertEqual(self.due(self.one_time, "2026-11-11 02:20:30", "2026-11-11 02:20:31"), "2026-11-11")
+        self.assertIsNone(self.due(self.one_time, "2026-11-11 02:18:00", "2026-11-11 02:19:00"))
+
+    def test_catches_up_after_sleep_but_not_hours_late(self):
+        self.assertEqual(self.due(self.one_time, "2026-11-11 01:00:00", "2026-11-11 02:45:00"), "2026-11-11")
+        self.assertIsNone(self.due(self.one_time, "2026-11-11 01:00:00", "2026-11-11 03:46:00"))
+
+    def test_does_not_ring_for_a_time_already_past_at_startup(self):
+        self.assertIsNone(self.due(self.one_time, "2026-11-11 02:25:00", "2026-11-11 02:25:01"))
+
+    def test_date_weekday_and_repeat_rules(self):
+        self.assertIsNone(self.due(self.one_time, "2026-11-12 02:19:59", "2026-11-12 02:20:00"), "wrong date")
+        done = dict(self.one_time, last_triggered_date="2026-11-11")
+        self.assertIsNone(self.due(done, "2026-11-11 02:19:59", "2026-11-11 02:20:00"), "already rang today")
+        weekday = {"time_hhmm": "06:30", "target_date": None, "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri"]}
+        self.assertEqual(self.due(weekday, "2026-11-11 06:29:59", "2026-11-11 06:30:00"), "2026-11-11")  # Wednesday
+        self.assertIsNone(self.due(weekday, "2026-11-14 06:29:59", "2026-11-14 06:30:00"), "Saturday")
+
+    def test_late_night_alarm_after_midnight_wake(self):
+        late = {"time_hhmm": "23:55", "target_date": None, "weekdays": [], "last_triggered_date": None}
+        self.assertEqual(self.due(late, "2026-11-10 23:50:00", "2026-11-11 00:10:00"), "2026-11-10")
+
+    def test_local_now_matches_system_clock(self):
+        import datetime
+        gap = abs((self.m.local_now() - datetime.datetime.now()).total_seconds())
+        if "TZ" not in os.environ:
+            self.assertLess(gap, 5)
+
+
+class AlarmApi(unittest.TestCase):
+    """Create, edit and validate alarms through the real routes, on a throwaway database."""
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        cls._data = os.environ.get("ULTRASUITE_DATA")
+        os.environ["ULTRASUITE_DATA"] = tempfile.mkdtemp()
+        d = os.path.join(ROOT, "01_pebble_code_red_alarm", "backend")
+        spec = importlib.util.spec_from_file_location("alarm_pkg_test", os.path.join(d, "__init__.py"), submodule_search_locations=[d])
+        pkg = importlib.util.module_from_spec(spec)
+        sys.modules["alarm_pkg_test"] = pkg
+        spec.loader.exec_module(pkg)
+        import importlib as il
+        cls.m = il.import_module("alarm_pkg_test.main")
+        cls.m.init_db()
+        from fastapi.testclient import TestClient
+        cls.c = TestClient(cls.m.app)  # no "with": the scheduler loop stays off
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._data is None:
+            os.environ.pop("ULTRASUITE_DATA", None)
+        else:
+            os.environ["ULTRASUITE_DATA"] = cls._data
+
+    def body(self, **kw):
+        b = {"label": "Gym", "time_hhmm": "07:15", "weekdays": ["Mon"], "recurring": True, "code_red": False,
+             "custom_phrase": "", "ring_duration_sec": 600, "math_mission_difficulty": 0}
+        b.update(kw)
+        return b
+
+    def test_edit_in_place(self):
+        r = self.c.post("/api/alarms", json=self.body())
+        self.assertEqual(r.status_code, 200)
+        aid = r.json()["id"]
+        r = self.c.put(f"/api/alarms/{aid}", json=self.body(label="Gym late", time_hhmm="07:45"))
+        self.assertEqual(r.status_code, 200)
+        a = next(x for x in r.json()["alarms"] if x["id"] == aid)
+        self.assertEqual((a["label"], a["time_hhmm"], a["last_triggered_date"]), ("Gym late", "07:45", None))
+
+    def test_rejects_bad_input(self):
+        self.assertEqual(self.c.put("/api/alarms/nope", json=self.body()).status_code, 404)
+        self.assertEqual(self.c.post("/api/alarms", json=self.body(time_hhmm="25:00")).status_code, 400)
+        self.assertEqual(self.c.post("/api/alarms", json=self.body(weekdays=[], target_date=None)).status_code, 400)
+        self.assertEqual(self.c.post("/api/alarms", json=self.body(code_red=True, custom_phrase=" ")).status_code, 400)
+
+
+class InsightsChart(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self._data = os.environ.get("ULTRASUITE_DATA")
+        os.environ["ULTRASUITE_DATA"] = tempfile.mkdtemp()
+        self.m = load("05_insights/insights.py", "insights_under_test")
+
+    def tearDown(self):
+        if self._data is None:
+            os.environ.pop("ULTRASUITE_DATA", None)
+        else:
+            os.environ["ULTRASUITE_DATA"] = self._data
+
+    def test_last_slot_is_today_in_local_time(self):
+        import datetime, time
+        now = time.time()
+        keys = self.m.bucket_keys(now, 30)
+        self.assertEqual(len(keys), 30)
+        self.assertEqual(keys[-1], datetime.date.fromtimestamp(now).isoformat())
+        self.assertEqual(keys, sorted(keys))
+        self.assertEqual(len(set(keys)), 30)
+
+    def test_day_view_has_24_hours_ending_now(self):
+        import datetime, time
+        now = time.time()
+        keys = self.m.bucket_keys(now, 1)
+        self.assertEqual(len(keys), 24)
+        self.assertEqual(keys[-1], datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:00"))
+
+
 class Versions(unittest.TestCase):
     def test_version_compare(self):
         import devtools

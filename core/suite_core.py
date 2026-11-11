@@ -19,6 +19,27 @@ import os
 import sys
 
 FROZEN = getattr(sys, "frozen", False)
+
+
+def fix_local_time():
+    """Windows: drop an inherited TZ so the C runtime uses the system time zone.
+
+    The Windows C runtime only understands POSIX-style TZ values ("PST8PDT"). An IANA name such as
+    "America/Los_Angeles" (set by some launchers and dev tools) makes it silently fall back to UTC,
+    which puts every local time in the suite off by hours. Windows apps should follow the zone set
+    in Windows Settings, so the variable is removed and the runtime re-reads the system zone.
+    """
+    if os.name != "nt" or "TZ" not in os.environ:
+        return
+    os.environ.pop("TZ", None)  # CPython uses _wputenv here, so the C runtime sees the change
+    try:
+        import ctypes
+        ctypes.cdll.ucrtbase._tzset()
+    except Exception:
+        pass
+
+
+fix_local_time()
 ROOT = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APPDATA = os.environ.get("APPDATA", os.path.expanduser("~"))
 LOCALAPPDATA = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
@@ -82,7 +103,10 @@ def load_settings():
             k, v = line.split("=", 1)
             values[k.strip()] = v.strip()  # a later line wins over an earlier one
     for k, v in values.items():
+        if k == "TZ" and os.name == "nt":
+            continue  # Docker-only setting; on Windows it would push every clock in the suite to UTC
         os.environ.setdefault(k, v)
+    fix_local_time()
     os.environ.setdefault("ULTRASUITE_DATA", DATA_DIR)
     os.environ["HOST_AUDIO_BRIDGE_URL"] = "http://127.0.0.1:8091"
     os.environ["ONESCRIPT_WEBHOOK_URL"] = "http://127.0.0.1:8091/run-onescript"

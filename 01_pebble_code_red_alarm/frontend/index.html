@@ -130,6 +130,15 @@ input[type=time].in{font-variant-numeric:tabular-nums}
 .out-row select{flex:1;min-width:0}
 .banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:14px}
 .banner.warn{background:var(--amber-soft);color:var(--ink)}
+.banner.bad{background:var(--red-soft);color:var(--ink);border:1px solid color-mix(in srgb,var(--red) 40%,transparent);margin-bottom:20px;animation:tin .2s ease-out}
+.banner.bad b{color:var(--red-ink)}
+.tag.ok{background:var(--green-soft);color:var(--green)}
+.tag.miss{background:var(--amber-soft);color:var(--ink)}
+.alarm.editing{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.alarm{animation:tin .2s ease-out}
+.form-actions{display:flex;gap:8px}
+.form-actions .btn.primary{flex:1}
+#h-new .badge{font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:2px}
 .banner code{font-family:var(--mono);font-size:12px}
 
 /* Ringing screen */
@@ -187,6 +196,11 @@ input[type=time].in{font-variant-numeric:tabular-nums}
       <span class="chip" id="chip-speaker"><span class="dot"></span>Speaker: checking…</span>
     </div>
   </header>
+
+  <div class="banner bad" id="clock-warn" role="alert" hidden>
+    <span aria-hidden="true">⚠</span>
+    <div id="clock-warn-text"></div>
+  </div>
 
   <div class="grid">
     <div class="stack">
@@ -248,7 +262,10 @@ input[type=time].in{font-variant-numeric:tabular-nums}
               <div class="hint">Case-sensitive.</div>
             </div>
           </div>
-          <button type="submit" class="btn primary block" id="save">Save alarm</button>
+          <div class="form-actions">
+            <button type="button" class="btn ghost" id="cancel-edit" hidden>Cancel</button>
+            <button type="submit" class="btn primary block" id="save">Save alarm</button>
+          </div>
         </form>
       </section>
 
@@ -257,7 +274,7 @@ input[type=time].in{font-variant-numeric:tabular-nums}
         <div class="card-b">
           <div class="banner warn" id="bridge-warn" hidden>
             <span aria-hidden="true">⚠</span>
-            <div>The speaker helper on this PC isn't running, so alarms only ring in open browser tabs. Run <code>start_all_windows.ps1</code> to fix this.</div>
+            <div>The speaker helper isn't responding, so alarms only ring in open windows and browser tabs. Choose Quit in the Ultra Dock menu and open the app again from the Start menu (or restart the PC).</div>
           </div>
           <div class="field">
             <label class="f" for="out">Play alarms on</label>
@@ -366,24 +383,50 @@ document.querySelectorAll(".preset").forEach(p => p.onclick = () => setDays({wk:
 $("f-codered").onchange = () => $("cr").classList.toggle("on", $("f-codered").checked);
 
 /* ---------- Alarms ---------- */
-let alarms = [];
-function nextAlarmText(){
-  const on = alarms.filter(a => a.enabled);
-  if (!on.length) return "";
-  const now = new Date(); let best = null;
-  for (const a of on) {
-    const [h,m] = a.time_hhmm.split(":").map(Number);
-    for (let i = 0; i < 8; i++) {
-      const d = new Date(now); d.setDate(now.getDate()+i); d.setHours(h,m,0,0);
-      if (d <= now) continue;
-      const wd = DAYS[(d.getDay()+6)%7];
-      const ok = a.target_date ? d.toLocaleDateString("en-CA") === a.target_date : (a.weekdays||[]).includes(wd);
-      if (ok) { if (!best || d < best.d) best = {d, a}; break; }
-    }
+let alarms = [], editingId = null;
+/* Alarms ring by the engine's clock. engineSkew = engine time minus this device's time, in ms. */
+let engineSkew = 0;
+const engineNow = () => new Date(Date.now() + engineSkew);
+const dateKey = (d) => d.toLocaleDateString("en-CA");
+function nextRing(a, now = engineNow()){
+  if (!a.enabled) return null;
+  const [h,m] = a.time_hhmm.split(":").map(Number);
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now); d.setDate(now.getDate()+i); d.setHours(h,m,0,0);
+    if (d <= now) continue;
+    const ok = a.target_date ? dateKey(d) === a.target_date : (a.weekdays||[]).includes(DAYS[(d.getDay()+6)%7]);
+    if (ok) return d;
   }
-  if (!best) return "";
-  const mins = Math.round((best.d - now)/60000), h = Math.floor(mins/60), m = mins%60;
-  return `Next alarm in ${h ? h+"h " : ""}${m}m`;
+  return null;
+}
+/* A one-time alarm whose moment passed (beyond the engine's 30-minute catch-up) without ringing. */
+function missed(a, now = engineNow()){
+  if (!a.target_date || !a.enabled || a.last_triggered_date) return false;
+  const at = new Date(`${a.target_date}T${a.time_hhmm}:00`);
+  return now - at > 30 * 60000;
+}
+const inText = (d, now = engineNow()) => {
+  const mins = Math.max(1, Math.round((d - now)/60000)), h = Math.floor(mins/60), m = mins%60;
+  return h >= 24 ? `in ${Math.floor(h/24)}d ${h%24}h` : `in ${h ? h+"h " : ""}${m}m`;
+};
+function nextAlarmText(){
+  const next = alarms.map(a => nextRing(a)).filter(Boolean).sort((x,y) => x - y)[0];
+  return next ? `Next alarm ${inText(next)}` : "";
+}
+function sorted(){
+  const now = engineNow();
+  return [...alarms].sort((a, b) => {
+    const na = nextRing(a, now), nb = nextRing(b, now);
+    if (na && nb) return na - nb;
+    if (na || nb) return na ? -1 : 1;
+    return a.time_hhmm.localeCompare(b.time_hhmm);
+  });
+}
+function statusTag(a){
+  if (missed(a)) return `<span class="tag miss" title="The alarm engine wasn't running on the right clock at that time">Missed</span>`;
+  if (a.target_date && !a.enabled && a.last_triggered_date) return `<span class="tag ok">Rang</span>`;
+  const n = nextRing(a);
+  return n ? `<span class="tag">Rings ${inText(n)}</span>` : "";
 }
 function render(){
   $("count").textContent = alarms.length ? `${alarms.filter(a=>a.enabled).length} of ${alarms.length} on` : "";
@@ -392,16 +435,17 @@ function render(){
     $("list").innerHTML = `<div class="empty"><b>No alarms yet</b>Create one on the left. It will ring on this PC and any device you open this page on.</div>`;
     return;
   }
-  $("list").innerHTML = alarms.map(a => {
+  $("list").innerHTML = sorted().map(a => {
     const t = fmt12(a.time_hhmm);
     const when = a.target_date ? new Date(a.target_date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})
       : (a.weekdays.length === 7 ? "Every day" : a.weekdays.join(" "));
-    return `<article class="alarm ${a.enabled ? "" : "off"} ${a.code_red ? "red" : ""}">
+    return `<article class="alarm ${a.enabled ? "" : "off"} ${a.code_red ? "red" : ""} ${a.id === editingId ? "editing" : ""}">
       <div class="alarm-top">
         <div><div class="time">${t.t}<small>${t.ap}</small></div><div class="name">${esc(a.label)}</div></div>
         <label class="switch"><input type="checkbox" ${a.enabled ? "checked" : ""} data-toggle="${esc(a.id)}" aria-label="${a.enabled ? "Turn off" : "Turn on"} ${esc(a.label)}"><span></span></label>
       </div>
       <div class="tags">
+        ${statusTag(a)}
         <span class="tag">${esc(when)}</span>
         <span class="tag">${Math.round(a.ring_duration_sec/60)} min</span>
         ${a.code_red ? `<span class="tag red" title="${esc(a.custom_phrase)}">Code Red</span>` : ""}
@@ -409,19 +453,49 @@ function render(){
       </div>
       <div class="alarm-actions">
         <button class="btn sm" data-test="${esc(a.id)}">Preview</button>
+        <button class="btn sm" data-edit="${esc(a.id)}" aria-label="Edit ${esc(a.label)}">Edit</button>
         <button class="btn sm ghost" data-del="${esc(a.id)}" aria-label="Delete ${esc(a.label)}">Delete</button>
       </div>
     </article>`;
   }).join("");
 }
+
+/* ---------- Edit mode ---------- */
+function setDuration(sec){
+  const sel = $("f-duration");
+  if (![...sel.options].some(o => +o.value === sec)) sel.add(new Option(`${Math.round(sec/60)} minutes`, sec));
+  sel.value = String(sec);
+}
+function startEdit(a){
+  editingId = a.id;
+  $("f-label").value = a.label; $("f-time").value = a.time_hhmm; setDuration(a.ring_duration_sec);
+  $("f-date").value = a.target_date || ""; setDays(a.target_date ? [] : a.weekdays);
+  $("f-math").value = String(a.math_mission_difficulty || 0);
+  $("f-codered").checked = !!a.code_red; $("cr").classList.toggle("on", !!a.code_red);
+  if (a.code_red) $("f-phrase").value = a.custom_phrase || "";
+  $("h-new").innerHTML = `Edit alarm<span class="badge">${esc(a.label)}</span>`;
+  $("save").textContent = "Save changes"; $("cancel-edit").hidden = false;
+  render(); $("h-new").scrollIntoView({behavior: "smooth", block: "center"}); $("f-label").focus({preventScroll: true});
+}
+function endEdit(){
+  editingId = null; $("form").reset(); $("f-date").value = ""; setDays(DAYS.slice(0,5));
+  $("cr").classList.toggle("on", $("f-codered").checked);
+  $("h-new").textContent = "New alarm"; $("save").textContent = "Save alarm"; $("cancel-edit").hidden = true; render();
+}
+$("cancel-edit").onclick = endEdit;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("ring").classList.contains("show")) endEdit(); });
+
 $("list").addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-test],[data-del]"); if (!t) return;
+  const t = e.target.closest("[data-test],[data-del],[data-edit]"); if (!t) return;
+  if (t.dataset.edit) { const a = alarms.find(x => x.id === t.dataset.edit); if (a) startEdit(a); return; }
   try {
     if (t.dataset.test) { unlockAudio(); await api(`/api/alarms/${encodeURIComponent(t.dataset.test)}/test-ring?seconds=10`, {method:"POST"}); }
     if (t.dataset.del) {
       const a = alarms.find(x => x.id === t.dataset.del);
       if (!confirm(`Delete "${a ? a.label : "this alarm"}"?`)) return;
-      alarms = (await api(`/api/alarms/${encodeURIComponent(t.dataset.del)}`, {method:"DELETE"})).alarms; render(); toast("Alarm deleted");
+      alarms = (await api(`/api/alarms/${encodeURIComponent(t.dataset.del)}`, {method:"DELETE"})).alarms;
+      if (t.dataset.del === editingId) endEdit(); else render();
+      toast("Alarm deleted");
     }
   } catch (err) { toast(err.message, true); }
 });
@@ -440,16 +514,19 @@ $("form").addEventListener("submit", async (e) => {
   if (!$("f-time").value) { toast("Pick a time.", true); return; }
   if (!days.length && !$("f-date").value) { toast("Pick a day or a date.", true); return; }
   if (codeRed && phrase.length < 4) { toast("Code Red needs a phrase of at least 4 characters.", true); $("f-phrase").focus(); return; }
-  const btn = $("save"); btn.disabled = true; btn.textContent = "Saving…";
+  const btn = $("save"), editing = editingId; btn.disabled = true; btn.textContent = "Saving…";
   try {
-    const data = await api("/api/alarms", { method:"POST", body: JSON.stringify({
+    const data = await api(editing ? `/api/alarms/${encodeURIComponent(editing)}` : "/api/alarms", { method: editing ? "PUT" : "POST", body: JSON.stringify({
       label, time_hhmm: $("f-time").value, target_date: days.length ? null : $("f-date").value,
       weekdays: days, recurring: days.length > 0, enabled: true, code_red: codeRed, custom_phrase: codeRed ? phrase : "",
       volume_percent: 100, ring_duration_sec: +$("f-duration").value, math_mission_difficulty: +$("f-math").value })});
-    alarms = data.alarms; render();
-    const t = fmt12($("f-time").value); toast(`Saved: ${label} at ${t.t} ${t.ap}`);
+    alarms = data.alarms;
+    const saved = alarms.find(a => a.id === data.id), n = saved && nextRing(saved);
+    const t = fmt12($("f-time").value);
+    toast(`${editing ? "Updated" : "Saved"}: ${label} at ${t.t} ${t.ap}${n ? ", rings " + inText(n) : ""}`);
+    if (editing) endEdit(); else render();
   } catch (err) { toast(err.message, true); }
-  finally { btn.disabled = false; btn.textContent = "Save alarm"; }
+  finally { btn.disabled = false; btn.textContent = editingId ? "Save changes" : "Save alarm"; }
 });
 
 /* ---------- Sound output ---------- */
@@ -546,6 +623,20 @@ $("ring-stop").onclick = async () => {
   finally { b.disabled = false; }
 };
 
+/* ---------- Clock check ----------
+   Alarms ring by the engine's clock. If it disagrees with this device by more than two minutes, say so loudly:
+   that is exactly how an alarm once rang 8 hours off without anyone noticing. */
+function checkClock(eng){
+  const off = Math.round(engineSkew / 60000), warn = $("clock-warn");
+  if (Math.abs(off) < 2) { warn.hidden = true; return; }
+  const t = (d) => d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  const h = Math.abs(off) >= 60 ? `${Math.round(Math.abs(off)/6)/10} hours` : `${Math.abs(off)} minutes`;
+  $("clock-warn-text").innerHTML = `<b>The alarm clock and this device disagree by ${h}.</b> The alarm engine says ${t(eng)}, this device says ${t(new Date())}. `
+    + `Alarms ring by the engine's clock. If this device is right, choose Quit in the Ultra Dock menu and open the app again from the Start menu (or restart the PC). `
+    + `If you're on another device in a different time zone, you can ignore this.`;
+  warn.hidden = false;
+}
+
 /* ---------- Live connection ---------- */
 let ws = null, retry = 0;
 function connect(){
@@ -555,7 +646,12 @@ function connect(){
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.server_time) { const [h,mi] = m.server_time.split(":"); const t = fmt12(`${h}:${mi}`); $("clock").textContent = `${t.t} ${t.ap}`; }
-    if (m.server_date) $("date").textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+    if (m.server_iso) {
+      const eng = new Date(m.server_iso);
+      engineSkew = eng - Date.now();
+      $("date").textContent = eng.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+      checkClock(eng);
+    } else if (m.server_date) $("date").textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
     if (m.is_ringing && m.alarm) showRing(m); else if (ringingId) hideRing();
   };
   ws.onclose = () => { chip("chip-engine", "bad", "Reconnecting…"); const d = Math.min(10000, 1000 * 2 ** retry++); setTimeout(connect, d); };

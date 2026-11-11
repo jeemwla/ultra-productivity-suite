@@ -19,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .clock import due_day, local_now
+
 DB_PATH = os.path.join(os.environ.get("ULTRASUITE_DATA") or os.path.join(os.path.dirname(__file__), "..", "data"), "alarms.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 HOST_AUDIO_BRIDGE_URL = os.getenv("HOST_AUDIO_BRIDGE_URL", "http://host.docker.internal:8091")
@@ -131,7 +133,7 @@ ws_clients: List[WebSocket] = []
 
 
 async def broadcast_state():
-    now = datetime.datetime.now()
+    now = local_now()
     remaining_sec = 0
     if ring_state.is_ringing and ring_state.expires_at:
         remaining_sec = max(0, int((ring_state.expires_at - now).total_seconds()))
@@ -148,7 +150,8 @@ async def broadcast_state():
         "remaining_sec": remaining_sec,
         "math_question": ring_state.math_question,
         "server_time": now.strftime("%H:%M:%S"),
-        "server_date": now.strftime("%Y-%m-%d (%a)")
+        "server_date": now.strftime("%Y-%m-%d (%a)"),
+        "server_iso": now.strftime("%Y-%m-%dT%H:%M:%S"),  # the clock alarms ring by; the page compares it with its own
     }
     stale = []
     for ws in ws_clients:
@@ -162,7 +165,7 @@ async def broadcast_state():
 
 
 async def trigger_alarm_now(alarm_dict: dict):
-    now = datetime.datetime.now()
+    now = local_now()
     ring_state.is_ringing = True
     ring_state.alarm = alarm_dict
     ring_state.started_at = now
@@ -199,13 +202,13 @@ async def trigger_alarm_now(alarm_dict: dict):
 
 
 async def scheduler_loop():
+    prev = local_now()
+    print(f"[SchedulerLoop] started, local time {prev:%Y-%m-%d %H:%M:%S}")
     while True:
         try:
-            now = datetime.datetime.now()
-            hhmm = now.strftime("%H:%M")
-            today_iso = now.strftime("%Y-%m-%d")
-            weekday_short = now.strftime("%a")  # Mon, Tue, Wed...
-
+            now = local_now()
+            if now < prev:  # clock moved back (DST, manual change): start over from here
+                prev = now
             if not ring_state.is_ringing:
                 with sqlite3.connect(DB_PATH) as conn:
                     conn.row_factory = sqlite3.Row
@@ -213,23 +216,18 @@ async def scheduler_loop():
                     for row in rows:
                         alm = dict(row)
                         alm["weekdays"] = json.loads(alm["weekdays"])
-                        if alm["time_hhmm"] != hhmm:
+                        day_iso = due_day(alm, prev, now)
+                        if not day_iso:
                             continue
-                        if alm["last_triggered_date"] == today_iso:
-                            continue
-                        # Check date or weekday match
-                        date_match = (not alm["target_date"]) or (alm["target_date"] == today_iso)
-                        day_match = (not alm["weekdays"]) or (weekday_short in alm["weekdays"])
-                        if date_match and day_match:
-                            conn.execute(
-                                "UPDATE alarms SET last_triggered_date = ? WHERE id = ?",
-                                (today_iso, alm["id"])
-                            )
-                            if not alm["recurring"] and alm["target_date"]:
-                                conn.execute("UPDATE alarms SET enabled = 0 WHERE id = ?", (alm["id"],))
-                            conn.commit()
-                            await trigger_alarm_now(alm)
-                            break
+                        conn.execute("UPDATE alarms SET last_triggered_date = ? WHERE id = ?", (day_iso, alm["id"]))
+                        if not alm["recurring"] and alm["target_date"]:
+                            conn.execute("UPDATE alarms SET enabled = 0 WHERE id = ?", (alm["id"],))
+                        conn.commit()
+                        print(f"[SchedulerLoop] ringing {alm['id']} ({alm['time_hhmm']}) at {now:%H:%M:%S}")
+                        await trigger_alarm_now(alm)
+                        break
+                if not ring_state.is_ringing:
+                    prev = now  # only advance while idle, so an alarm due mid-ring still rings afterwards
             await broadcast_state()
         except Exception as exc:
             print(f"[SchedulerLoop] Error: {exc}")
@@ -285,17 +283,44 @@ async def list_alarms():
     return {"alarms": fetch_all_alarms()}
 
 
-@app.post("/api/alarms")
-async def create_alarm(payload: AlarmCreate):
-    alarm_id = f"alm-{uuid.uuid4().hex[:8]}"
+def _validate(payload: AlarmCreate):
     if not payload.label.strip():
         raise HTTPException(status_code=400, detail="Give the alarm a name.")
+    hh, mm = (int(x) for x in payload.time_hhmm.split(":"))
+    if hh > 23 or mm > 59:
+        raise HTTPException(status_code=400, detail="That isn't a valid time.")
     if not (60 <= payload.ring_duration_sec <= 3600):
         raise HTTPException(status_code=400, detail="Ring duration must be between 1 and 60 minutes.")
     if not payload.weekdays and not payload.target_date:
         raise HTTPException(status_code=400, detail="Pick at least one weekday or a specific date.")
     if payload.code_red and not payload.custom_phrase.strip():
         raise HTTPException(status_code=400, detail="Code Red alarms require a non-empty verification phrase.")
+
+
+@app.put("/api/alarms/{alarm_id}")
+async def update_alarm(alarm_id: str, payload: AlarmCreate):
+    """Edit an alarm in place. It counts as new, so it can ring again today."""
+    _validate(payload)
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute('''
+            UPDATE alarms SET label = ?, time_hhmm = ?, target_date = ?, weekdays = ?, recurring = ?, enabled = ?,
+                code_red = ?, custom_phrase = ?, volume_percent = ?, ring_duration_sec = ?, wake_up_check_min = ?,
+                math_mission_difficulty = ?, snooze_limit = ?, snoozes_used = 0, last_triggered_date = NULL
+            WHERE id = ?
+        ''', (payload.label.strip(), payload.time_hhmm, payload.target_date, json.dumps(payload.weekdays),
+              int(payload.recurring), int(payload.enabled), int(payload.code_red), payload.custom_phrase.strip(),
+              payload.volume_percent, payload.ring_duration_sec, payload.wake_up_check_min,
+              payload.math_mission_difficulty, payload.snooze_limit, alarm_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Alarm not found")
+    return {"ok": True, "id": alarm_id, "alarms": fetch_all_alarms()}
+
+
+@app.post("/api/alarms")
+async def create_alarm(payload: AlarmCreate):
+    alarm_id = f"alm-{uuid.uuid4().hex[:8]}"
+    _validate(payload)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('''
             INSERT INTO alarms VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -72,7 +72,7 @@
   [data-motion=off] *,[data-motion=off] *::before,[data-motion=off] *::after{animation:none!important;transition:none!important}
   [data-motion=reduced] *{animation-duration:.01ms!important;animation-iteration-count:1!important}
   .ua-reveal{opacity:0;transform:translateY(14px);transition:opacity .55s cubic-bezier(.2,.9,.25,1),transform .65s cubic-bezier(.2,.9,.25,1)}
-  .ua-reveal.in{opacity:1;transform:none}
+  .ua-reveal.ua-in{opacity:1;transform:none}
   [data-motion=off] .ua-reveal,[data-motion=reduced] .ua-reveal{opacity:1;transform:none}
   html{scroll-behavior:smooth} [data-motion=off]{scroll-behavior:auto}
   body{transition:background-color .35s ease,color .35s ease}`;
@@ -112,7 +112,7 @@
   /* ---------- Scroll reveal for cards below the fold ---------- */
   function reveal(){
     if (!("IntersectionObserver" in window)) return;
-    const io = new IntersectionObserver((es) => es.forEach(en => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } }), { rootMargin: "0px 0px -8% 0px" });
+    const io = new IntersectionObserver((es) => es.forEach(en => { if (en.isIntersecting) { en.target.classList.add("ua-in"); io.unobserve(en.target); } }), { rootMargin: "0px 0px -8% 0px" });
     document.querySelectorAll("[data-reveal], .card").forEach((el, i) => {
       const r = el.getBoundingClientRect(); if (r.top < innerHeight * 0.92) return; // already visible: no animation
       el.classList.add("ua-reveal"); el.style.transitionDelay = `${Math.min(i % 4, 3) * 40}ms`; io.observe(el);

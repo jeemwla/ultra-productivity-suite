@@ -35,7 +35,12 @@ h1{font:600 20px/1.2 var(--fd)} header p{color:var(--ink-3);font-size:13px}
 .cb{padding:12px 16px 16px}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:6px}.legend i{width:14px;height:2px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle}
 .chart{position:relative}.chart svg{width:100%;height:220px;display:block}
-.tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
+.tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;z-index:2}
+.xax{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);margin-top:6px;font-variant-numeric:tabular-nums}
+.yl{position:absolute;left:0;font-size:11px;color:var(--ink-3);transform:translateY(-120%);font-variant-numeric:tabular-nums;pointer-events:none}
+.nodata{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-3);font-size:13px;pointer-events:none}
+.nodata[hidden]{display:none}
+.hdot{position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface);transform:translate(-50%,-50%);pointer-events:none}
 .bars{display:grid;gap:8px}.bar{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:13px}
 .bar .t{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}.bar .t i{display:block;height:100%;border-radius:99px;background:var(--s2);transition:width .8s var(--ease)}
 .bar span:last-child{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
@@ -70,7 +75,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;colo
   <div class="grid">
     <section class="card"><div class="ch"><h2>Installs vs uninstalls</h2><span id="ch-sub"></span></div>
       <div class="cb"><div class="legend"><span><i style="background:var(--s1)"></i>Installs</span><span><i style="background:var(--s2)"></i>Uninstalls</span><span><i style="background:var(--s3)"></i>Feedback</span></div>
-      <div class="chart" id="chart"><svg id="svg" viewBox="0 0 800 220" preserveAspectRatio="none"></svg></div></div></section>
+      <div class="chart" id="chart"><svg id="svg" viewBox="0 0 800 220" preserveAspectRatio="none" role="img" aria-label="Installs, uninstalls and feedback over time"></svg><div id="ylabels"></div><div class="nodata" id="nodata" hidden>No installs, uninstalls or feedback in this period</div></div>
+      <div class="xax" id="xax"></div></div></section>
     <section class="card"><div class="ch"><h2>Why people uninstall</h2><span id="rs-sub"></span></div><div class="cb"><div class="bars" id="reasons"></div></div></section>
   </div>
   <div class="grid">
@@ -86,18 +92,30 @@ const TW=new Map(); let raf=0;
 function tween(el,to){ if(!el) return; const from=el._c==null?0:el._c; TW.set(el,{from,to,st:performance.now()}); if(!raf) raf=requestAnimationFrame(step); }
 function step(t){ raf=0; for(const[el,s] of TW){ const k=Math.min(1,(t-s.st)/900), e=1-Math.pow(1-k,3); el._c=s.from+(s.to-s.from)*e; el.textContent=n0(el._c); if(k>=1) TW.delete(el);} if(TW.size) raf=requestAnimationFrame(step); }
 const when=ts=>new Date(ts*1000).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
-function smooth(p){ if(p.length<2) return ""; let d=`M${p[0][0]},${p[0][1]}`; for(let i=0;i<p.length-1;i++){const a=p[i-1]||p[i],b=p[i],c=p[i+1],e=p[i+2]||c; d+=` C${b[0]+(c[0]-a[0])/6},${b[1]+(c[1]-a[1])/6} ${c[0]-(e[0]-b[0])/6},${c[1]-(e[1]-b[1])/6} ${c[0]},${c[1]}`;} return d; }
+/* Smooth curve through the points; control points are clamped to the baseline so a zero never dips below the axis. */
+function smooth(p,base=Infinity){ if(p.length<2) return ""; const cl=v=>Math.min(v,base); let d=`M${p[0][0]},${p[0][1]}`; for(let i=0;i<p.length-1;i++){const a=p[i-1]||p[i],b=p[i],c=p[i+1],e=p[i+2]||c; d+=` C${b[0]+(c[0]-a[0])/6},${cl(b[1]+(c[1]-a[1])/6)} ${c[0]-(e[0]-b[0])/6},${cl(c[1]-(e[1]-b[1])/6)} ${c[0]},${c[1]}`;} return d; }
+const SERIES=[["install","var(--s1)","installs"],["uninstall","var(--s2)","uninstalls"],["feedback","var(--s3)","feedback"]];
+/* "2026-11-11" -> "Nov 11"; "2026-11-11 15:00" -> "3 PM" */
+const slot=t=>{ const [d,h]=t.split(" "), dd=new Date(d+"T"+(h||"00:00")); return h?dd.toLocaleTimeString([], {hour:"numeric"}):dd.toLocaleDateString([], {month:"short",day:"numeric"}); };
+const plur=(n,w)=>`${n} ${n===1?w.replace(/s$/,""):w}`;
 function chart(hover){
-  const s=data.series, W=800, H=220, max=Math.max(3,...s.map(x=>Math.max(x.install,x.uninstall,x.feedback)))*1.15;
+  const s=data.series, W=800, H=220, top=Math.max(3,...s.map(x=>Math.max(x.install,x.uninstall,x.feedback))), max=top*1.15;
   const x=i=>8+i/(Math.max(1,s.length-1))*(W-16), y=v=>H-14-v/max*(H-30);
-  const line=(k,c)=>`<path d="${smooth(s.map((p,i)=>[x(i),y(p[k])]))}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
-  const grid=[.33,.66,1].map(f=>`<line x1="0" x2="${W}" y1="${y(max/1.15*f)}" y2="${y(max/1.15*f)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("");
+  const line=(k,c)=>`<path d="${smooth(s.map((p,i)=>[x(i),y(p[k])]),H-14)}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  const ticks=[...new Set([Math.round(top/3),Math.round(top*2/3),top])].filter(v=>v>0);
+  const grid=ticks.map(v=>`<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" vector-effect="non-scaling-stroke"/>`).join("");
   const cross=hover!=null?`<line x1="${x(hover)}" x2="${x(hover)}" y1="0" y2="${H}" stroke="var(--ink-3)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`:"";
-  $("svg").innerHTML=grid+`<line x1="0" x2="${W}" y1="${H-14}" y2="${H-14}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>`+line("install","var(--s1)")+line("uninstall","var(--s2)")+line("feedback","var(--s3)")+cross;
+  $("svg").innerHTML=grid+`<line x1="0" x2="${W}" y1="${H-14}" y2="${H-14}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>`+SERIES.map(([k,c])=>line(k,c)).join("")+cross;
+  // HTML on top of the stretched SVG, so text and dots keep their shape
+  $("ylabels").innerHTML=ticks.map(v=>`<span class="yl" style="top:${y(v)/H*100}%">${v}</span>`).join("")+
+    (hover!=null?SERIES.map(([k,c])=>`<span class="hdot" style="left:${x(hover)/W*100}%;top:${y(s[hover][k])/H*100}%;background:${c}"></span>`).join(""):"");
+  $("nodata").hidden=s.some(p=>p.install||p.uninstall||p.feedback);
+  const n=s.length; $("xax").innerHTML=n?[0,Math.floor((n-1)/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>`<span>${esc(slot(s[i].t))}</span>`).join(""):"";
 }
-$("chart").addEventListener("mousemove",e=>{ if(!data) return; const r=$("chart").getBoundingClientRect(), n=data.series.length, i=Math.max(0,Math.min(n-1,Math.round((e.clientX-r.left)/r.width*(n-1))));
-  document.querySelectorAll(".tip").forEach(t=>t.remove()); chart(i); const p=data.series[i], t=document.createElement("div"); t.className="tip"; t.style.left=(e.clientX-r.left)+"px";
-  t.textContent=`${p.t} · ${p.install} installs · ${p.uninstall} uninstalls · ${p.feedback} feedback`; $("chart").appendChild(t); });
+$("chart").addEventListener("mousemove",e=>{ if(!data||!data.series.length) return; const r=$("chart").getBoundingClientRect(), n=data.series.length, i=Math.max(0,Math.min(n-1,Math.round((e.clientX-r.left)/r.width*(n-1))));
+  document.querySelectorAll(".tip").forEach(t=>t.remove()); chart(i); const p=data.series[i], t=document.createElement("div"); t.className="tip";
+  t.textContent=`${slot(p.t)} · ${plur(p.install,"installs")} · ${plur(p.uninstall,"uninstalls")} · ${p.feedback} feedback`; $("chart").appendChild(t);
+  const half=t.offsetWidth/2, px=Math.max(half,Math.min(r.width-half,e.clientX-r.left)); t.style.left=px+"px"; });
 $("chart").addEventListener("mouseleave",()=>{document.querySelectorAll(".tip").forEach(t=>t.remove()); if(data) chart();});
 function render(){
   const c=data.counts||{}, g=data.github||{};
