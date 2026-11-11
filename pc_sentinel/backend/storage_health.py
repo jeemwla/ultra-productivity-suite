@@ -24,18 +24,66 @@ _cache = {"at": 0.0, "data": None}
 PS = r"""
 $ErrorActionPreference='SilentlyContinue'
 $out=@()
-foreach($d in Get-PhysicalDisk){
+$physical=@(Get-PhysicalDisk)
+$disks=@(Get-Disk)
+foreach($d in $physical){
   $r=$null; try { $r = $d | Get-StorageReliabilityCounter } catch {}
+  $matches=@()
+  if($d.UniqueId -and @($physical | Where-Object UniqueId -eq $d.UniqueId).Count -eq 1){
+    $matches=@($disks | Where-Object UniqueId -eq $d.UniqueId)
+  }
+  if($matches.Count -ne 1 -and $d.SerialNumber){
+    $serial=($d.SerialNumber -replace '\s','')
+    if(@($physical | Where-Object {($_.SerialNumber -replace '\s','') -eq $serial}).Count -eq 1){
+      $matches=@($disks | Where-Object {($_.SerialNumber -replace '\s','') -eq $serial})
+    }
+  }
+  $disk=$null; $volumes=@()
+  if($matches.Count -eq 1){
+    $disk=$matches[0]
+    foreach($part in @(Get-Partition -DiskNumber $disk.Number)){
+      $volume=Get-Volume -Partition $part
+      if($volume.Size -gt 0){
+        $mount=if($volume.DriveLetter){[string]$volume.DriveLetter+':'}else{
+          @($part.AccessPaths | Where-Object {$_ -notlike '*Volume{*'} | Select-Object -First 1) -join ''
+        }
+        if($mount){$volumes += [ordered]@{mount=$mount; filesystem=$volume.FileSystem; size=$volume.Size; free=$volume.SizeRemaining}}
+      }
+    }
+  }
   $out += [ordered]@{
     id=$d.DeviceId; name=$d.FriendlyName; serial=($d.SerialNumber -replace '\s',''); firmware=$d.FirmwareVersion
     media=[string]$d.MediaType; bus=[string]$d.BusType; size=$d.Size; health=[string]$d.HealthStatus
     status=(@($d.OperationalStatus) -join ', '); spindle=$d.SpindleSpeed
     temp=$r.Temperature; temp_max=$r.TemperatureMax; wear=$r.Wear; hours=$r.PowerOnHours
     read_errors=$r.ReadErrorsTotal; write_errors=$r.WriteErrorsTotal; start_stop=$r.StartStopCycleCount
+    volumes=$volumes; disk_number=$disk.Number; partition_style=[string]$disk.PartitionStyle
+    logical_sector_bytes=$disk.LogicalSectorSize; physical_sector_bytes=$disk.PhysicalSectorSize
   }
 }
-$out | ConvertTo-Json -Depth 3 -Compress
+$out | ConvertTo-Json -Depth 5 -Compress
 """
+
+
+def _bytes(value):
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0 else None
+
+
+def capacity_details(raw):
+    """Keep decimal device capacity separate from binary and filesystem capacity."""
+    size = _bytes(raw.get("size"))
+    volumes = []
+    for volume in raw.get("volumes") or []:
+        total, free = _bytes(volume.get("size")), _bytes(volume.get("free"))
+        if total is not None and free is not None and free > total:
+            free = None
+        volumes.append({"mount": volume.get("mount") or "Mounted volume", "filesystem": volume.get("filesystem") or None,
+                        "size_bytes": total, "free_bytes": free,
+                        "used_bytes": total - free if total is not None and free is not None else None})
+    return {"size_bytes": size, "size_gib": round(size / 2**30, 2) if size is not None else None,
+            "volumes": volumes, "disk_number": raw.get("disk_number"),
+            "partition_style": raw.get("partition_style") or None,
+            "logical_sector_bytes": raw.get("logical_sector_bytes"), "physical_sector_bytes": raw.get("physical_sector_bytes")}
 
 
 def drives(max_age=60):
@@ -61,6 +109,7 @@ def drives(max_age=60):
         out.append({
             "name": (d.get("name") or "Drive").strip(), "kind": kind, "bus": d.get("bus"), "size_gb": round((d.get("size") or 0) / 1e9),
             "id": str(d.get("id", "")), "serial": d.get("serial") or None,
+            **capacity_details(d),
             "health": health, "status": d.get("status"), "firmware": d.get("firmware"),
             "temp": d.get("temp") or None, "temp_max": d.get("temp_max") or None,
             "life_left": (100 - wear) if isinstance(wear, (int, float)) and 0 <= wear <= 100 else None,
