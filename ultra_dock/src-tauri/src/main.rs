@@ -377,18 +377,20 @@ fn organizer_loop() {
 // ----------------------------------------------------------------------------- watchdog
 /// Safety net: the organizer may only tuck buttons away while the dock can show them. Every 2 seconds this
 /// pings the strip's window (its main thread) and checks that the strip page is still asking for the folder
-/// list. Two missed pings, or a shown strip that stopped refreshing for 15 seconds, marks the dock unhealthy;
-/// the organizer then puts every button back on the normal taskbar until the dock recovers.
+/// list. The rule: buttons stay tucked away only while the strip is on screen and alive, or while the taskbar
+/// itself is hidden (auto-hide, a full-screen game), when nobody can see taskbar buttons anyway. Otherwise the
+/// organizer puts every button back on the normal taskbar until the dock recovers.
 static UI_SEEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static HEALTHY: AtomicBool = AtomicBool::new(true);
+static HEALTHY: AtomicBool = AtomicBool::new(false);  // nothing is tucked away until the strip is up
 static STRIP_SHOWN: AtomicBool = AtomicBool::new(false);
+static TB_VISIBLE: AtomicBool = AtomicBool::new(true);
 static STRIP_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 fn now_secs() -> u64 { SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
 
 /// Pure decision, kept separate so it can be tested: is the dock fit to keep buttons tucked away?
-fn dock_healthy(missed_pings: u32, strip_shown: bool, secs_since_ui: u64) -> bool {
-    missed_pings < 2 && (!strip_shown || secs_since_ui < 15)
+fn dock_healthy(missed_pings: u32, strip_shown: bool, taskbar_visible: bool, secs_since_ui: u64) -> bool {
+    missed_pings < 2 && if strip_shown { secs_since_ui < 15 } else { !taskbar_visible }
 }
 
 #[cfg(windows)]
@@ -408,7 +410,7 @@ fn watchdog() {
         missed = if answered { 0 } else { missed + 1 };
         let seen = UI_SEEN.load(Ordering::Relaxed);
         let since = now_secs().saturating_sub(if seen == 0 { started } else { seen });
-        let ok = dock_healthy(missed, STRIP_SHOWN.load(Ordering::Relaxed), since);
+        let ok = dock_healthy(missed, STRIP_SHOWN.load(Ordering::Relaxed), TB_VISIBLE.load(Ordering::Relaxed), since);
         HEALTHY.store(ok, Ordering::Relaxed);
         if ok != was { println!("[watchdog] dock {}", if ok { "healthy again: organizing" } else { "not responding: taskbar buttons restored" }); was = ok; }
     }
@@ -419,11 +421,13 @@ mod watchdog_tests {
     use super::dock_healthy;
     #[test]
     fn decides_when_buttons_must_come_back() {
-        assert!(dock_healthy(0, true, 1));
-        assert!(dock_healthy(1, true, 1), "one slow ping is tolerated");
-        assert!(!dock_healthy(2, true, 1), "a frozen main thread gives the buttons back");
-        assert!(!dock_healthy(0, true, 20), "a shown strip that stopped refreshing gives them back");
-        assert!(dock_healthy(0, false, 600), "a hidden strip (full-screen game) may stop refreshing");
+        // (missed pings, strip shown, taskbar visible, seconds since the strip last refreshed)
+        assert!(dock_healthy(0, true, true, 1));
+        assert!(dock_healthy(1, true, true, 1), "one slow ping is tolerated");
+        assert!(!dock_healthy(2, true, true, 1), "a frozen main thread gives the buttons back");
+        assert!(!dock_healthy(0, true, true, 20), "a shown strip that stopped refreshing gives them back");
+        assert!(!dock_healthy(0, false, true, 1), "taskbar on screen but no strip: the apps must not vanish");
+        assert!(dock_healthy(0, false, false, 600), "taskbar hidden (auto-hide, full-screen game): fine to keep them tucked");
     }
 }
 
@@ -778,7 +782,6 @@ fn taskbar_tracker(app: AppHandle) {
     use windows::Win32::System::Com::*;
     use windows::Win32::System::Variant::VARIANT;
     use windows::Win32::UI::Accessibility::*;
-    use windows::Win32::UI::Shell::*;
     use windows::Win32::UI::WindowsAndMessaging::*;
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -796,8 +799,11 @@ fn taskbar_tracker(app: AppHandle) {
             let scale = mon.scale_factor();
             let mon_bottom = mon.position().y + mon.size().height as i32;
             let tb_visible = r.top < mon_bottom - 6 && (r.bottom - r.top) > 20;
-            let qs = SHQueryUserNotificationState().unwrap_or(QUNS_ACCEPTS_NOTIFICATIONS);
-            let fullscreen = qs == QUNS_RUNNING_D3D_FULL_SCREEN || qs == QUNS_PRESENTATION_MODE || qs == QUNS_BUSY;
+            // Full screen means: the window in front covers the whole monitor the taskbar is on. Windows' own
+            // "busy" state can't be used: a full-screen picture on ANY screen (a USB sensor LCD, a second
+            // monitor) sets it, which once hid the dock for good while its folders were still holding apps.
+            let fullscreen = foreground_covers_taskbar_monitor(tb);
+            TB_VISIBLE.store(tb_visible, Ordering::Relaxed);
             if tb_visible && last_uia.elapsed() > Duration::from_millis(350) {
                 last_uia = Instant::now();
                 if let Some(u) = uia.as_ref() {
@@ -843,6 +849,30 @@ fn taskbar_tracker(app: AppHandle) {
             }
         }
     }
+}
+
+#[cfg(windows)]
+unsafe fn foreground_covers_taskbar_monitor(tb: windows::Win32::Foundation::HWND) -> bool {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    let fg = GetForegroundWindow();
+    if fg.is_invalid() || fg == tb { return false; }
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(fg, Some(&mut pid));
+    if pid == std::process::id() { return false; }
+    let mut cls = [0u16; 64];
+    let n = GetClassNameW(fg, &mut cls) as usize;
+    let class = String::from_utf16_lossy(&cls[..n.min(cls.len())]);
+    if ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"].contains(&class.as_str()) { return false; }
+    let mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    if mon != MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST) { return false; }
+    let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    if !GetMonitorInfoW(mon, &mut mi).as_bool() { return false; }
+    let mut r = RECT::default();
+    if GetWindowRect(fg, &mut r).is_err() { return false; }
+    let m = mi.rcMonitor;
+    r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom
 }
 
 #[cfg(windows)]
