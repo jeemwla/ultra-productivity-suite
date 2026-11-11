@@ -106,6 +106,153 @@ fn is_kept(exe: &str, cfg: &OrgCfg) -> bool {
     cfg.keep.iter().any(|k| lower.ends_with(k.as_str()) || lower.contains(k.as_str()))
 }
 
+// ----------------------------------------------------------------------------- taskbar pins
+/// Apps pinned to the taskbar stay normal taskbar buttons. Tucking a pinned app's button away leaves the pin
+/// without its "running" underline and puts a second copy of the app in a folder, so pins always win.
+/// Two sources: shortcut files (normal programs) and the Taskband "Favorites" value (Store/MSIX apps such as
+/// Claude, which only appear there as a package family name and install folder).
+#[derive(Default, Debug, PartialEq)]
+struct Pins { exes: Vec<String>, dirs: Vec<String>, pkgs: Vec<(String, String)> }
+static PINS: Mutex<Option<(Instant, std::sync::Arc<Pins>)>> = Mutex::new(None);
+
+/// Printable UTF-16 runs of at least 6 characters, tried at both byte alignments.
+fn utf16_strings(bytes: &[u8]) -> Vec<String> {
+    let mut out = vec![];
+    for start in 0..2 {
+        let mut cur = String::new();
+        for ch in bytes[start.min(bytes.len())..].chunks_exact(2) {
+            let c = u16::from_le_bytes([ch[0], ch[1]]);
+            if (0x20..0x7f).contains(&c) { cur.push(c as u8 as char); }
+            else { if cur.len() >= 6 { out.push(std::mem::take(&mut cur)); } cur.clear(); }
+        }
+        if cur.len() >= 6 { out.push(cur); }
+    }
+    out
+}
+
+/// Sort the strings found in the Favorites value into exe paths, install folders and package family names.
+fn pins_from_strings(strings: &[String], pins: &mut Pins) {
+    for s in strings {
+        let s = s.trim().to_lowercase();
+        let b = s.as_bytes();
+        if b.len() > 3 && b[1] == b':' && b[2] == b'\\' {
+            if s.ends_with(".exe") { pins.exes.push(s.clone()); }
+            else if s.contains("\\windowsapps\\") { pins.dirs.push(format!("{}\\", s.trim_end_matches('\\'))); }
+            continue;
+        }
+        // "claude_pzs8sxrjxfjjc", "claude_5.1231.2.0_x64__pzs8sxrjxfjjc" or "claude_pzs8sxrjxfjjc!claude"
+        let id = s.split('!').next().unwrap_or("");
+        if let Some((head, publisher)) = id.rsplit_once('_') {
+            let name = head.split('_').next().unwrap_or("");
+            if publisher.len() == 13 && publisher.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                && !name.is_empty() && !name.contains(' ') {
+                let p = (name.to_string(), publisher.to_string());
+                if !pins.pkgs.contains(&p) { pins.pkgs.push(p); }
+            }
+        }
+    }
+}
+
+/// A shortcut's folder counts too (Discord's pin points at Update.exe, its window comes from app-x\Discord.exe),
+/// except broad system folders, which would sweep in unrelated programs.
+fn add_pin_target(target: &str, pins: &mut Pins) {
+    let t = target.trim().to_lowercase();
+    if !t.ends_with(".exe") { return; }
+    pins.exes.push(t.clone());
+    let windir = std::env::var("WINDIR").unwrap_or_else(|_| "c:\\windows".into()).to_lowercase();
+    if let Some((dir, _)) = t.rsplit_once('\\') {
+        if !dir.starts_with(&windir) && dir.matches('\\').count() >= 2 { pins.dirs.push(format!("{dir}\\")); }
+    }
+}
+
+#[cfg(windows)]
+fn read_pins() -> Pins {
+    use windows::core::{w, Interface, HSTRING};
+    use windows::Win32::System::Com::*;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_BINARY};
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    let mut pins = Pins::default();
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let dir = PathBuf::from(appdata).join(r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar");
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = e.path();
+            if path.extension().map(|x| x.eq_ignore_ascii_case("lnk")) != Some(true) { continue; }
+            unsafe {
+                let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER) else { continue };
+                let Ok(pf) = link.cast::<IPersistFile>() else { continue };
+                if pf.Load(&HSTRING::from(path.as_os_str()), STGM_READ).is_err() { continue; }
+                let mut buf = [0u16; 1024];
+                if link.GetPath(&mut buf, std::ptr::null_mut(), 0).is_ok() {
+                    let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+                    add_pin_target(&String::from_utf16_lossy(&buf[..n]), &mut pins);
+                }
+            }
+        }
+    }
+    unsafe {
+        let key = w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband");
+        let mut size = 0u32;
+        if RegGetValueW(HKEY_CURRENT_USER, key, w!("Favorites"), RRF_RT_REG_BINARY, None, None, Some(&mut size)).is_ok() && size > 0 {
+            let mut data = vec![0u8; size as usize];
+            if RegGetValueW(HKEY_CURRENT_USER, key, w!("Favorites"), RRF_RT_REG_BINARY, None, Some(data.as_mut_ptr() as *mut _), Some(&mut size)).is_ok() {
+                data.truncate(size as usize);
+                pins_from_strings(&utf16_strings(&data), &mut pins);
+            }
+        }
+    }
+    pins
+}
+
+#[cfg(windows)]
+fn pinned_apps() -> std::sync::Arc<Pins> {
+    if let Ok(g) = PINS.lock() { if let Some((t, p)) = g.as_ref() { if t.elapsed() < Duration::from_secs(10) { return p.clone(); } } }
+    let p = std::sync::Arc::new(read_pins());
+    if let Ok(mut g) = PINS.lock() { *g = Some((Instant::now(), p.clone())); }
+    p
+}
+
+fn is_pinned(exe: &str, pins: &Pins) -> bool {
+    let lower = exe.to_lowercase();
+    pins.exes.iter().any(|e| *e == lower)
+        || pins.dirs.iter().any(|d| lower.starts_with(d.as_str()))
+        || pins.pkgs.iter().any(|(name, publisher)| lower.contains(&format!("\\windowsapps\\{name}_")) && lower.contains(&format!("__{publisher}\\")))
+}
+
+#[cfg(test)]
+mod pin_tests {
+    use super::*;
+
+    fn utf16(s: &str) -> Vec<u8> { s.encode_utf16().flat_map(|c| c.to_le_bytes()).collect() }
+
+    #[test]
+    fn store_app_pin_matches_its_window() {
+        // what the owner's Taskband Favorites value holds for Claude, wrapped in binary noise
+        let mut blob = vec![0x14, 0x00, 0x1f, 0x80];
+        for s in ["Claude_pzs8sxrjxfjjc", "\u{1}", r"C:\Program Files\WindowsApps\Claude_5.1231.2.0_x64__pzs8sxrjxfjjc", "\u{2}", r"Assets\Square150x150Logo.png"] {
+            blob.extend(utf16(s));
+        }
+        let mut pins = Pins::default();
+        pins_from_strings(&utf16_strings(&blob), &mut pins);
+        assert!(pins.pkgs.contains(&("claude".into(), "pzs8sxrjxfjjc".into())));
+        assert!(is_pinned(r"C:\Program Files\WindowsApps\Claude_5.1231.2.0_x64__pzs8sxrjxfjjc\app\claude.exe", &pins));
+        // an updated Claude lives in a new versioned folder and still matches by package name
+        assert!(is_pinned(r"C:\Program Files\WindowsApps\Claude_5.2000.0.0_x64__pzs8sxrjxfjjc\app\claude.exe", &pins));
+        assert!(!is_pinned(r"C:\Users\x\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\claude-code\claude.exe", &pins));
+        assert!(!is_pinned(r"C:\Program Files\WindowsApps\Spotify_1.2.3.0_x64__zpdnekdrzrea0\Spotify.exe", &pins));
+    }
+
+    #[test]
+    fn shortcut_pin_covers_its_folder_but_not_windows() {
+        let mut pins = Pins::default();
+        add_pin_target(r"C:\Users\x\AppData\Local\DiscordPTB\Update.exe", &mut pins);
+        add_pin_target(r"C:\Windows\System32\cmd.exe", &mut pins);
+        assert!(is_pinned(r"C:\Users\x\AppData\Local\DiscordPTB\app-1.0.1\DiscordPTB.exe", &pins));
+        assert!(is_pinned(r"C:\Windows\System32\cmd.exe", &pins));
+        assert!(!is_pinned(r"C:\Windows\System32\notepad.exe", &pins), "a system-folder pin must not sweep in its neighbours");
+        assert!(!is_pinned(r"C:\Users\x\AppData\Local\Discord\app-1.0\Discord.exe", &pins));
+    }
+}
+
 fn pretty_name(exe: &str) -> String {
     let stem = exe.rsplit('\\').next().unwrap_or(exe).trim_end_matches(".exe").trim_end_matches(".EXE");
     let mut c = stem.chars();
@@ -194,6 +341,7 @@ fn organizer_loop() {
     loop {
         std::thread::sleep(Duration::from_millis(700));
         let cfg = org_config();
+        let pins = pinned_apps();
         let wins = enum_app_windows();
         let fg = unsafe { GetForegroundWindow().0 as isize };
         let on = ORGANIZE.load(Ordering::Relaxed);
@@ -204,7 +352,7 @@ fn organizer_loop() {
             hidden.retain(|h| unsafe { IsWindow(Some(HWND(*h as _))).as_bool() });
             let reapply = last_reapply.elapsed() > Duration::from_secs(4);
             for (h, title, exe) in &wins {
-                let kept = is_kept(exe, &cfg);
+                let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
                 let hw = HWND(*h as _);
                 if on && !kept {
                     // apps re-add their own button when they re-show a window, so re-apply now and then
