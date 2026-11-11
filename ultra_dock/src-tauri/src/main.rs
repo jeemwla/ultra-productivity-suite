@@ -13,6 +13,7 @@ use base64::Engine;
 mod recovery;
 mod wake;
 mod dock_safety;
+mod launch;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -43,6 +44,8 @@ static CORE: Mutex<Option<Child>> = Mutex::new(None);
 static GUARD: Mutex<Option<Child>> = Mutex::new(None);
 static ICONS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 static SNAPSHOT: Mutex<Vec<WinInfo>> = Mutex::new(Vec::new());
+static LAUNCHES: launch::Launches = launch::Launches::new();
+static STARTUP_URL: std::sync::OnceLock<tauri::Url> = std::sync::OnceLock::new();
 
 #[derive(Serialize, Clone, PartialEq)]
 struct WinInfo { hwnd: isize, title: String, exe: String, name: String, category: String, active: bool }
@@ -903,32 +906,104 @@ fn set_app_identity(app: &AppHandle, win: &WebviewWindow, name: &str, title: &st
 fn set_app_identity(_app: &AppHandle, _win: &WebviewWindow, _name: &str, _title: &str) {}
 
 fn open_view(app: &AppHandle, name: &str) {
-    let (title, url, w, h) = match name {
-        "alarm" => ("Code Red Alarm", "http://127.0.0.1:8081/", 1360.0, 920.0),
-        "sentinel" => ("PC Sentinel", "http://127.0.0.1:8084/", 1440.0, 960.0),
-        "insights" => ("Ultra Suite Insights", "http://127.0.0.1:8301/", 1440.0, 960.0),
-        _ => return,
-    };
-    if let Some(win) = app.get_webview_window(name) { let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return; }
-    ensure_core(app);
+    let Some(view) = launch::view(name) else { return };
+    if let Some(win) = app.get_webview_window(name) { show_view_window(&win); }
+    let Some(permit) = LAUNCHES.begin(view) else { return };
+    let app = app.clone();
+    // Creating WebView2 in a synchronous Windows command/event callback can deadlock.
+    // https://docs.rs/tauri/2.12.5/tauri/webview/struct.WebviewWindowBuilder.html#method.new
+    if let Err(error) = std::thread::Builder::new().name(format!("launch-{}", view.name)).spawn(move || {
+        let _permit = permit;
+        open_view_worker(&app, view);
+    }) { eprintln!("[launch] worker could not start: {error}"); }
+}
+
+fn show_view_window(win: &WebviewWindow) {
+    let _ = win.unminimize();
+    let _ = win.show();
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::{Foundation::{HWND, RECT}, Graphics::Gdi::*, UI::WindowsAndMessaging::*};
+        if let Ok(handle) = win.hwnd() {
+            let hwnd = HWND(handle.0 as _);
+            let mut rect = RECT::default();
+            let mut monitor = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+            if !IsIconic(hwnd).as_bool() && GetWindowRect(hwnd, &mut rect).is_ok()
+                && GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut monitor).as_bool() {
+                let area = monitor.rcWork;
+                let visible_w = rect.right.min(area.right) - rect.left.max(area.left);
+                let visible_h = rect.bottom.min(area.bottom) - rect.top.max(area.top);
+                let width = (rect.right - rect.left).min(area.right - area.left);
+                let height = (rect.bottom - rect.top).min(area.bottom - area.top);
+                if visible_w < 80 || visible_h < 48 || rect.right - rect.left > width || rect.bottom - rect.top > height {
+                    let x = rect.left.clamp(area.left, area.right - width);
+                    let y = rect.top.clamp(area.top, area.bottom - height);
+                    let _ = SetWindowPos(hwnd, None, x, y, width, height, SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                }
+            }
+        }
+    }
+    let _ = win.set_focus();
+}
+
+fn open_view_worker(app: &AppHandle, view: launch::View) {
+    #[cfg(windows)]
+    struct Apartment(bool);
+    #[cfg(windows)]
+    impl Drop for Apartment { fn drop(&mut self) { if self.0 { unsafe { windows::Win32::System::Com::CoUninitialize(); } } } }
+    #[cfg(windows)]
+    let _apartment = Apartment(unsafe { windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED) }.is_ok());
+    let name = view.name;
+    let url = format!("http://127.0.0.1:{}/", view.port);
+    let startup = format!("starting.html?app={name}");
+    if let Some(win) = app.get_webview_window(name) {
+        if LAUNCHES.loaded(view) { ensure_core(app); return; }
+        if let Some(base) = STARTUP_URL.get() {
+            let mut loading = base.clone();
+            loading.set_query(Some(&format!("app={name}")));
+            let _ = win.navigate(loading);
+        }
+        wait_for_view(app, &win, view, &url);
+        return;
+    }
+    let (w, h) = if name == "alarm" { (1360.0, 920.0) } else { (1440.0, 960.0) };
     // every app window gets its own icon (title bar, taskbar, Alt+Tab)
     let icon_bytes: &[u8] = match name {
         "alarm" => include_bytes!("../icons/apps/alarm.png"),
         "sentinel" => include_bytes!("../icons/apps/sentinel.png"),
         _ => include_bytes!("../icons/apps/insights.png"),
     };
-    let mut builder = WebviewWindowBuilder::new(app, name, WebviewUrl::External(url.parse().unwrap()))
-        .title(title).inner_size(w, h).min_inner_size(900.0, 620.0).center().visible(false);
-    if let Ok(img) = tauri::image::Image::from_bytes(icon_bytes) {
-        builder = match builder.icon(img) { Ok(b) => b, Err(_) => return };
-    }
-    if let Ok(win) = builder.build() {
+    let builder = WebviewWindowBuilder::new(app, name, WebviewUrl::App(startup.into()))
+        .title(view.title).inner_size(w, h).min_inner_size(360.0, 400.0).center().visible(false)
+        .on_page_load(move |_, payload| {
+            let loaded = payload.event() == tauri::webview::PageLoadEvent::Finished
+                && payload.url().host_str() == Some("127.0.0.1") && payload.url().port() == Some(view.port);
+            LAUNCHES.set_loaded(view, loaded);
+        });
+    match builder.build() {
+      Ok(win) => {
         let w2 = win.clone();
         win.on_window_event(move |e| { if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w2.hide(); } });
-        set_app_identity(app, &win, name, title);
-        let _ = win.show();
-        let _ = win.set_focus();
+        if let Ok(img) = tauri::image::Image::from_bytes(icon_bytes) { let _ = win.set_icon(img); }
+        set_app_identity(app, &win, name, view.title);
+        show_view_window(&win);
+        wait_for_view(app, &win, view, &url);
+      }
+      Err(error) => eprintln!("[launch] {} window creation failed: {error}", view.name),
     }
+}
+
+fn wait_for_view(app: &AppHandle, win: &WebviewWindow, view: launch::View, url: &str) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    ensure_core(app);
+    while Instant::now() < deadline {
+        if view.ready(http_get(view.port, view.probe).as_deref()) {
+            if let Err(error) = win.navigate(url.parse().unwrap()) { eprintln!("[launch] {} navigation failed: {error}", view.name); }
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let _ = win.eval("document.getElementById('status').textContent='The local service is not ready yet. Try again, or check that the app service is running.';document.getElementById('retry').disabled=false;document.getElementById('retry').textContent='Try again';");
 }
 
 fn port_open(port: u16) -> bool {
@@ -1284,7 +1359,12 @@ fn main() {
             let handle = app.handle().clone();
             let strip = WebviewWindowBuilder::new(app, "taskbar", WebviewUrl::App("index.html?view=strip".into()))
                 .title("Ultra Dock").decorations(false).transparent(true).always_on_top(true).skip_taskbar(true)
-                .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0).build()?;
+                .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0)
+                .on_page_load(|_, payload| {
+                    let mut url = payload.url().clone();
+                    url.set_path("/starting.html");url.set_query(None);url.set_fragment(None);
+                    let _ = STARTUP_URL.set(url);
+                }).build()?;
             #[cfg(windows)]
             make_noactivate(&strip);
             if let Ok(h) = strip.hwnd() { STRIP_HWND.store(h.0 as isize, Ordering::Relaxed); }

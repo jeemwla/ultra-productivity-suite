@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Starting app</title>
+<style>:root{color-scheme:light dark;font:15px/1.6 "Segoe UI",system-ui,sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;background:Canvas;color:CanvasText}main{max-width:480px;padding:32px}h1{font-size:26px;line-height:1.25}p{opacity:.75}button{font:inherit;padding:9px 18px;border-radius:9px;border:1px solid GrayText;background:ButtonFace;color:ButtonText;cursor:pointer}button:disabled{cursor:wait;opacity:.6}:focus-visible{outline:2px solid Highlight;outline-offset:3px}</style></head>
+<body><main><h1 id="title">Starting app…</h1><p id="status" role="status">Waiting for the local service. This window will open the app when it is ready.</p><button id="retry" disabled>Checking the service…</button></main>
+<script>
+const app=new URLSearchParams(location.search).get('app');
+const names={sentinel:'PC Sentinel',alarm:'Code Red Alarm',insights:'Ultra Suite Insights'};
+document.getElementById('title').textContent=names[app]?'Starting '+names[app]+'…':'App unavailable';
+document.getElementById('retry').addEventListener('click',async()=>{
+ const button=document.getElementById('retry');button.disabled=true;button.textContent='Checking the service…';
+ try{await window.__TAURI__.core.invoke('open_app_view',{name:app});}
+ catch{document.getElementById('status').textContent='The app could not be opened. Try again.';button.disabled=false;button.textContent='Try again';}
+});
+</script></body></html>

@@ -56,6 +56,7 @@
   .ua-pop{position:fixed;z-index:80;width:340px;max-width:calc(100vw - 24px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;
     box-shadow:0 24px 60px -20px rgba(0,0,0,.45);padding:14px;opacity:0;transform:translateY(-6px) scale(.98);transform-origin:top right;pointer-events:none;transition:opacity .18s,transform .22s cubic-bezier(.2,.9,.25,1)}
   .ua-pop.show{opacity:1;transform:none;pointer-events:auto}
+  .ua-pop[hidden]{display:none!important}
   .ua-pop h4{font:600 13px var(--font,system-ui);margin:2px 2px 10px;color:var(--ink)}
   .ua-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
   .ua-sw{border:1px solid var(--line);border-radius:12px;padding:8px;cursor:pointer;background:transparent;text-align:left;color:var(--ink);transition:border-color .15s,transform .15s}
@@ -78,7 +79,14 @@
   body{transition:background-color .35s ease,color .35s ease}`;
   const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
   const ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6C22 6 17.5 2 12 2Z"/></svg>';
-  let pop = null;
+  let pop = null, trigger = null;
+  function closeAppearance(restoreFocus=false){
+    if(!pop)return;
+    const inside=pop.contains(document.activeElement);
+    pop.classList.remove('show');pop.hidden=true;
+    if(trigger)trigger.setAttribute('aria-expanded','false');
+    if(restoreFocus&&inside&&trigger)trigger.focus();
+  }
   apply();
   function renderSwatches(){
     if (!pop) return;
@@ -86,7 +94,7 @@
     pop.querySelectorAll(".ua-seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === state.motion));
   }
   function build(){
-    pop = document.createElement("div"); pop.className = "ua-pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Appearance");
+    pop = document.createElement("div"); pop.className = "ua-pop"; pop.id="ultra-appearance";pop.hidden=true;pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Appearance");
     const sw = (k) => { const t = P[k] || { bg: "linear-gradient(135deg,#f4f5f7 50%,#0f1012 50%)", accent: "#2a78d6", series2: "#eb6834", good: "#0ca30c", name: "System" };
       return `<button class="ua-sw" data-t="${k}" aria-pressed="false"><div class="pv" style="background:${t.bg};border:1px solid ${t.line || "rgba(127,127,127,.3)"}">
         <i style="height:60%;background:${t.accent}"></i><i style="height:85%;background:${t.series2}"></i><i style="height:40%;background:${t.good}"></i></div><span>${t.name}</span></button>`; };
@@ -99,6 +107,8 @@
   function toggle(btn){
     if (!pop) build();
     const show = !pop.classList.contains("show");
+    if(!show){closeAppearance();return;}
+    trigger=btn;pop.hidden=false;btn.setAttribute('aria-expanded','true');
     if (show) { // open below or above the button, toward whichever side has room
       const r = btn.getBoundingClientRect(), h = pop.offsetHeight || 330, below = innerHeight - r.bottom > h + 16;
       pop.style.top = below ? (r.bottom + 8) + "px" : Math.max(12, r.top - h - 8) + "px";
@@ -106,8 +116,8 @@
       else { pop.style.right = Math.max(12, innerWidth - r.right) + "px"; pop.style.left = "auto"; pop.style.transformOrigin = below ? "top right" : "bottom right"; } }
     pop.classList.toggle("show", show);
   }
-  document.addEventListener("click", (e) => { if (pop && pop.classList.contains("show") && !pop.contains(e.target) && !e.target.closest(".ua-btn")) pop.classList.remove("show"); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pop) pop.classList.remove("show"); });
+  document.addEventListener("click", (e) => { if (pop && pop.classList.contains("show") && !pop.contains(e.target) && !e.target.closest(".ua-btn")) closeAppearance(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pop) closeAppearance(true); });
 
   /* ---------- Scroll reveal for cards below the fold ---------- */
   function reveal(){
@@ -121,6 +131,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-theme-slot]").forEach(slot => {
       const b = document.createElement("button"); b.className = "ua-btn"; b.type = "button"; b.title = "Appearance"; b.setAttribute("aria-label", "Appearance");
+      b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls','ultra-appearance');b.setAttribute('aria-expanded','false');
       b.innerHTML = ICON; b.addEventListener("click", (e) => { e.stopPropagation(); toggle(b); }); slot.replaceWith(b);
     });
     setTimeout(reveal, 60);
