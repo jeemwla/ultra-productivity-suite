@@ -95,3 +95,12 @@ test('failed PSU saves preserve newer edits and show the failure',async()=>{
  post.reject(new Error('local storage unavailable'));await saving;h.ctx.renderPower();
  assert.equal(h.box('psu-w').value,'850');assert.match(h.box('psu-save-status').textContent,/Not saved: local storage unavailable/);
 });
+
+test('power history uses the displayed quantity and separates estimate from component history',()=>{
+ const h=harness({});h.ctx.H={pw:[]};h.ctx.push=(key,value)=>h.ctx.H[key].push(value);
+ h.ctx.recordPowerHistory({measured_subtotal_w:100});h.ctx.recordPowerHistory({measured_subtotal_w:110});
+ assert.deepEqual(Array.from(h.ctx.H.pw),[100,110]);
+ h.ctx.recordPowerHistory({modeled_dc_w:150,measured_subtotal_w:110,coverage:{component_readings_complete:true}});
+ assert.deepEqual(Array.from(h.ctx.H.pw),[150],'a different quantity begins a new history');
+ h.ctx.recordPowerHistory({});assert.deepEqual(Array.from(h.ctx.H.pw),[null]);
+});

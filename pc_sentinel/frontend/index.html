@@ -521,7 +521,7 @@ document.addEventListener("mousemove", (e) => {
 const lvl = (v, w, c) => v == null ? "good" : v >= c ? "critical" : v >= w ? "warning" : "good";
 const HOT = { good: "Normal", warning: "Warm", critical: "Hot" };
 function trend(id, color){ return `<svg class="trend" viewBox="0 0 300 42" preserveAspectRatio="none" aria-hidden="true"><path id="ta-${id}" fill="${color}" opacity=".12"/><path id="tl-${id}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`; }
-function drawTrend(id, arr){ const a = arr.slice(-60).filter(v => v != null); if (a.length < 2) return; const max = Math.max(...a) * 1.08, min = Math.min(...a) * .92, sp = Math.max(1, max - min);
+function drawTrend(id, arr){ const a = arr.slice(-60).filter(v => v != null); if (a.length < 2) { $("tl-" + id)?.setAttribute("d", ""); $("ta-" + id)?.setAttribute("d", ""); return; } const max = Math.max(...a) * 1.08, min = Math.min(...a) * .92, sp = Math.max(1, max - min);
   const pts = a.map((v, i) => [(i + (60 - a.length)) / 59 * 300, 40 - (v - min) / sp * 36]); const d = smooth(pts);
   $("tl-" + id).setAttribute("d", d); $("ta-" + id).setAttribute("d", d + ` L${pts[pts.length - 1][0]},42 L${pts[0][0]},42 Z`); }
 function buildTiles(){ if ($("t-cpu")) return; const tile = (id, l, u, c, href) => `<a class="card tile" href="#${href}" style="color:inherit"><div class="l"><span>${l}</span><span id="t-${id}-sub"></span></div>
@@ -592,6 +592,8 @@ function powerView(p){
   const wall=modeled!=null&&validWatts(p.modeled_wall_w)?`Wall model: ≈ ${n0(p.modeled_wall_w)} W, assuming ${n0((p.wall_model?.efficiency??.9)*100)}% efficiency. Not metered.`:"Wall consumption is not measured.";
   return {value:modeled??subtotal,kind:modeled!=null?"modeled":subtotal!=null?"partial":"unknown",label:modeled!=null?"Estimated system draw":subtotal!=null?"Measured component subtotal":"Unavailable",wall};
 }
+let powerHistoryKind=null;
+function recordPowerHistory(p){const view=powerView(p);if(powerHistoryKind!==view.kind){H.pw.length=0;powerHistoryKind=view.kind;}push("pw",view.value);}
 let powerContext=null, powerContextError="", powerSaving=false, powerContextGeneration=0;
 async function loadPowerContext(){const generation=++powerContextGeneration;try{const value=await api("/api/power/context");if(generation!==powerContextGeneration)return;powerContext=value;powerContextError="";}catch{if(generation!==powerContextGeneration)return;powerContextError="PSU details could not be loaded. Retry Save when the local service is ready.";}if(snap)renderPower();}
 function renderPower(){
@@ -816,7 +818,28 @@ async function checkUpdate(force){ try { const u = await api("/api/update" + (fo
 $("upd-later").onclick = () => { store.set("skipVersion", $("upd").dataset.v || ""); $("upd").hidden = true; };
 $("upd-go").onclick = async () => { $("upd-go").disabled = true; $("upd-go").textContent = "Downloading…"; try { await api("/api/update/install", { method: "POST" }); toast("The installer is starting. Ultra Suite reopens when it's done."); } catch (e) { toast(e.message, true); } $("upd-go").disabled = false; $("upd-go").textContent = "Update now"; };
 $("ab-upd").onclick = () => checkUpdate(true);
-$("ab-export").onclick = () => { const rep = { exported: new Date().toISOString(), snapshot: snap, apps, plans, displays: disps }; const a = document.createElement("a");
+function prepareReport(input, includeIdentifiers=false){
+  const report=JSON.parse(JSON.stringify(input));
+  report.privacy={identifiers_included:includeIdentifiers,description:includeIdentifiers?"Includes available computer identifiers and process details.":"Known identifier fields and user paths redacted; process details omitted. Review free text before sharing."};
+  if(includeIdentifiers)return report;
+  const hostname=report.snapshot?.hardware?.device?.hostname;
+  delete report.apps;
+  const identifier=/^(?:hostname|computer_?name|serial(?:_?number)?|serial_number_raw|uuid|unique_?id|canonical_exe|exe|(?:.*_)?path|(?:.*_)?ip(?:_address)?|mac(?:_address)?|address|host)$/i;
+  const scrub=(value,key="")=>{
+    if(identifier.test(key)&&value!=null)return "[redacted]";
+    if(typeof value==="string"){
+      if(/(?:[a-z]:[\\/]|\\\\)[^\r\n]*\busers[\\/]/i.test(value)||/\/(?:home|Users)\/[^/\s]+/.test(value))return "[redacted user path]";
+      if(hostname&&value.toLocaleLowerCase().includes(hostname.toLocaleLowerCase()))return "[redacted computer name]";
+      return value;
+    }
+    if(Array.isArray(value))return value.map(v=>scrub(v));
+    if(value&&typeof value==="object")for(const k of Object.keys(value))value[k]=scrub(value[k],k);
+    return value;
+  };
+  return scrub(report);
+}
+$("ab-export").insertAdjacentHTML("beforebegin",'<label style="display:block;margin:12px 0"><input id="ab-export-identifiers" type="checkbox"> Include computer name, process details and file paths</label><p class="muted" style="margin-bottom:10px">Off by default. Known identifiers are hidden in the default report. Review free text before sharing.</p>');
+$("ab-export").onclick = () => { const rep = prepareReport({ exported: new Date().toISOString(), snapshot: snap, apps, plans, displays: disps },$("ab-export-identifiers").checked); const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(rep, null, 2)], { type: "application/json" })); a.download = `pc-sentinel-report-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("Report saved to your Downloads folder."); };
 
 /* ---------- feedback ---------- */
@@ -884,7 +907,7 @@ function render(){
   ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
 }
 function onSnap(d){ snap = d; lastMsg = Date.now(); const s = d.hardware.summary || {};
-  push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); push("pw", d.hardware.power && d.hardware.power.dc_total_w); push("cput", s.cpu_temp); push("gput", s.gpu_temp);
+  push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); recordPowerHistory(d.hardware.power); push("cput", s.cpu_temp); push("gput", s.gpu_temp);
   checkAlerts(s); if (!document.hidden) render(); }
 function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`); ws.onopen = () => { retry = 0; };
   ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
