@@ -578,14 +578,36 @@ mod watchdog_tests {
     }
 }
 
+/// The strip lists other apps only where it can stand in for their native taskbar buttons. While a taskbar it cannot
+/// cover keeps every native button visible, listing the same apps in the strip would show each app twice, and
+/// clicking the copy would only bring up the window the native button already opens. Brief health dips do not
+/// empty the strip, so it does not flicker while it resizes.
+fn strip_lists_windows(organize: bool, all_taskbars_covered: bool) -> bool { organize && all_taskbars_covered }
+
+#[cfg(test)]
+mod strip_listing_tests {
+    use super::strip_lists_windows;
+    #[test]
+    fn apps_are_listed_only_where_native_buttons_can_be_replaced() {
+        assert!(strip_lists_windows(true, true));
+        assert!(!strip_lists_windows(true, false), "an uncovered taskbar keeps native buttons, so no duplicates");
+        assert!(!strip_lists_windows(false, true), "grouping off: native buttons only");
+        assert!(!strip_lists_windows(false, false));
+    }
+}
+
 #[tauri::command]
 fn get_windows() -> Value {
     UI_SEEN.store(now_secs(), Ordering::Relaxed);  // polling is diagnostic, not proof of rendering
-    let wins = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
     #[cfg(windows)]
     let covered = all_taskbars_covered();
     #[cfg(not(windows))]
     let covered = false;
+    let wins = if strip_lists_windows(ORGANIZE.load(Ordering::Relaxed), covered) {
+        SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default()
+    } else {
+        vec![]
+    };
     let reason = if !ORGANIZE.load(Ordering::Relaxed) { Some("Grouping is off; native taskbar buttons stay visible.") }
         else if !covered { Some("Native taskbar mode: multiple taskbars need their own Dock strips.") }
         else if !HEALTHY.load(Ordering::Relaxed) { Some("Native taskbar mode until the Dock is visible, fits, and finishes rendering.") }
