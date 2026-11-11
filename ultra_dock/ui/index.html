@@ -182,7 +182,7 @@ function render(){
       <div class="tray ${open === cat ? "open now" : ""}"><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
-  const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${update ? `Ultra Dock: version ${esc(update.latest)} is available` : "Ultra Dock"}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
+  const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || (update ? `Ultra Dock: version ${update.latest} is available` : "Ultra Dock"))}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
     <div class="tray ${open === "__menu" ? "open now" : ""}"><div class="inner">${upAct}
       <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
@@ -192,7 +192,7 @@ function render(){
   $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
   requestAnimationFrame(report);
 }
-function report(){ if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth) + 2 }); }
+function report(){ if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth) + 2, rendered: state.windows.map(w => w.hwnd) }); }
 
 function setOpen(cat){
   const prev = open; open = cat;
@@ -239,9 +239,12 @@ $("strip").addEventListener("mouseenter", () => clearTimeout(closeTimer));
 async function poll(){
   try {
     const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
-    const nsig = JSON.stringify([s.organize, s.windows.map(w => [w.hwnd, w.category, w.active, w.title])]);
+    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title])]);
     state = s;
-    if (nsig !== sig) { sig = nsig; render(); }
+    // Commit the signature only after a successful render. Otherwise a transient
+    // render exception would prevent retries while polling still looked healthy.
+    if (nsig !== sig) { render(); sig = nsig; }
+    else report();
   } catch {}
 }
 /* ---------------- Update dot ----------------
