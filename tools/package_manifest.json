@@ -30,9 +30,12 @@
     "pc_sentinel/backend/process_icons.py",
     "pc_sentinel/backend/process_metadata.py",
     "pc_sentinel/backend/process_names.py",
+    "pc_sentinel/backend/psu_catalog.json",
+    "pc_sentinel/backend/psu_catalog.py",
     "pc_sentinel/backend/speedtest.py",
     "pc_sentinel/backend/storage_health.py",
     "pc_sentinel/backend/system_tools.py",
-    "pc_sentinel/frontend/index.html"
+    "pc_sentinel/frontend/index.html",
+    "pc_sentinel/frontend/psu_picker.js"
   ]
 }

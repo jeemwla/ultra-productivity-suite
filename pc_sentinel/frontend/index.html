@@ -260,6 +260,9 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 .field input[type=number]{width:84px;height:34px;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;background:var(--surface);text-align:right}
 #desktop-psu .field{flex-direction:column;align-items:flex-start;gap:6px}
 #desktop-psu .field input[type=text]{width:100%;min-width:0;height:36px;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;background:var(--surface)}
+#psu-catalog .field :is(select,input){width:100%;min-width:0;max-width:100%}
+#psu-catalog select{appearance:auto;height:38px}
+#psu-catalog summary{cursor:pointer;color:var(--accent);font-weight:600}
 .form-actions{display:flex;flex-wrap:wrap;gap:8px}
 .toggle{position:relative;width:40px;height:22px;flex:none}.toggle input{position:absolute;inset:0;opacity:0;z-index:1;cursor:pointer}
 .toggle span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .2s}
@@ -362,6 +365,16 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <p class="muted mt" id="pw-coverage"></p>
             <details class="mt"><summary>How the estimate is calculated</summary><div class="muted mt" id="pw-assumptions"></div></details>
             <div class="mt" id="desktop-psu"><h3>Desktop power supply (optional)</h3><p class="muted">Enter the rated output and size from the PSU label or receipt. These details stay on this PC.</p>
+            <details class="mt" id="psu-catalog"><summary>Find a PSU in the catalog</summary>
+              <p class="muted mt" id="psu-catalog-status" role="status">The catalog works offline. Open to choose a brand, wattage, size and model.</p>
+              <div class="field mt"><label for="psu-brand-search">Search brands</label><input id="psu-brand-search" type="search" placeholder="Type a brand, for example Corsair" autocomplete="off"></div>
+              <div class="field mt"><label for="psu-brand">Brand</label><select id="psu-brand" disabled><option value="">Choose brand</option></select></div>
+              <div class="field mt"><label for="psu-watts-choice">Wattage</label><select id="psu-watts-choice" disabled><option value="">Choose wattage</option></select></div>
+              <div class="field mt"><label for="psu-form-choice">Form factor</label><select id="psu-form-choice" disabled><option value="">Choose form factor</option></select></div>
+              <div class="field mt"><label for="psu-model-choice">Model / series</label><select id="psu-model-choice" disabled><option value="">Choose model / series</option></select></div>
+              <div class="mt form-actions"><button type="button" class="btn" id="psu-use" disabled>Use these details</button><button type="button" class="btn" id="psu-catalog-retry">Load / retry catalog</button></div>
+              <p class="muted mt" id="psu-choice-status" role="status"></p><p class="muted mt">Factual specifications from <a href="https://psutierlist.org" target="_blank" rel="noopener noreferrer">SPL's PSU Tier List</a>. Series ranges are not a list of available models. No tier ratings are included.</p>
+            </details>
             <div class="field mt"><label for="psu-w">Rated output (W)</label><input id="psu-w" type="number" min="50" max="5000" step="1" placeholder="e.g. 1000"></div>
             <div class="field mt"><label for="psu-model">Model</label><input type="text" id="psu-model" maxlength="120" placeholder="Optional model name"></div>
             <div class="field mt"><label for="psu-size">Size / form factor</label><input type="text" id="psu-size" maxlength="40" placeholder="e.g. ATX, SFX, SFX-L"></div>
@@ -972,5 +985,6 @@ setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && sn
 setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
 go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); checkUpdate(false); connect();
 </script>
+<script src="/psu_picker.js"></script>
 </body>
 </html>
