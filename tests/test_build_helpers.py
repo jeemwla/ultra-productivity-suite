@@ -73,6 +73,19 @@ class NativeCommands(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertNotIn("AFTER-STEP", r.stdout)
 
+    def test_prepared_interpreter_and_session_path_survive_tool_refresh(self):
+        with tempfile.TemporaryDirectory(prefix="ultrasuite-buildtools-", dir=SCRATCH_PARENT) as base:
+            shim = os.path.join(base, "python.cmd")
+            with open(shim, "w") as stream:
+                stream.write("@echo off\necho FIXTURE-PYTHON\n")
+            r = run_ps(f"$env:Path = {ps_quote(base + ';')} + $env:Path; "
+                       "$py = Initialize-BuildTools; "
+                       f"if ($py -ne {ps_quote(shim)}) {{ throw 'Prepared interpreter changed' }}; "
+                       f"if (($env:Path -split ';')[0] -ne {ps_quote(base)}) {{ throw 'Session PATH precedence lost' }}; "
+                       "Invoke-Native -Step 'prepared Python' -FilePath $py -ArgumentList @('-VV')")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("FIXTURE-PYTHON", r.stdout)
+
 
 @unittest.skipUnless(os.name == "nt" and os.path.isfile(POWERSHELL), "needs Windows PowerShell 5.1")
 @unittest.skipUnless(os.path.isfile(HELPERS), "tools/build_helpers.ps1 is missing")
@@ -142,6 +155,17 @@ class SafeDeletion(unittest.TestCase):
         r = self.remove(self.build)
         self.assertNotEqual(r.returncode, 0)
         self.assertTrue(os.path.isdir(self.core))
+
+    def test_relative_and_drive_relative_paths_are_refused_before_deletion(self):
+        for target, root in [("build\\dist\\x", self.build), (self.core, "build"),
+                             ("D:build\\dist\\x", self.build), (self.core, "D:build"),
+                             ("\\build\\dist\\x", self.build)]:
+            with self.subTest(target=target, root=root):
+                r = self.remove(target, root)
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("fully qualified", r.stdout + r.stderr)
+                self.assertTrue(os.path.isfile(os.path.join(self.core, "ultrasuite-core.exe")))
+                self.assertOutsideIntact()
 
     def test_junction_inside_the_tree_is_refused_and_not_followed(self):
         self.junction(os.path.join(self.core, "escape"), self.outside)

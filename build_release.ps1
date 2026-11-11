@@ -13,8 +13,10 @@ if (-not (Test-Path -LiteralPath $helpers -PathType Leaf)) {
     throw "Missing $helpers. The build needs it (native exit-code checks, safe cleanup, fresh-artifact checks)."
 }
 . $helpers
-# pick up tools installed since this window opened (Node, Rust)
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.cargo\bin"
+# Keep the caller's prepared Python and PATH, then discover newly installed tools.
+$PythonExe = Initialize-BuildTools
+Write-Host "Build Python: $PythonExe"
+Invoke-Native -Step "Python version" -FilePath $PythonExe -ArgumentList @("-VV")
 Set-Location $R
 # Building never touches the installed app: it stays running (alarms keep ringing) while artifacts are made in
 # build\ and ultra_dock\src-tauri\target\. Installing is a separate step (build\install_outside.cmd).
@@ -27,7 +29,7 @@ $Version = (Get-Content "$R\VERSION" -Raw).Trim()
 Write-Host "Ultra Suite $Version" -ForegroundColor Cyan
 
 Write-Host "[1/3] Generating app icons" -ForegroundColor Cyan
-Invoke-Native -Step "app icons" -FilePath "python" -ArgumentList @("-I", "$R\ultra_dock\tools\make_icons.py")
+Invoke-Native -Step "app icons" -FilePath $PythonExe -ArgumentList @("-I", "$R\ultra_dock\tools\make_icons.py")
 
 # keep the desktop app's version in step with VERSION
 $conf = "$R\ultra_dock\src-tauri\tauri.conf.json"
@@ -51,7 +53,7 @@ $coreArgs = @("-m", "PyInstaller", "--noconfirm", "--clean", "--noconsole", "--l
     $cs + @("--hidden-import", "xml.etree.ElementTree", "--hidden-import", "importlib.util", "--hidden-import", "tempfile",
     "$R\core\suite_core.py")
 $coreStarted = [DateTime]::UtcNow
-Invoke-Native -Step "PyInstaller core" -FilePath "python" -ArgumentList $coreArgs
+Invoke-Native -Step "PyInstaller core" -FilePath $PythonExe -ArgumentList $coreArgs
 $null = Assert-FreshFile -Path "$R\build\dist\ultrasuite-core\ultrasuite-core.exe" -NotBeforeUtc $coreStarted -What "The background service (ultrasuite-core.exe)"
 
 Write-Host "[3/3] Building the installer" -ForegroundColor Cyan

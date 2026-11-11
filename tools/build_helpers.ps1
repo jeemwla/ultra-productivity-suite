@@ -31,10 +31,27 @@ function Invoke-Native {
 
 function Get-NormalizedFullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
+    # IsPathRooted also accepts D:relative and \root-relative on .NET Framework.
+    # Neither identifies an absolute deletion target independently of shell state.
+    if ($Path -notmatch '^(?:[A-Za-z]:[\\/]|\\\\(?![?.](?:\\|$))[^\\/]+\\[^\\/]+(?:\\|$))') {
+        throw "Refusing path '$Path': a fully qualified drive or UNC path is required."
+    }
     $full = [IO.Path]::GetFullPath($Path)
     # Keep a drive root such as "D:\" intact; strip trailing separators otherwise
     if ($full.Length -gt 3) { $full = $full.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) }
     return $full
+}
+
+function Initialize-BuildTools {
+    # Resolve the prepared interpreter before refreshing tool discovery. Keep
+    # virtual-environment and Developer PowerShell paths ahead of registry paths.
+    $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $paths = @($env:Path -split ';') +
+        @([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') +
+        @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') +
+        @("$env:USERPROFILE\.cargo\bin")
+    $env:Path = ($paths | Where-Object { $_ } | Select-Object -Unique) -join ';'
+    return $python
 }
 
 function Test-IsReparsePoint {
