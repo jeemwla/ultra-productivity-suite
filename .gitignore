@@ -22,3 +22,6 @@ node_modules/
 # Build output
 build/
 02_translucent_taskbar_dock/src-tauri/appicons/
+
+# Private reports for the owner (never published)
+private/

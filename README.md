@@ -5,19 +5,22 @@ Four small Windows apps that work together: a wake-up alarm you can't ignore, a 
 | App | What it does | Opens at |
 |---|---|---|
 | **Code Red Alarm** | Alarms that force your chosen speaker to full volume and, in Code Red mode, only stop when you type a phrase (no pasting). Works from your phone over Tailscale. | http://localhost:8081 |
-| **Ultra Dock** | A translucent bar above the taskbar that groups your apps (AI, Chat, Games, Tools) into drawers. It finds which apps you have installed by itself. | starts with Windows |
+| **Ultra Dock** | Your app groups (AI, Chat, Games, Tools) built into the Windows taskbar next to Start. Click a group and its apps slide open right in the taskbar, with their real icons; click again and it slides closed. Hides during fullscreen games. | inside your taskbar |
 | **deck knobs** | Plugin and profile for deck decks: Spotify, Discord and master volume knobs, a PC-stats knob that toggles your VPN on press, and a Gaming folder (Riot, Epic). | inside deck Studio |
 | **PC Sentinel** | CPU, GPU, memory, fan and drive health in plain language (Simple) or every sensor (Detailed), plus live latency, a speed test and a VPN button. | http://localhost:8084 |
 
 ## Install (any Windows 10 or 11 PC)
 
-1. Download this repo: **Code → Download ZIP**, then unzip it somewhere permanent (for example `Documents\ultra-productivity-suite`).
-2. Double-click **`Setup.cmd`**.
-3. Click **Yes** when Windows asks for admin approval (once, so hardware sensors can start at sign-in).
+**[Download the installer (UltraSuite-Setup-x64.exe)](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)** and run it. Pick an install folder, click Install, done. It adds **Code Red Alarm**, **PC Sentinel**, **Ultra Dock** and **deck Deck Setup** to your Start menu and starts with Windows. Uninstall from Settings > Apps like any other program.
 
-Setup installs whatever is missing (Python, LibreHardwareMonitor), configures the suite for your PC, installs the dock and the deck plugin if you have deck Studio, turns on start-at-sign-in, and opens both dashboards. Running it again is safe.
+For hardware sensors, also install the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) and turn on **Options > Remote Web Server** (port 8085).
 
-After that, everything starts on its own when you sign in. To start it by hand, double-click **`Start Suite.cmd`**.
+<details><summary>Developer setup (run from source instead)</summary>
+
+1. Clone this repo, then double-click **`Setup.cmd`** (installs Python packages and LibreHardwareMonitor, configures `.env`).
+2. Double-click **`Start Suite.cmd`** to run the services from source.
+3. Build the installer yourself with `build_release.ps1` (needs Rust, VS Build Tools, Node.js, PyInstaller).
+</details>
 
 ### Choose your speakers
 
