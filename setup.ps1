@@ -16,7 +16,7 @@ param([switch]$FromLauncher, [switch]$NoAutostart, [switch]$NoStart)
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 $Root = $PSScriptRoot
-$Repo = "OWNER/ultra-productivity-suite"   # filled in when published
+$Repo = "jeemwla/ultra-productivity-suite"   # where the dock download comes from
 $Step = 0
 function Step([string]$t) { $script:Step++; Write-Host ""; Write-Host "  [$script:Step/6] $t" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "        $t" -ForegroundColor Green }
