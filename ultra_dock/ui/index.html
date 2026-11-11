@@ -20,6 +20,12 @@ body{font:12px/1 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased
 button{font:inherit;color:inherit;border:0;background:none;cursor:default;outline:none}
 
 .strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap}
+/* Nothing in the strip may shrink: the window is narrow while a folder or window list opens, and a shrunken
+   strip would measure (and request) too little width, cutting off everything after it. */
+.strip > .group, .group > *, .inner > *, .pick > *{flex:none}
+/* A folder that is re-drawn while already open appears at full width at once (no slide), so the strip can
+   measure its real width in the same frame. */
+.tray.now{transition:none}
 .group{display:flex;align-items:center;height:100%}
 .grp{position:relative;height:40px;min-width:44px;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .12s}
 .grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
@@ -169,11 +175,11 @@ function render(){
     return `<div class="group" data-cat="${esc(cat)}">
       <button class="grp ${active ? "has-active" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" title="${esc(cat)}: ${ws.map(w => w.title).slice(0, 6).map(esc).join(" · ")}">
         <span class="folder ${uniq.length === 1 ? "n1" : ""}">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="runbar"></span></button>
-      <div class="tray ${open === cat ? "open" : ""}"><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
+      <div class="tray ${open === cat ? "open now" : ""}"><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
   const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${update ? `Ultra Dock: version ${esc(update.latest)} is available` : "Ultra Dock"}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
-    <div class="tray ${open === "__menu" ? "open" : ""}"><div class="inner">${upAct}
+    <div class="tray ${open === "__menu" ? "open now" : ""}"><div class="inner">${upAct}
       <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
       <button class="act" data-act="edit">Edit</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
@@ -190,6 +196,7 @@ function setOpen(cat){
   $("strip").querySelectorAll(".group").forEach(g => {
     const isOpen = g.dataset.cat === cat, tray = g.querySelector(".tray"), b = g.querySelector(".grp,.more");
     b.setAttribute("aria-expanded", isOpen);
+    tray.classList.remove("now");  // opening and closing by click slide as usual
     if (isOpen) { // grow the window first, then slide in
       const w = tray.querySelector(".inner").scrollWidth;
       if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth + w) + 4 });
