@@ -19,7 +19,7 @@ import httpx
 BASE = "https://speed.cloudflare.com"
 DOWN_SECONDS = float(os.getenv("SPEEDTEST_DOWN_SECONDS", "10"))
 UP_SECONDS = float(os.getenv("SPEEDTEST_UP_SECONDS", "10"))
-DOWN_STREAMS, UP_STREAMS = 6, 4
+DOWN_STREAMS, UP_STREAMS = 6, 6
 TICK = 0.2
 COLO = {"LAX": "Los Angeles", "SJC": "San Jose", "SFO": "San Francisco", "SEA": "Seattle", "PDX": "Portland",
         "LAS": "Las Vegas", "PHX": "Phoenix", "DEN": "Denver", "DFW": "Dallas", "IAH": "Houston", "ORD": "Chicago",
@@ -221,11 +221,13 @@ async def run(send: Send) -> Dict:
                 down, down_lat = await _throughput("download", down_worker, DOWN_STREAMS, DOWN_SECONDS, send)
                 await send({"type": "phase_done", "phase": "download", "mbps": down, "loaded_ms": down_lat, "server": down_server})
 
-                block = os.urandom(256 * 1024)
+                # Small blocks: bytes are counted as they're handed to the socket, so small pieces keep
+                # the count close to what has actually left the PC (big blocks overstate upload speed).
+                block = os.urandom(128 * 1024)
 
                 async def up_worker(counter, stop):
                     async def body():
-                        for _ in range(100):  # up to 25 MB per request
+                        for _ in range(200):  # up to 25 MB per request
                             if stop.is_set():
                                 return
                             counter["bytes"] += len(block)
