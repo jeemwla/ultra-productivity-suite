@@ -18,6 +18,7 @@
 html,body{height:100%;background:transparent;overflow:hidden}
 body{font:12px/1 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
 button{font:inherit;color:inherit;border:0;background:none;cursor:default;outline:none}
+button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 
 .strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap}
 /* Nothing in the strip may shrink: the window is narrow while a folder or window list opens, and a shrunken
@@ -29,9 +30,18 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:default;outlin
 /* A category with a single app shows that app directly, always visible */
 .solo .win{opacity:1;transform:none}
 .group{display:flex;align-items:center;height:100%}
-.grp{position:relative;height:40px;min-width:44px;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .12s}
+.grp{position:relative;height:40px;width:44px;min-width:0;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;overflow:hidden;transition:background .12s,width .32s var(--ease),padding .32s var(--ease)}
 .grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
-.grp[aria-expanded=true]{background:var(--open)}
+.grp[aria-expanded=true]{width:24px;padding:0;background:transparent}
+.grp .folder{flex:none;transition:opacity .18s var(--ease),transform .32s var(--ease)}
+.grp[aria-expanded=true] .folder{opacity:0;transform:scale(.5);pointer-events:none}
+.grp[aria-expanded=true]>.runbar{opacity:0}
+.collapse-mark{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transform:scale(.7);pointer-events:none;transition:opacity .18s var(--ease),transform .32s var(--ease)}
+.collapse-mark::after{content:"";width:2px;height:22px;background:var(--ink-3);border-radius:2px}
+.grp[aria-expanded=true] .collapse-mark{opacity:1;transform:none}
+.grp[aria-expanded=true]:hover .collapse-mark::after{background:var(--ink)}
+.grp.now,.grp.now .folder,.grp.now .collapse-mark{transition:none}
+@media(prefers-reduced-motion:reduce){.grp,.grp .folder,.grp .collapse-mark,.tray,.tray.open .win{transition:none!important}}
 /* Phone-style folder tile: up to 4 real app icons in a 2x2 grid, fully opaque, no overlap */
 .folder{position:relative;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
   display:grid;grid-template-columns:13px 13px;grid-template-rows:13px 13px;gap:2px;padding:2px;place-content:center}
@@ -170,24 +180,31 @@ function appButton(exe, wins){
 }
 
 function render(){
+  const activeElement = document.activeElement;
+  const focusKey = el => [el.classList.contains("grp") ? "grp" : el.classList.contains("more") ? "more" : el.classList.contains("wt") ? "wt" : el.classList.contains("win") ? "win" : "act",el.dataset.cat,el.dataset.exe,el.dataset.h,el.dataset.act].join("|");
+  const oldFocus = $("strip").contains(activeElement) && activeElement.tagName === "BUTTON" ? focusKey(activeElement) : null;
   const gs = groups();
-  const html = gs.map(([cat, ws]) => {
+  const html = gs.map(([cat, ws], index) => {
     const uniq = []; const seen = new Set(); for (const w of ws) if (!seen.has(w.exe)) { seen.add(w.exe); uniq.push(w); }
     const active = ws.some(w => w.active);
     // One app in a category: a folder would only add a click, so show the app itself
     if (uniq.length === 1) return `<div class="group solo" data-cat="${esc(cat)}">${appButton(uniq[0].exe, ws)}</div>`;
     return `<div class="group" data-cat="${esc(cat)}">
-      <button class="grp ${active ? "has-active" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" title="${esc(cat)}: ${ws.map(w => w.title).slice(0, 6).map(esc).join(" · ")}">
-        <span class="folder ${uniq.length === 1 ? "n1" : ""}">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="runbar"></span></button>
-      <div class="tray ${open === cat ? "open now" : ""}"><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
+      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + cat)}" title="${esc(open === cat ? `Collapse ${cat} back into a folder` : cat + ': ' + ws.map(w => w.title).slice(0,6).join(' · '))}">
+        <span class="folder" aria-hidden="true">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="collapse-mark" aria-hidden="true"></span><span class="runbar"></span></button>
+      <div id="group-tray-${index}" class="tray ${open === cat ? "open now" : ""}" aria-hidden="${open !== cat}" ${open !== cat ? "inert" : ""}><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
   const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || (update ? `Ultra Dock: version ${update.latest} is available` : "Ultra Dock"))}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
-    <div class="tray ${open === "__menu" ? "open now" : ""}"><div class="inner">${upAct}
+    <div class="tray ${open === "__menu" ? "open now" : ""}" aria-hidden="${open !== "__menu"}" ${open !== "__menu" ? "inert" : ""}><div class="inner">${upAct}
       <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
       <button class="act" data-act="edit">Edit</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
   $("strip").innerHTML = html + menu;
+  if (oldFocus && document.hasFocus()) {
+    const replacement = [...$("strip").querySelectorAll("button")].find(button => focusKey(button) === oldFocus && !button.closest("[inert]"));
+    replacement?.focus({preventScroll:true});
+  }
   // keep any open tray at its natural width
   $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
   requestAnimationFrame(report);
@@ -200,14 +217,21 @@ function setOpen(cat){
   $("strip").querySelectorAll(".group:not(.solo)").forEach(g => {
     const isOpen = g.dataset.cat === cat, tray = g.querySelector(".tray"), b = g.querySelector(".grp,.more");
     b.setAttribute("aria-expanded", isOpen);
+    if (b.classList.contains("grp")) {
+      b.classList.remove("now");
+      b.setAttribute("aria-label", (isOpen ? "Collapse " : "Expand ") + g.dataset.cat);
+      b.title = isOpen ? `Collapse ${g.dataset.cat} back into a folder` : `Expand ${g.dataset.cat}`;
+    }
+    tray.inert = !isOpen;
+    tray.setAttribute("aria-hidden", !isOpen);
     tray.classList.remove("now");  // opening and closing by click slide as usual
     if (isOpen) { // grow the window first, then slide in
       const w = tray.querySelector(".inner").scrollWidth;
       if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth + w) + 4 });
-      requestAnimationFrame(() => { tray.style.width = w + "px"; tray.classList.add("open"); });
+      requestAnimationFrame(() => { if (!g.isConnected || open !== g.dataset.cat) return; tray.style.width = w + "px"; tray.classList.add("open"); });
     } else { tray.style.width = "0px"; tray.classList.remove("open"); }
   });
-  if (!cat || prev) setTimeout(report, 340); // shrink after sliding closed
+  setTimeout(report, 340); // settle the measured native width after either transition
 }
 
 $("strip").addEventListener("click", async (e) => {
@@ -235,6 +259,7 @@ function closeAll(){
 }
 $("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 1200); });
 $("strip").addEventListener("mouseenter", () => clearTimeout(closeTimer));
+$("strip").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeAll(); } });
 
 async function poll(){
   try {

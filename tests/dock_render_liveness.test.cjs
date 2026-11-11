@@ -13,3 +13,16 @@ test('a failed Dock render retries and never counts as a successful frame',async
  await context.poll();assert.equal(context.renderCalls,2);assert.notEqual(vm.runInContext('sig',context),'');
  await context.poll();assert.equal(context.renderCalls,2);assert.equal(context.reports,1);
 });
+test('rapid folder close cannot be undone by a stale animation frame',()=>{
+ const source=html.slice(html.indexOf('function setOpen(cat){'),html.indexOf('$("strip").addEventListener("click"'));
+ const frames=[];
+ const button={classList:{contains:name=>name==='grp',remove:()=>{}},attrs:{},setAttribute(k,v){this.attrs[k]=v;}};
+ const tray={style:{width:'0px'},attrs:{},inert:true,classList:{remove:()=>{},add:()=>{}},setAttribute(k,v){this.attrs[k]=v;},querySelector:()=>({scrollWidth:80})};
+ const group={dataset:{cat:'Tools'},isConnected:true,querySelector:s=>s==='.tray'?tray:button};
+ const strip={scrollWidth:44,querySelectorAll:()=>[group]};
+ const context=vm.createContext({$:()=>strip,invoke:()=>{},requestAnimationFrame:cb=>frames.push(cb),setTimeout:()=>{},report:()=>{},render:()=>{}});
+ vm.runInContext("let open=null,pick=null;\n"+source,context);
+ context.setOpen('Tools');assert.equal(tray.inert,false);assert.equal(button.attrs['aria-label'],'Collapse Tools');
+ context.setOpen(null);assert.equal(tray.inert,true);assert.equal(button.attrs['aria-label'],'Expand Tools');
+ frames.forEach(cb=>cb());assert.equal(tray.style.width,'0px');assert.equal(vm.runInContext('open',context),null);
+});
