@@ -109,6 +109,17 @@ pub fn plan(groups: &[(String, Vec<String>)], avail: f64) -> Plan {
     Plan { width: width_of(&items), items, compacted: true, over_six, left_out: vec![] }
 }
 
+/// Hysteresis for the room the folder plan uses, so a reading that wobbles by a few pixels (UI Automation
+/// rounding, a clock that gets one digit wider) cannot regroup the folders back and forth. The plan follows a
+/// change of `ROOM_STEP` CSS pixels or more, and follows at once whenever the current plan no longer fits.
+pub const ROOM_STEP: f64 = 12.0;
+pub fn settle_room(used: Option<f64>, new: f64, plan_width: f64) -> f64 {
+    match used {
+        Some(u) if new + 0.5 >= plan_width && (new - u).abs() < ROOM_STEP => u,
+        _ => new,
+    }
+}
+
 /// Taskbar geometry in physical pixels, read with UI Automation and window rectangles.
 #[derive(Clone, Debug, Default)]
 pub struct TaskbarGeom {
@@ -160,22 +171,81 @@ pub fn projected_gain(visible_buttons: usize, pending_apps: usize, button_w: f64
 }
 
 /// "Does the strip fit?" for the watchdog. A strip wider than today's free space is allowed only briefly, and
-/// only when hiding the pending native buttons will make the room (`gain`). If that promise is not kept within
-/// `GRACE_MS`, projections are switched off for `COOLDOWN_MS`, so the Dock cannot flap between modes.
+/// only when hiding the native buttons of apps the plan shows will make the room (`gain`). If that promise is not
+/// kept within `GRACE_MS`, projections stay off for this situation (`sig`: the apps, the taskbar and the tray,
+/// which do not change when the Dock hides or restores buttons) until it changes or `COOLDOWN_MS` passes, so the
+/// Dock settles in one mode instead of switching on and off.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct FitGate { clipped_since: Option<u64>, projection_off_until: u64 }
+pub struct FitGate { clipped_since: Option<u64>, failed: Option<(u64, u64)> }
 impl FitGate {
-    pub const GRACE_MS: u64 = 2_500;
-    pub const COOLDOWN_MS: u64 = 300_000;
-    pub fn projection_on(&self, now_ms: u64) -> bool { now_ms >= self.projection_off_until }
-    pub fn update(&mut self, need: f64, avail: f64, gain: f64, now_ms: u64) -> bool {
+    pub const GRACE_MS: u64 = 6_000;
+    pub const COOLDOWN_MS: u64 = 1_800_000;
+    pub fn projection_on(&self, now_ms: u64, sig: u64) -> bool {
+        match self.failed { Some((s, at)) => s != sig || now_ms >= at + Self::COOLDOWN_MS, None => true }
+    }
+    pub fn update(&mut self, need: f64, avail: f64, gain: f64, now_ms: u64, sig: u64) -> bool {
         if need <= avail + 0.5 { self.clipped_since = None; return true; }
-        if !self.projection_on(now_ms) || need > avail + gain.max(0.0) + 0.5 { self.clipped_since = None; return false; }
+        if !self.projection_on(now_ms, sig) || need > avail + gain.max(0.0) + 0.5 { self.clipped_since = None; return false; }
         let since = *self.clipped_since.get_or_insert(now_ms);
         if now_ms.saturating_sub(since) < Self::GRACE_MS { return true; }
-        self.clipped_since = None;
-        self.projection_off_until = now_ms + Self::COOLDOWN_MS;
+        self.fail(now_ms, sig);
         false
+    }
+    /// The projected room did not arrive: no projections for this situation for a while.
+    pub fn fail(&mut self, now_ms: u64, sig: u64) { self.clipped_since = None; self.failed = Some((sig, now_ms)); }
+}
+
+/// One reading of the taskbar and the apps, as the tracker sees it every tick.
+pub struct Reading<'a> {
+    /// Every app the Dock may group (not kept, not pinned), by category in display order.
+    pub groups: &'a [(String, Vec<String>)],
+    /// Those apps whose native button is still showing.
+    pub pending: &'a std::collections::HashSet<String>,
+    /// Measured free space, physical pixels.
+    pub room: f64,
+    pub buttons: usize,
+    pub button_w: f64,
+    pub centered: bool,
+    pub scale: f64,
+    /// Collapsed strip width the page measured, CSS pixels.
+    pub page_base: f64,
+    pub sig: u64,
+    pub now_ms: u64,
+}
+pub struct Assessment { pub layout_room: f64, pub fits: bool }
+
+/// The one decision the tracker makes every tick: how much room the folder plan may use, and whether the Dock
+/// fits. It judges the plan for every app it may group (not only those already in the strip), so a crowded
+/// taskbar can still switch to folders, and it counts only room that hiding the plan's own apps frees.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Assessor { pub gate: FitGate, used: Option<f64>, last_plan_w: f64, page_over_since: Option<u64>, projected_at: Option<u64> }
+impl Assessor {
+    pub fn assess(&mut self, r: &Reading) -> Assessment {
+        let scale = if r.scale.is_finite() && r.scale > 0.0 { r.scale } else { 1.0 };
+        let on = self.gate.projection_on(r.now_ms, r.sig);
+        let gain_all = if on { projected_gain(r.buttons, r.pending.len(), r.button_w, r.centered) } else { 0.0 };
+        let room_css = settle_room(self.used, ((r.room + gain_all) / scale).floor(), self.last_plan_w);
+        let p = plan(r.groups, room_css);
+        let hidden_apps = r.groups.iter().flat_map(|g| g.1.iter()).filter(|e| !r.pending.contains(*e)).count();
+        let recently_projected = self.projected_at.is_some_and(|t| r.now_ms.saturating_sub(t) <= FitGate::GRACE_MS);
+        if gain_all > 0.0 { self.projected_at = Some(r.now_ms); }
+        if p.items.is_empty() && hidden_apps > 0 && recently_projected && gain_all == 0.0 {
+            // Buttons were hidden on a projection and the room that actually came is too small to show them:
+            // a broken promise, so stop projecting here instead of hiding and restoring them in a loop.
+            self.gate.fail(r.now_ms, r.sig);
+        }
+        self.used = Some(room_css);
+        self.last_plan_w = p.width;
+        let pending_in_plan = p.items.iter().flat_map(|i| i.exes.iter()).filter(|e| r.pending.contains(*e)).count();
+        let gain = if on { projected_gain(r.buttons, pending_in_plan, r.button_w, r.centered) } else { 0.0 };
+        let fits = self.gate.update(p.width * scale, r.room, gain, r.now_ms, r.sig);
+        // The page redraws a moment after the plan changes, so its own measurement may be one plan behind. Only a
+        // page that stays wider than the room for the whole grace counts against the fit (a drawing problem).
+        let page_ok = if r.page_base * scale <= r.room + 0.5 { self.page_over_since = None; true } else {
+            let since = *self.page_over_since.get_or_insert(r.now_ms);
+            r.now_ms.saturating_sub(since) < FitGate::GRACE_MS
+        };
+        Assessment { layout_room: room_css, fits: fits && page_ok }
     }
 }
 
@@ -372,23 +442,25 @@ mod tests {
     }
 
     #[test]
-    fn fit_gate_allows_a_short_promised_overflow_then_cools_down() {
+    fn fit_gate_allows_a_short_promised_overflow_then_stays_off_for_that_situation() {
+        let g0 = FitGate::GRACE_MS;
         let mut g = FitGate::default();
-        assert!(g.update(100.0, 120.0, 0.0, 0));
-        assert!(!g.update(200.0, 120.0, 40.0, 10), "no promise of enough room");
-        assert!(g.update(150.0, 120.0, 40.0, 100), "room is coming");
-        assert!(g.update(150.0, 120.0, 40.0, 100 + FitGate::GRACE_MS - 1));
-        assert!(!g.update(150.0, 120.0, 40.0, 100 + FitGate::GRACE_MS), "promise not kept");
-        assert!(!g.projection_on(200 + FitGate::GRACE_MS));
-        assert!(!g.update(150.0, 120.0, 40.0, 300 + FitGate::GRACE_MS), "no projection during cooldown");
-        assert!(g.update(110.0, 120.0, 0.0, 400 + FitGate::GRACE_MS), "a strip that fits always fits");
-        assert!(g.projection_on(100 + FitGate::GRACE_MS + FitGate::COOLDOWN_MS));
+        assert!(g.update(100.0, 120.0, 0.0, 0, 1));
+        assert!(!g.update(200.0, 120.0, 40.0, 10, 1), "no promise of enough room");
+        assert!(g.update(150.0, 120.0, 40.0, 100, 1), "room is coming");
+        assert!(g.update(150.0, 120.0, 40.0, 100 + g0 - 1, 1));
+        assert!(!g.update(150.0, 120.0, 40.0, 100 + g0, 1), "promise not kept");
+        assert!(!g.projection_on(200 + g0, 1));
+        assert!(!g.update(150.0, 120.0, 40.0, 300 + g0, 1), "no projection for the same situation");
+        assert!(g.projection_on(300 + g0, 2), "a new app or a different taskbar gets a fresh try");
+        assert!(g.update(110.0, 120.0, 0.0, 400 + g0, 1), "a strip that fits always fits");
+        assert!(g.projection_on(100 + g0 + FitGate::COOLDOWN_MS, 1), "the same situation is retried much later");
         // room arriving in time resets the grace clock
         let mut g = FitGate::default();
-        assert!(g.update(150.0, 120.0, 40.0, 0));
-        assert!(g.update(150.0, 160.0, 0.0, 1000));
-        assert!(g.update(170.0, 160.0, 40.0, 2000));
-        assert!(g.update(170.0, 160.0, 40.0, 2000 + FitGate::GRACE_MS - 1));
+        assert!(g.update(150.0, 120.0, 40.0, 0, 1));
+        assert!(g.update(150.0, 160.0, 0.0, 1000, 1));
+        assert!(g.update(170.0, 160.0, 40.0, 2000, 1));
+        assert!(g.update(170.0, 160.0, 40.0, 2000 + g0 - 1, 1));
     }
 
     #[test]
@@ -401,5 +473,94 @@ mod tests {
         assert_eq!(b.tick(5, 5000, hidden), None, "a window with a visible button is left alone");
         assert_eq!(b.tick(9, 5100, hidden), Some(9), "a new foreground window starts a new burst");
         assert_eq!(b.tick(0, 5200, hidden), None);
+    }
+
+    #[test]
+    fn settle_room_ignores_wobble_but_follows_real_changes() {
+        assert_eq!(settle_room(None, 300.0, 0.0), 300.0);
+        assert_eq!(settle_room(Some(300.0), 305.0, 200.0), 300.0);
+        assert_eq!(settle_room(Some(300.0), 290.0, 200.0), 300.0);
+        assert_eq!(settle_room(Some(300.0), 320.0, 200.0), 320.0);
+        assert_eq!(settle_room(Some(300.0), 295.0, 298.0), 295.0, "the plan no longer fits: follow at once");
+    }
+
+    /// A simplified Dock on a centered taskbar (CSS pixels at scale 1), ticking every 700 ms: the organizer hides
+    /// what the strip renders while healthy (and restores everything when not), the tracker measures the room left
+    /// by the remaining native buttons, and the fit check decides health. Returns the health and strip history.
+    fn simulate(screen: f64, tray: f64, pinned: usize, apps: usize, new_logic: bool, ticks: usize) -> (Vec<bool>, Vec<usize>) {
+        let mut cats: Vec<(String, Vec<String>)> = vec![];
+        for i in 0..apps {
+            let c = format!("Cat{}", i % 4);
+            match cats.iter_mut().find(|g| g.0 == c) {
+                Some(g) => g.1.push(format!("app{i}.exe")),
+                None => cats.push((c, vec![format!("app{i}.exe")])),
+            }
+        }
+        let mut hidden: std::collections::HashSet<String> = Default::default();
+        let (mut healthy, mut dock, mut page_base) = (false, Assessor::default(), 0.0);
+        let (mut history, mut shown) = (vec![], vec![]);
+        for t in 0..ticks {
+            let now = t as u64 * 700;
+            let natives = pinned + apps - hidden.len();
+            let row = 44.0 * (natives + 1) as f64;  // Start plus the buttons, centered
+            let start_left = ((screen - row) / 2.0).max(0.0);
+            // Windows moves its own extra buttons into an overflow menu before they reach the tray
+            let buttons_right = (start_left + row).min(screen - tray - 12.0);
+            let g = TaskbarGeom { left: 0, right: screen as i32, start_left: Some(start_left as i32),
+                start_right: Some((start_left + 44.0) as i32), buttons_right: Some(buttons_right as i32),
+                obstacles: vec![(screen - tray) as i32], scale: 1.0 };
+            let room = free_span(&g).width() as f64;
+            let listed: Vec<(String, Vec<String>)> = if healthy { cats.clone() } else { vec![] };
+            let rendered: Vec<String> = if new_logic {
+                let pending: std::collections::HashSet<String> =
+                    cats.iter().flat_map(|c| c.1.iter().cloned()).filter(|e| !hidden.contains(e)).collect();
+                let a = dock.assess(&Reading { groups: &cats, pending: &pending, room, buttons: natives, button_w: 44.0,
+                    centered: is_centered(&g), scale: 1.0, page_base, sig: (apps * 1000 + pinned) as u64, now_ms: now });
+                let p = plan(&listed, a.layout_room);
+                page_base = p.width - 4.0;
+                healthy = a.fits;
+                p.items.iter().flat_map(|i| i.exes.clone()).collect()
+            } else {
+                // 2.2.15: every listed app rendered; healthy only while that strip is not clipped
+                let w = listed.iter().map(|(_, e)| if e.len() > 1 { FOLDER_W } else { APP_W }).sum::<f64>() + MENU_W + SLACK_W;
+                healthy = w - 4.0 <= room;
+                listed.iter().flat_map(|(_, e)| e.clone()).collect()
+            };
+            hidden = if healthy { rendered.iter().cloned().collect() } else { Default::default() };
+            history.push(healthy);
+            shown.push(if healthy { rendered.len() } else { 0 });
+        }
+        (history, shown)
+    }
+    fn flips(h: &[bool]) -> usize { h.windows(2).filter(|w| w[0] != w[1]).count() }
+
+    #[test]
+    fn old_logic_flaps_on_a_crowded_laptop_taskbar_and_new_logic_settles() {
+        // G14-like: 1440 CSS px wide, a 330 px tray, 4 pinned apps, 8 open apps
+        let (h, _) = simulate(1440.0, 330.0, 4, 8, false, 200);
+        assert!(flips(&h[20..]) > 20, "the 2.2.15 model keeps switching modes: {}", flips(&h[20..]));
+        let (h, shown) = simulate(1440.0, 330.0, 4, 8, true, 200);
+        assert_eq!(flips(&h[20..]), 0);
+        assert!(h[199] && shown[199] == 8, "all 8 apps end up in the strip");
+    }
+
+    #[test]
+    fn new_logic_settles_on_every_small_and_large_screen() {
+        let mut checked = 0;
+        for screen in [1097.0, 1280.0, 1366.0, 1440.0, 1536.0, 1707.0, 1920.0, 2560.0] {
+            for tray in [220.0, 330.0, 420.0] {
+                for pinned in [0, 3, 6, 10] {
+                    for apps in [0, 1, 2, 5, 9, 14, 20, 30] {
+                        let (h, shown) = simulate(screen, tray, pinned, apps, true, 900);
+                        let tail = &h[h.len() - 450..];
+                        assert_eq!(flips(tail), 0, "screen {screen} tray {tray} pinned {pinned} apps {apps}: {} flips", flips(tail));
+                        let st = &shown[shown.len() - 450..];
+                        assert!(st.windows(2).all(|w| w[0] == w[1]), "screen {screen} tray {tray} pinned {pinned} apps {apps}: strip keeps changing");
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 8 * 3 * 4 * 8);
     }
 }

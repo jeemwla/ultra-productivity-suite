@@ -40,8 +40,11 @@ static AVAIL_CSS: AtomicU32 = AtomicU32::new(u32::MAX);
 static LAYOUT_CSS: AtomicU32 = AtomicU32::new(u32::MAX);
 /// Collapsed strip width the page last measured (no folder open), in CSS pixels.
 static STRIP_BASE_W: AtomicU32 = AtomicU32::new(0);
-/// Distinct apps the Dock is about to group whose native buttons are still showing.
-static PENDING_APPS: AtomicU32 = AtomicU32::new(0);
+/// Every app the Dock may group, by category in display order, with those whose native button still shows
+/// and how many are hidden now. The tracker plans the strip for all of them, not only the ones already listed.
+#[derive(Default)]
+struct Candidates { groups: Vec<(String, Vec<String>)>, pending: std::collections::HashSet<String>, hidden_apps: usize }
+static CANDIDATES: Mutex<Option<Candidates>> = Mutex::new(None);
 static UI_RENDERED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static RENDERED_WINDOWS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 fn uptime_secs() -> u64 {
@@ -385,14 +388,20 @@ fn organizer_loop() {
         let mut snap = vec![];
         let reapply = last_reapply.elapsed() > Duration::from_secs(4);
         let now_ms = started.elapsed().as_millis() as u64;
-        let mut pending: std::collections::HashSet<&str> = Default::default();
+        let mut pending: std::collections::HashSet<String> = Default::default();
+        let mut hidden_exes: std::collections::HashSet<String> = Default::default();
+        let mut cands: Vec<(usize, String, String, String)> = vec![];
         hidden_now.clear();
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
             // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
             let hidden = on && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
             if !hidden { recovery::restore_window(*h, &tbl); } else { hidden_now.insert(*h); }
-            if !kept && !hidden { pending.insert(exe.as_str()); }
+            if !kept {
+                let cat = categorize(exe, &cfg);
+                cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone()));
+                if hidden { hidden_exes.insert(exe.clone()); } else { pending.insert(exe.clone()); }
+            }
             // List a window only while its native button is hidden (or briefly while hiding is first tried), so an
             // app never shows twice: native button plus strip copy.
             if !kept && ORGANIZE.load(Ordering::Relaxed) && listing.decide(*h, now_ms, on, hidden) {
@@ -401,7 +410,18 @@ fn organizer_loop() {
             }
         }
         listing.retain(&wins.iter().map(|w| w.0).collect());
-        PENDING_APPS.store(if ORGANIZE.load(Ordering::Relaxed) { pending.len() as u32 } else { 0 }, Ordering::Relaxed);
+        cands.sort();
+        let mut groups: Vec<(String, Vec<String>)> = vec![];
+        if ORGANIZE.load(Ordering::Relaxed) {
+            for (_, _, cat, exe) in cands {
+                match groups.iter_mut().find(|g| g.0 == cat) {
+                    Some(g) => if !g.1.contains(&exe) { g.1.push(exe) },
+                    None => groups.push((cat, vec![exe])),
+                }
+            }
+        }
+        let pending: std::collections::HashSet<String> = pending.difference(&hidden_exes).cloned().collect();
+        if let Ok(mut c) = CANDIDATES.lock() { *c = Some(Candidates { groups, pending, hidden_apps: hidden_exes.len() }); }
         if !on { recovery::restore_all(&tbl); }
         if !guarded && last_guard_retry.elapsed() > Duration::from_secs(10) {
             spawn_guard();
@@ -1300,7 +1320,7 @@ fn taskbar_tracker(_app: AppHandle) {
         // Latest UI Automation reading of the taskbar: Start, the native buttons and the notification area
         let mut geom = dock_layout::TaskbarGeom::default();
         let (mut buttons, mut button_w) = (0usize, 0f64);
-        let mut gate = dock_layout::FitGate::default();
+        let mut dock = dock_layout::Assessor::default();
         let started = Instant::now();
         let mut last_uia = Instant::now() - Duration::from_secs(10);
         let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false);
@@ -1370,16 +1390,28 @@ fn taskbar_tracker(_app: AppHandle) {
             let span = dock_layout::free_span(&g);
             let room = span.width();
             let now_ms = started.elapsed().as_millis() as u64;
-            let gain = if gate.projection_on(now_ms) {
-                dock_layout::projected_gain(buttons, PENDING_APPS.load(Ordering::Relaxed) as usize, button_w, dock_layout::is_centered(&g))
-            } else { 0.0 };
+            let a = {
+                let guard = CANDIDATES.lock().ok();
+                let empty = Candidates::default();
+                let c = guard.as_ref().and_then(|g| g.as_ref()).unwrap_or(&empty);
+                // The situation: the apps, the taskbar and the tray, none of which change when the Dock hides or
+                // restores buttons (visible plus hidden buttons stays the same)
+                use std::hash::{Hash, Hasher};
+                let mut hs = std::collections::hash_map::DefaultHasher::new();
+                c.groups.hash(&mut hs); (r.left, r.right, g.obstacles.iter().min().copied(), dpi, buttons + c.hidden_apps).hash(&mut hs);
+                dock.assess(&dock_layout::Reading { groups: &c.groups, pending: &c.pending, room: room as f64, buttons, button_w,
+                    centered: dock_layout::is_centered(&g), scale, page_base: STRIP_BASE_W.load(Ordering::Relaxed) as f64,
+                    sig: hs.finish(), now_ms })
+            };
             AVAIL_CSS.store((room as f64 / scale).floor() as u32, Ordering::Relaxed);
-            LAYOUT_CSS.store(((room as f64 + gain) / scale).floor() as u32, Ordering::Relaxed);
+            LAYOUT_CSS.store(a.layout_room as u32, Ordering::Relaxed);
+            let fits = a.fits;
             let x = span.x;
-            let w = ((STRIP_W.load(Ordering::Relaxed) as f64 * scale).round() as i32).min(room).max(0) as u32;
-            let base = STRIP_BASE_W.load(Ordering::Relaxed) as f64 * scale;
-            let fits = gate.update(base, room as f64, gain, now_ms);
-            let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && w > 8;
+            let requested = (STRIP_W.load(Ordering::Relaxed) as f64 * scale).round() as i32;
+            let w = requested.min(room).max(0) as u32;
+            // A strip that cannot show even its menu is hidden rather than drawn as a sliver beside the tray,
+            // unless room is on its way (the fit check's short grace while buttons are being hidden).
+            let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && w > 8 && (w as i32 >= requested || fits);
             STRIP_FITS.store(show && fits, Ordering::Relaxed);
             STRIP_SHOWN.store(show, Ordering::Relaxed);
             let state = (x, r.top, w, h, show);
