@@ -436,7 +436,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
         <div id="groups"></div></div></section></section>
 
       <section class="page" id="p-settings">
-        <div class="grid g2">
+        <fieldset id="settings-fields" disabled style="border:0;min-width:0"><div class="grid g2">
           <section class="card"><div class="ch"><h2>Your pages</h2><span class="sub">Choose what appears in navigation</span></div><div class="cb">
             <p class="muted">Settings / Extras always stays available. Keep at least one page visible. Hiding a page does not disable hardware monitoring or stop an active speed test.</p>
             <div id="settings-pages"></div>
@@ -447,8 +447,8 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <div class="settings-row"><label for="extra-router-ping">Monitor router latency<br><span class="muted">Includes the configured router among latency targets.</span></label><input type="checkbox" id="extra-router-ping"></div>
             <p class="muted mt">No router password or address is saved by this page. Configuration is managed separately.</p>
           </div></section>
-        </div>
-        <section class="card mt"><div class="cb"><div class="settings-actions"><button class="btn primary" type="button" id="settings-save">Save settings</button><button class="btn" type="button" id="settings-reset">Reset draft to defaults</button></div><p class="muted mt" role="status" id="settings-status">Loading settings from this PC…</p><p class="muted mt">Saved on this PC and shared by its Sentinel windows. Appearance and motion are available from the palette button next to Settings.</p></div></section>
+        </div></fieldset>
+        <section class="card mt"><div class="cb"><div class="settings-actions"><button class="btn primary" type="button" id="settings-save" disabled>Save settings</button><button class="btn" type="button" id="settings-reset" disabled>Reset draft to defaults</button></div><p class="muted mt" role="status" id="settings-status">Loading settings from this PC…</p><p class="muted mt">Saved on this PC and shared by its Sentinel windows. Appearance and motion are available from the palette button next to Settings.</p></div></section>
       </section>
       <!-- SYSTEM -->
       <section class="page" id="p-system">
@@ -526,7 +526,8 @@ $("navs").innerHTML = PAGES.filter(p=>p[0]!=="settings").map(([id, t, , ic]) => 
 function defaultPreferences(){return {pages:Object.fromEntries(PAGES.filter(p=>p[0]!=="settings").map(([id])=>[id,id==="battery"?null:true])),router_vpn:false,router_ping:false,revision:"0"};}
 function pageVisible(id,settings,hasBattery){return id==="settings"||settings.pages[id]===true||(id==="battery"&&settings.pages.battery===null&&hasBattery);}
 function freshPreferences(current,incoming){try{return BigInt(incoming.revision||"0")>=BigInt(current.revision||"0");}catch{return false;}}
-let prefs=defaultPreferences(),preferencesDirty=false,preferencesEditing=0,preferencesSaving=false;
+let prefs=defaultPreferences(),preferencesDirty=false,preferencesEditing=0,preferencesSaving=false,preferencesReady=false;
+$("settings-fields").disabled=true;$("settings-save").disabled=true;$("settings-reset").disabled=true;
 $("settings-pages").innerHTML=PAGES.filter(p=>p[0]!=="settings").map(([id,title])=>id==="battery"?`<div class="settings-row"><label for="setting-page-battery">Battery<br><span class="muted">Automatic follows battery detection; Show also works on desktops.</span></label><select id="setting-page-battery"><option value="auto">Automatic</option><option value="show">Show</option><option value="hide">Hide</option></select></div>`:`<div class="settings-row"><label for="setting-page-${id}">${title}</label><input type="checkbox" id="setting-page-${id}"></div>`).join("");
 function fillPreferences(value){
   for(const [id] of PAGES.filter(p=>p[0]!=="settings"))if(id==="battery")$("setting-page-battery").value=value.pages.battery===null?"auto":value.pages.battery?"show":"hide";else $("setting-page-"+id).checked=value.pages[id];
@@ -540,13 +541,13 @@ function applyPreferences(){
 }
 function acceptPreferences(value){
   if(!value||!freshPreferences(prefs,value))return;
-  prefs=value;if(!preferencesDirty)fillPreferences(prefs);applyPreferences();
+  prefs=value;preferencesReady=true;$("settings-fields").disabled=false;if(!preferencesSaving){$("settings-save").disabled=false;$("settings-reset").disabled=false;$("settings-save").textContent="Save settings";}if(!preferencesDirty)fillPreferences(prefs);applyPreferences();
 }
-async function loadPreferences(){try{acceptPreferences(await api("/api/preferences"));if(!preferencesDirty)$("settings-status").textContent=prefs.storage_status==="ok"?"Saved settings loaded from this PC.":prefs.storage_status==="invalid_or_unavailable"?"Saved settings could not be read. Safe defaults are active; Save will replace the invalid record.":"Default pages are shown. Router extras are off until you choose them.";}catch{$("settings-status").textContent="Settings could not be loaded. Retry Save when the local service is available.";}}
+async function loadPreferences(){try{acceptPreferences(await api("/api/preferences"));if(!preferencesDirty)$("settings-status").textContent=prefs.storage_status==="ok"?"Saved settings loaded from this PC.":prefs.storage_status==="invalid_or_unavailable"?"Saved settings could not be read. Safe defaults are active; Save will replace the invalid record.":"Default pages are shown. Router extras are off until you choose them.";}catch{if(!preferencesReady){$("settings-status").textContent="Settings could not be loaded. Retry loading before changing them.";$("settings-save").disabled=false;$("settings-save").textContent="Retry loading settings";}}}
 function preferenceDraft(){const value={pages:{},router_vpn:$("extra-vpn").checked,router_ping:$("extra-router-ping").checked};for(const [id] of PAGES.filter(p=>p[0]!=="settings"))value.pages[id]=id==="battery"?({auto:null,show:true,hide:false}[$("setting-page-battery").value]):$("setting-page-"+id).checked;return value;}
 for(const el of document.querySelectorAll('#settings-pages input,#settings-pages select,#extra-vpn,#extra-router-ping'))el.addEventListener('change',()=>{preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Unsaved changes. Choose Save settings to apply.";});
 $("settings-save").onclick=async()=>{
-  if(preferencesSaving)return;const draft=preferenceDraft(),edit=preferencesEditing;
+  if(preferencesSaving)return;if(!preferencesReady){await loadPreferences();return;}const draft=preferenceDraft(),edit=preferencesEditing;
   if(!Object.values(draft.pages).some(v=>v===true)){$("settings-status").textContent="Keep at least one page visible before saving.";return;}
   preferencesSaving=true;$("settings-save").disabled=true;$("settings-reset").disabled=true;$("settings-status").textContent="Saving…";
   try{acceptPreferences(await api("/api/preferences",{method:"POST",body:JSON.stringify(draft)}));if(edit===preferencesEditing){preferencesDirty=false;fillPreferences(prefs);$("settings-status").textContent="Saved on this PC. All Sentinel windows will use these settings.";}else $("settings-status").textContent="Submitted settings saved. Your newer edits are still unsaved.";}

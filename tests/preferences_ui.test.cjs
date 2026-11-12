@@ -32,3 +32,13 @@ test('section-number shortcuts never hijack selects or editable fields',()=>{
  assert.deepEqual(visits,[]);
  handler({key:'1',target:{closest:()=>false}});assert.deepEqual(visits,['overview']);
 });
+test('settings cannot save an uninitialized default draft; failed loading offers a read-only retry',async()=>{
+ const boxes={};const $=id=>boxes[id]??={checked:false,value:'',disabled:false,hidden:false,textContent:'',addEventListener(){}};
+ let fail=true,calls=[];
+ const state=vm.createContext({$,snap:null,page:'settings',go(){},document:{querySelectorAll:()=>[]},api:async(p,o)=>{calls.push([p,o]);if(fail)throw Error('offline');return{...state.defaultPreferences(),revision:'123',storage_status:'ok',router_vpn:true};}});
+ vm.runInContext(pages+pure+html.slice(html.indexOf('let prefs=defaultPreferences()'),html.indexOf('/* ---------- navigation actions ---------- */')),state);
+ assert.equal($('settings-fields').disabled,true);assert.equal($('settings-save').disabled,true);
+ await state.loadPreferences();assert.equal($('settings-fields').disabled,true);assert.match($('settings-save').textContent,/Retry loading/);
+ fail=false;await $('settings-save').onclick();assert.equal($('settings-fields').disabled,false);assert.equal($('extra-vpn').checked,true);
+ assert.ok(calls.every(([,options])=>options===undefined),'retry must GET stored state rather than POST defaults');
+});
