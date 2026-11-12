@@ -14,6 +14,7 @@ mod recovery;
 mod wake;
 mod dock_safety;
 mod launch;
+mod edition;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -1339,6 +1340,11 @@ fn run_survey() {
 }
 
 fn main() {
+    // Phase 1 declares Dev identities, but legacy runtime integration is pending.
+    if cfg!(feature = "dev-edition") && !edition::runtime_ready() {
+        eprintln!("Ultra Suite (Dev): Dev runtime integration not ready; no runtime was started.");
+        return;
+    }
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--uninstall-survey") { run_survey(); return; }
     #[cfg(windows)]

@@ -4,6 +4,10 @@ version = "2.2.11"
 description = "Ultra Suite: in-taskbar app groups, Code Red Alarm, PC Sentinel"
 edition = "2021"
 
+[features]
+default = []
+dev-edition = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 serde_json = "1.0"
