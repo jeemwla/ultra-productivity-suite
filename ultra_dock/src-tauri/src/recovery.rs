@@ -93,7 +93,11 @@ mod win {
     fn lock_generation(_owner: Owner) -> Option<GenerationLock> {
         // All generations share a transaction lock. A late old guard must see a
         // newly persisted claim before it decides whether to restore that HWND.
-        lock_named("Local\\UltraSuite.DockJournal.Transactions")
+        #[cfg(not(test))]
+        let name = "Local\\UltraSuite.DockJournal.Transactions";
+        #[cfg(test)]
+        let name = format!("Local\\UltraSuite.DockJournal.Transactions.Test.{}", std::process::id());
+        lock_named(&name)
     }
     fn lock_named(name: &str) -> Option<GenerationLock> {
         let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
@@ -446,9 +450,9 @@ mod win {
         }
         #[test]
         fn generation_mutex_serializes_another_thread() {
-            let name = format!("Local\\UltraSuite.DockJournal.Test.{}", std::process::id());
-            let _lock = lock_named(&name).unwrap();
-            assert!(std::thread::spawn(move || lock_named(&name).is_none()).join().unwrap());
+            let owner = process_owner(std::process::id()).unwrap();
+            let _lock = lock_generation(owner).unwrap();
+            assert!(std::thread::spawn(move || lock_generation(owner).is_none()).join().unwrap());
         }
     }
 }
