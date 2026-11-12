@@ -53,8 +53,8 @@ def _validate(changes):
 def _path(_test_path=None):
     if _test_path is not None:
         return Path(_test_path)
-    roaming = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    return roaming / "UltraSuite" / "sentinel_power.json"
+    conf = os.environ.get("ULTRASUITE_CONF") or Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "UltraSuite"
+    return Path(conf) / "sentinel_power.json"
 
 
 def _read(path):

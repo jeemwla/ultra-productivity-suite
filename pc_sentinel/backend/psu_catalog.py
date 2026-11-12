@@ -62,7 +62,8 @@ def read(path):
 
 
 def cache_path():
-    return Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite/psu_catalog.json"
+    conf = os.environ.get("ULTRASUITE_CONF") or Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite"
+    return Path(conf) / "psu_catalog.json"
 
 
 def load(*, _cache=None, _bundle=None):

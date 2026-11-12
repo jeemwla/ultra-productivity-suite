@@ -97,10 +97,21 @@ DEV_JS = """(() => { let v = null; const tick = async () => {
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 # Only origins that actually serve suite pages. A different localhost service is
 # not a trusted browser client. Keep this in sync with the native window URLs.
-SUITE_ORIGIN = re.compile(
-    r"(?:https?://(?:127\.0\.0\.1|localhost|\[::1\]):(?:8081|8084|8098|8301)"
-    r"|https?://tauri\.localhost|tauri://localhost)\Z"
-)
+def _suite_origin():
+    ports = set()
+    for item in os.environ.get("ULTRASUITE_ORIGIN_PORTS", "8081,8084,8098,8301").split(","):
+        item = item.strip()
+        if not re.fullmatch(r"[0-9]{1,5}", item) or not 1 <= int(item) <= 65535:
+            raise ValueError("ULTRASUITE_ORIGIN_PORTS must contain comma-separated ports from 1 to 65535")
+        ports.add(int(item))
+    owned_ports = "|".join(str(port) for port in sorted(ports))
+    return re.compile(
+        r"(?:https?://(?:127\.0\.0\.1|localhost|\[::1\]):(?:" + owned_ports + r")"
+        r"|https?://tauri\.localhost|tauri://localhost)\Z"
+    )
+
+
+SUITE_ORIGIN = _suite_origin()
 
 
 def host_name(host_header: str) -> str:
@@ -155,13 +166,16 @@ def add_local_guard(app):
 
 def add_shared_routes(app, frontend_dir: str):
     dev = os.environ.get("ULTRASUITE_DEV") == "1"
+    edition = os.environ.get("ULTRASUITE_EDITION", "Public")
+    self_update = edition != "Dev" and os.environ.get("ULTRASUITE_SELF_UPDATE") != "0"
     add_local_guard(app)
 
     @app.get("/__ui/icons/{name}")
     async def ui_icon(name: str):
         if not re.fullmatch(r"[a-z]+\.png", name or ""):
             raise HTTPException(404)
-        p = os.path.join(STATIC, "icons", name)
+        icons = os.path.join(STATIC, "icons", "dev") if edition == "Dev" else os.path.join(STATIC, "icons")
+        p = os.path.join(icons, name)
         if not os.path.isfile(p):
             raise HTTPException(404)
         return FileResponse(p, media_type="image/png", headers={"Cache-Control": "max-age=3600"})
@@ -214,10 +228,13 @@ def add_shared_routes(app, frontend_dir: str):
 
     @app.get("/api/about")
     async def about():
-        return {"version": version(), "dev": dev, "data": DATA, "repo": REPO}
+        return {"version": version(), "dev": dev, "data": DATA, "repo": REPO, "edition": edition}
 
     @app.get("/api/update")
     async def check_update(force: bool = False):
+        if not self_update:
+            cur = version()
+            return {"current": cur, "latest": cur, "available": False, "edition": edition}
         if _upd["data"] and not force and time.time() - _upd["at"] < 6 * 3600:
             return _upd["data"]
         cur = version()
@@ -239,6 +256,8 @@ def add_shared_routes(app, frontend_dir: str):
 
     @app.post("/api/update/install")
     async def install_update():
+        if not self_update:
+            raise HTTPException(403, "Self-update is disabled for this edition. Use a local build instead.")
         info = await check_update(force=True)
         if not info.get("available") or not info.get("asset"):
             raise HTTPException(409, "You're already on the newest version.")

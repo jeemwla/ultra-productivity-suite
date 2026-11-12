@@ -19,7 +19,8 @@ BOOLEANS = ("router_vpn", "router_ping", "hide_cooling_without_fans")
 
 
 def path():
-    return Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite/sentinel_preferences.json"
+    conf = os.environ.get("ULTRASUITE_CONF") or Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite"
+    return Path(conf) / "sentinel_preferences.json"
 
 
 def validate(changes, current=None):

@@ -15,9 +15,11 @@ class Feedback(BaseModel):
 
 def anon_id() -> str:
     """Random per-PC id (same file the desktop app uses). Created on first use; contains nothing personal."""
-    p = os.path.join(os.environ.get("APPDATA", ""), "UltraSuite", "id.txt")
+    conf = os.environ.get("ULTRASUITE_CONF") or os.path.join(os.environ.get("APPDATA", ""), "UltraSuite")
+    p = os.path.join(conf, "id.txt")
     try:
-        v = open(p, encoding="utf-8").read().strip()
+        with open(p, encoding="utf-8") as handle:
+            v = handle.read().strip()
         if len(v) >= 16:
             return v
     except Exception:
@@ -26,7 +28,8 @@ def anon_id() -> str:
     v = secrets.token_hex(12)
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        open(p, "w", encoding="utf-8").write(v)
+        with open(p, "w", encoding="utf-8") as handle:
+            handle.write(v)
     except Exception:
         pass
     return v
@@ -35,6 +38,8 @@ def anon_id() -> str:
 def add_feedback_route(app, app_name: str, version: str = "2.0.1"):
     @app.post("/api/feedback")
     async def send_feedback(fb: Feedback):
+        if os.environ.get("ULTRASUITE_EDITION") == "Dev":
+            raise HTTPException(403, "Feedback is disabled in the Dev edition.")
         msg = fb.message.strip()
         if len(msg) < 3:
             raise HTTPException(400, "Write a few words first.")
