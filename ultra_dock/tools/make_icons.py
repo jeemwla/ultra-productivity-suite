@@ -6,11 +6,18 @@ Outputs, for each app:
   core/static/icons/<app>.png       64 px favicon served to each app page
 
 Run:  python ultra_dock/tools/make_icons.py
+Dev only: python ultra_dock/tools/make_icons.py --edition Dev
+Dev writes icons/dev (suite PNGs, ICO, window PNGs and per-size frames),
+appicons-dev (shortcut ICOs), core/static/icons/dev and ui/hubicons/dev.
+Use --preview-dir private/dev-icons for actual-size dark/light contact sheets.
 """
 import math
 import os
+import argparse
+from pathlib import Path
+from functools import lru_cache
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TAURI = os.path.join(HERE, "..", "src-tauri")
@@ -107,11 +114,12 @@ def insights():
     return shadowed(g)
 
 
-def dock():
+def dock(colors=None):
     g = Image.new("RGBA", (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(g)
     # phone-style folder: four app tiles in a frosted plate
     d.rounded_rectangle((210, 210, 814, 814), radius=150, fill=(255, 255, 255, 52), outline=(255, 255, 255, 120), width=10)
-    colors = [(255, 255, 255, 255), (255, 214, 102, 255), (125, 211, 252, 255), (252, 165, 165, 255)]
+    if colors is None:
+        colors = [(255, 255, 255, 255), (255, 214, 102, 255), (125, 211, 252, 255), (252, 165, 165, 255)]
     for i, (x, y) in enumerate([(275, 275), (537, 275), (275, 537), (537, 537)]):
         d.rounded_rectangle((x, y, x + 212, y + 212), radius=58, fill=colors[i])
     return shadowed(g)
@@ -123,6 +131,127 @@ APPS = {
     "insights": ((124, 58, 237), (236, 72, 153), insights),
     "dock": ((17, 24, 39), (79, 70, 229), dock),
 }
+
+
+ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
+DEV_SUITE_PNGS = {
+    "32x32.png": 32, "64x64.png": 64, "128x128.png": 128,
+    "128x128@2x.png": 256, "icon.png": 512,
+    "Square30x30Logo.png": 30, "Square44x44Logo.png": 44,
+    "Square71x71Logo.png": 71, "Square89x89Logo.png": 89,
+    "Square107x107Logo.png": 107, "Square142x142Logo.png": 142,
+    "Square150x150Logo.png": 150, "Square284x284Logo.png": 284,
+    "Square310x310Logo.png": 310, "StoreLogo.png": 50,
+}
+
+
+@lru_cache(maxsize=2)
+def dev_base(small):
+    """Use the Public tile geometry, with a stronger rim on small renders."""
+    img = gradient((11, 11, 11), (38, 38, 38))
+    img.putalpha(squircle_mask())
+    # Keep the tile dark on light taskbars; omit the Public surface glow.
+    width = 96 if small else 48
+    ImageDraw.Draw(img).rounded_rectangle(
+        (24, 24, S - 24, S - 24), radius=int(S * 0.235),
+        outline=(224, 224, 224, 255), width=width,
+    )
+    return img
+
+
+def dev_glyph(name):
+    """Preserve the exact glyph geometry and alpha, lifting colors to light gray."""
+    # Public blue and red tiles have nearly identical luminance. Give the four
+    # tiles separated light gray levels through the same geometry routine.
+    glyph = (dock([(v, v, v, 255) for v in (255, 224, 192, 160)])
+             if name == "dock" else APPS[name][2]())
+    # Keep the existing black shadow dark. Colored glyph details become light.
+    gray = ImageOps.grayscale(glyph)
+    if name != "dock":
+        gray = gray.point(lambda value: 0 if value == 0 else 144 + value * 111 // 255)
+    return Image.merge("RGBA", (gray, gray, gray, glyph.getchannel("A")))
+
+
+def dev_icon(name, size, glyph=None):
+    # Each small frame gets its own strengthened outline before resampling.
+    # All glyphs still come from the same Public drawing routines.
+    if glyph is None:
+        glyph = dev_glyph(name)
+    return Image.alpha_composite(dev_base(size <= 32), glyph).resize(
+        (size, size), Image.Resampling.LANCZOS,
+    )
+
+
+def save_dev_ico(path, frames):
+    """Supply every frame explicitly, including the strengthened small sizes."""
+    frames[256].save(
+        path, format="ICO", sizes=[(s, s) for s in ICO_SIZES],
+        append_images=[frames[s] for s in ICO_SIZES if s != 256],
+    )
+    # Older Pillow versions may silently ignore append_images. Fail rather than
+    # publish an ICO whose small frames do not match the reviewed PNGs.
+    with Image.open(path) as ico:
+        if ico.ico.sizes() != {(s, s) for s in ICO_SIZES}:
+            raise RuntimeError("Pillow did not save all requested ICO sizes")
+        for size in ICO_SIZES:
+            if ico.ico.getimage((size, size)).convert("RGBA").tobytes() != frames[size].tobytes():
+                raise RuntimeError(f"Pillow did not preserve the supplied {size}px ICO frame")
+
+
+def dev_contact_sheet(frames, sizes, path):
+    """Actual-size samples on taskbar backgrounds, with no sample enlargement."""
+    cell = max(sizes) + 24
+    label_width = 90
+    sheet = Image.new("RGB", (label_width + cell * len(APPS) * 2, sum(sizes) + 28 * len(sizes)))
+    draw = ImageDraw.Draw(sheet)
+    y = 0
+    for size in sizes:
+        height = size + 28
+        for column, bg in enumerate((32, 243)):
+            left = label_width + column * cell * len(APPS)
+            draw.rectangle((left, y, left + cell * len(APPS) - 1, y + height - 1), fill=(bg,) * 3)
+            for index, name in enumerate(APPS):
+                x = left + index * cell + (cell - size) // 2
+                sheet.paste(frames[name][size], (x, y + 6), frames[name][size])
+                draw.text((left + index * cell + 4, y + size + 9), name, fill=(150,) * 3)
+        draw.text((4, y + 6), f"{size}px", fill="white")
+        y += height
+    sheet.save(path)
+
+
+def make_dev_icons(root=ROOT, preview_dir=None):
+    """Write only new Dev assets; never open Public output files for writing."""
+    root = Path(root)
+    tauri = root / "ultra_dock/src-tauri"
+    icons = tauri / "icons/dev"
+    appicons = tauri / "appicons-dev"
+    favicons = root / "core/static/icons/dev"
+    hubicons = root / "ultra_dock/ui/hubicons/dev"
+    for folder in (icons / "apps", appicons, favicons, hubicons):
+        folder.mkdir(parents=True, exist_ok=True)
+    all_frames = {}
+    for name in APPS:
+        glyph = dev_glyph(name)
+        frames = {size: dev_icon(name, size, glyph) for size in ICO_SIZES}
+        all_frames[name] = frames
+        per_size = icons / "apps" / name
+        per_size.mkdir(exist_ok=True)
+        for size, frame in frames.items():
+            frame.save(per_size / f"{size}.png")
+        frames[256].save(icons / "apps" / f"{name}.png")
+        frames[64].save(favicons / f"{name}.png")
+        frames[256].save(hubicons / f"{name}.png")
+        save_dev_ico(appicons / f"{name}.ico", frames)
+    glyph = dev_glyph("dock")
+    for filename, size in DEV_SUITE_PNGS.items():
+        dev_icon("dock", size, glyph).save(icons / filename)
+    save_dev_ico(icons / "icon.ico", all_frames["dock"])
+    if preview_dir is not None:
+        preview_dir = Path(preview_dir)
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        dev_contact_sheet(all_frames, (16, 24, 32, 48), preview_dir / "dev-small.png")
+        dev_contact_sheet(all_frames, (64, 128, 256), preview_dir / "dev-large.png")
+    print("wrote Dev icons for", ", ".join(APPS))
 
 
 def main():
@@ -154,4 +283,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--edition", choices=("Public", "Dev"), default="Public")
+    parser.add_argument("--preview-dir", help="Dev contact sheets, outside the asset trees")
+    args = parser.parse_args()
+    if args.edition == "Dev":
+        make_dev_icons(preview_dir=args.preview_dir)
+    else:
+        main()
