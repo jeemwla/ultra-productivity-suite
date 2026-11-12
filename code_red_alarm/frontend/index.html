@@ -71,7 +71,39 @@ label.f{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin
 .in:hover{border-color:var(--ink-3)}
 .in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237b8494' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;text-overflow:ellipsis}
-input[type=time].in{font-variant-numeric:tabular-nums}
+.time-trigger{display:flex;align-items:center;justify-content:space-between;font-variant-numeric:tabular-nums;text-align:left;font-weight:600}
+.time-trigger svg{color:var(--ink-3);flex:none}
+.time-dialog{margin:auto;width:min(360px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:24px;border:1px solid var(--line);border-radius:22px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-lg)}
+.time-dialog::backdrop{background:rgba(10,14,24,.42);backdrop-filter:blur(5px)}
+.picker-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.picker-heading h2{font:600 19px var(--font-display)}
+.picker-caption{font-size:13px;color:var(--ink-2);margin-bottom:20px}
+.time-columns{display:grid;grid-template-columns:1fr 1fr .85fr;gap:10px}
+.wheel-label{text-align:center;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+.time-wheel{height:220px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent;border:1px solid var(--line);border-radius:14px;padding:88px 6px;background:var(--bg);scroll-padding:80px}
+.wheel-option{display:block;width:100%;height:40px;border:0;border-radius:9px;background:transparent;color:var(--ink-2);font-size:19px;font-variant-numeric:tabular-nums;flex:none}
+.wheel-option:hover{background:var(--surface-2)}
+.wheel-option[aria-selected=true]{background:var(--accent-soft);color:var(--ink);font-weight:700}
+.picker-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
+.timer-body{text-align:center;padding:24px 20px}
+.timer-face{--progress:0%;width:220px;height:220px;margin:0 auto 22px;padding:5px;border-radius:50%;background:conic-gradient(var(--accent) var(--progress),var(--surface-2) 0);display:grid;place-items:center}
+.timer-face-inner{width:100%;height:100%;border-radius:50%;background:var(--surface);display:flex;flex-direction:column;justify-content:center;align-items:center}
+.timer-readout{font:500 clamp(36px,6vw,48px)/1.2 var(--font-display);letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.timer-status{font-size:13px;color:var(--ink-2);margin-top:8px}
+.timer-presets{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0}
+.timer-preset{padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font-size:13px}
+.timer-preset:hover,.timer-preset[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--ink)}
+.timer-duration{display:flex;justify-content:center;align-items:center;gap:10px;margin:0 auto 18px;max-width:310px}
+.timer-duration label{flex:1;min-width:0;font-size:11px;color:var(--ink-3);letter-spacing:.05em;text-transform:uppercase}
+.timer-duration input{display:block;text-align:center;padding:0 4px;margin-top:5px;font-size:19px;font-variant-numeric:tabular-nums}
+.timer-controls{display:flex;justify-content:center;gap:8px}
+.timer-controls .primary{min-width:140px}
+.timer-note{max-width:360px;margin:16px auto 0;font-size:12px;color:var(--ink-3)}
+.timer-body :disabled{cursor:not-allowed;opacity:.55}
+.tool-nav{display:flex;gap:4px;padding:4px;width:max-content;border:1px solid var(--line);background:var(--surface);border-radius:12px;margin:0 0 20px}
+.tool-nav a{padding:7px 18px;border-radius:8px;text-decoration:none;color:var(--ink-2);font-size:13px;font-weight:600}
+.tool-nav a:hover,.tool-nav a:focus-visible{background:var(--surface-2);color:var(--ink)}
+#timer-card,#h-new{scroll-margin-top:20px}
 .hint{font-size:12px;color:var(--ink-3);margin-top:6px}
 
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -189,13 +221,14 @@ input[type=time].in{font-variant-numeric:tabular-nums}
   <header class="top">
     <div class="brand">
       <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/></svg></div>
-      <div><h1>Code Red Alarm</h1><p>Wake-up alarms that can't be ignored</p></div>
+      <div><h1>Code Red Alarm</h1><p>Alarms and timers, on your schedule</p></div>
     </div>
     <div class="chips" role="status" aria-live="polite"><span data-theme-slot></span>
       <span class="chip" id="chip-engine"><span class="dot"></span>Connecting…</span>
       <span class="chip" id="chip-speaker"><span class="dot"></span>Speaker: checking…</span>
     </div>
   </header>
+  <nav class="tool-nav" aria-label="Clock tools"><a href="#h-new">Alarms</a><a href="#timer-card">Timer</a></nav>
 
   <div class="banner bad" id="clock-warn" role="alert" hidden>
     <span aria-hidden="true">⚠</span>
@@ -218,8 +251,9 @@ input[type=time].in{font-variant-numeric:tabular-nums}
           </div>
           <div class="row2">
             <div class="field">
-              <label class="f" for="f-time">Time</label>
-              <input class="in" type="time" id="f-time" value="07:00" required />
+              <label class="f" id="time-label" for="time-picker-open">Time</label>
+              <input type="hidden" id="f-time" value="07:00" />
+              <button class="in time-trigger" type="button" id="time-picker-open" aria-haspopup="dialog" aria-controls="time-picker" aria-labelledby="time-label time-picker-value"><span id="time-picker-value">7:00 AM</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
             </div>
             <div class="field">
               <label class="f" for="f-duration">Rings for</label>
@@ -296,13 +330,31 @@ input[type=time].in{font-variant-numeric:tabular-nums}
       </section>
     </div>
 
+    <div class="stack activity-stack">
     <section class="card" aria-labelledby="h-list" id="alarms-card">
       <div class="card-h"><h2 id="h-list">Alarms</h2><span class="sub" id="count"></span></div>
       <div class="card-b"><div class="list" id="list" aria-live="polite"></div></div>
     </section>
+    <section class="card" aria-labelledby="h-timer" id="timer-card">
+      <div class="card-h"><h2 id="h-timer">Timer</h2><span class="sub">Up to 24 hours</span></div>
+      <div class="timer-body">
+        <div class="timer-face" id="timer-face"><div class="timer-face-inner"><div class="timer-readout" id="timer-readout" role="timer" aria-label="Time remaining">05:00</div><div class="timer-status" id="timer-status" role="status">Connecting…</div></div></div>
+        <div class="timer-presets" role="group" aria-label="Timer presets"><button type="button" class="timer-preset" data-seconds="300" aria-pressed="true">5 min</button><button type="button" class="timer-preset" data-seconds="600" aria-pressed="false">10 min</button><button type="button" class="timer-preset" data-seconds="1500" aria-pressed="false">25 min</button><button type="button" class="timer-preset" data-seconds="2700" aria-pressed="false">45 min</button></div>
+        <div class="timer-duration" role="group" aria-label="Custom timer duration"><label>Hours<input class="in" id="timer-hours" type="number" min="0" max="24" step="1" value="0" inputmode="numeric" /></label><span aria-hidden="true">:</span><label>Minutes<input class="in" id="timer-minutes" type="number" min="0" max="59" step="1" value="5" inputmode="numeric" /></label><span aria-hidden="true">:</span><label>Seconds<input class="in" id="timer-seconds" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" /></label></div>
+        <div class="timer-controls"><button type="button" class="btn primary" id="timer-toggle" disabled>Start timer</button><button type="button" class="btn ghost" id="timer-reset" disabled>Reset</button></div>
+        <p class="timer-note">Keeps counting with this window closed. Uses your chosen alarm speaker. The PC and alarm service need to be available.</p>
+      </div>
+    </section>
+    </div>
   </div>
 </div>
 
+<dialog class="time-dialog" id="time-picker" aria-labelledby="time-picker-title" aria-describedby="time-picker-help">
+  <div class="picker-heading"><h2 id="time-picker-title">Choose a time</h2><button type="button" class="btn ghost sm" id="time-picker-close" aria-label="Close time picker">✕</button></div>
+  <p class="picker-caption" id="time-picker-help">Scroll or use the arrow keys to find your time.</p>
+  <div class="time-columns"><div><div class="wheel-label" id="hour-label">Hour</div><div class="time-wheel" id="picker-hours" role="listbox" tabindex="0" aria-labelledby="hour-label"></div></div><div><div class="wheel-label" id="minute-label">Minute</div><div class="time-wheel" id="picker-minutes" role="listbox" tabindex="0" aria-labelledby="minute-label"></div></div><div><div class="wheel-label" id="period-label">Period</div><div class="time-wheel" id="picker-period" role="listbox" tabindex="0" aria-labelledby="period-label"></div></div></div>
+  <div class="picker-actions"><button type="button" class="btn ghost" id="time-picker-cancel">Cancel</button><button type="button" class="btn primary" id="time-picker-apply">Apply time</button></div>
+</dialog>
 <div class="ring" id="ring" role="alertdialog" aria-modal="true" aria-labelledby="ring-title">
   <div class="ring-box">
     <div class="k" id="ring-kind">Alarm</div>
@@ -358,6 +410,131 @@ const pretty = (n) => {
   return m ? m[1] : s;
 };
 const fmt12 = (hhmm) => { const [h,m] = hhmm.split(":").map(Number); return { t: `${((h+11)%12)+1}:${String(m).padStart(2,"0")}`, ap: h < 12 ? "AM" : "PM" }; };
+
+/* ---------- Time picker ---------- */
+function pickerParts(value){
+  const [h,m] = value.split(":").map(Number);
+  return {hour: (h + 11) % 12 + 1, minute: m, period: h < 12 ? "AM" : "PM"};
+}
+function pickerValue(parts){
+  const hour = parts.hour % 12 + (parts.period === "PM" ? 12 : 0);
+  return `${String(hour).padStart(2,"0")}:${String(parts.minute).padStart(2,"0")}`;
+}
+function syncTimePicker(){ const t = fmt12($("f-time").value); $("time-picker-value").textContent = `${t.t} ${t.ap}`; }
+let pickerDraft = pickerParts("07:00");
+const pickerColumns = [
+  {id:"picker-hours", key:"hour", values:Array.from({length:12},(_,i)=>i+1)},
+  {id:"picker-minutes", key:"minute", values:Array.from({length:60},(_,i)=>i)},
+  {id:"picker-period", key:"period", values:["AM","PM"]}
+];
+function selectPicker(column, value, scroll=true){
+  pickerDraft[column.key] = value;
+  const wheel = $(column.id);
+  [...wheel.children].forEach((option,i) => {
+    const selected = column.values[i] === value;
+    option.setAttribute("aria-selected", String(selected));
+    if (selected) {
+      wheel.setAttribute("aria-activedescendant", option.id);
+      if (scroll) option.scrollIntoView({block:"center"});
+    }
+  });
+}
+pickerColumns.forEach(column => {
+  const wheel = $(column.id);
+  column.values.forEach((value,i) => {
+    const option = document.createElement("button");
+    option.type = "button"; option.className = "wheel-option"; option.id = `${column.id}-${i}`;
+    option.tabIndex = -1; option.setAttribute("role","option"); option.setAttribute("aria-selected","false");
+    option.textContent = column.key === "minute" ? String(value).padStart(2,"0") : String(value);
+    option.onclick = () => { selectPicker(column,value); wheel.focus({preventScroll:true}); };
+    wheel.appendChild(option);
+  });
+  wheel.addEventListener("keydown", e => {
+    const last = column.values.length-1, index = column.values.indexOf(pickerDraft[column.key]);
+    const next = {ArrowUp:index-1,ArrowDown:index+1,Home:0,End:last,PageUp:index-5,PageDown:index+5}[e.key];
+    if (next === undefined) return;
+    e.preventDefault(); selectPicker(column,column.values[Math.max(0,Math.min(last,next))]);
+  });
+});
+$("time-picker-open").onclick = () => {
+  pickerDraft = pickerParts($("f-time").value); $("time-picker").showModal();
+  pickerColumns.forEach(column => selectPicker(column,pickerDraft[column.key]));
+  $("picker-hours").focus({preventScroll:true});
+};
+["time-picker-close","time-picker-cancel"].forEach(id => $(id).onclick = () => $("time-picker").close());
+$("time-picker").addEventListener("close", () => $("time-picker-open").focus({preventScroll:true}));
+$("time-picker-apply").onclick = () => {
+  $("f-time").value = pickerValue(pickerDraft); syncTimePicker(); syncDate(); $("time-picker").close();
+};
+
+/* ---------- Countdown timer ---------- */
+let timerData = null, timerReceivedAt = 0, timerBusy = false, deliveryEnabled = false;
+const timerFields = ["timer-hours","timer-minutes","timer-seconds"];
+function durationFromParts(parts){
+  if (!parts.every(v => /^\d+$/.test(String(v)))) throw new Error("Enter whole hours, minutes and seconds.");
+  const [h,m,s] = parts.map(Number), total = h*3600 + m*60 + s;
+  if (h > 24 || m > 59 || s > 59 || total < 1 || total > 86400) throw new Error("Choose a duration between 1 second and 24 hours.");
+  return total;
+}
+function timerText(seconds){
+  const total = Math.max(0,Math.ceil(seconds)), h = Math.floor(total/3600), m = Math.floor(total/60)%60, s = total%60;
+  return `${h ? h+":" : ""}${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+function setTimerDuration(seconds){
+  [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].forEach((n,i)=>$(timerFields[i]).value=String(n));
+}
+function timerRemaining(data, elapsed){ return Math.max(0,data.remaining_sec - (data.state === "running" ? elapsed/1000 : 0)); }
+function renderTimer(){
+  const state = timerData?.state || "idle", active = state === "running" || state === "paused";
+  const fresh = !!timerData && performance.now()-timerReceivedAt < 10000;
+  let selected = 0; try { selected = durationFromParts(timerFields.map(id=>$(id).value)); } catch {}
+  const remaining = active ? timerRemaining(timerData,performance.now()-timerReceivedAt) : (state === "idle" ? selected : 0);
+  $("timer-readout").textContent = timerText(remaining);
+  const status = !fresh ? "Reconnecting…" : (!deliveryEnabled ? "Sound delivery is off in this edition" : ({idle:"Ready",running:remaining > 0 ? "Counting down" : "Finishing…",paused:"Paused",finished:"Time's up",expired:"Finished while unavailable"}[state] || "Ready"));
+  if ($("timer-status").textContent !== status) $("timer-status").textContent = status;
+  $("timer-face").style.setProperty("--progress", `${active ? Math.max(0,Math.min(100,100*(1-remaining/timerData.duration_sec))) : (state === "finished" ? 100 : 0)}%`);
+  $("timer-toggle").textContent = state === "running" ? "Pause" : (state === "paused" ? "Resume" : "Start timer");
+  $("timer-toggle").disabled = timerBusy || !fresh || !deliveryEnabled || (active ? remaining <= 0 : selected < 1);
+  $("timer-reset").disabled = timerBusy || !fresh || state === "idle";
+  timerFields.forEach(id => $(id).disabled = timerBusy || active || !fresh);
+  document.querySelectorAll(".timer-preset").forEach(button => {
+    button.disabled = timerBusy || active || !fresh;
+    button.setAttribute("aria-pressed",String(+button.dataset.seconds === selected));
+  });
+}
+function applyTimerSnapshot(data){
+  if (timerData && (data.revision < timerData.revision || (data.revision === timerData.revision && data.sampled_at < timerData.sampled_at))) return;
+  deliveryEnabled = data.delivery_enabled === true;
+  $("browser-ring").disabled = !deliveryEnabled; $("unlock").disabled = !deliveryEnabled;
+  if (!deliveryEnabled) stopBrowserSiren();
+  if (!timerData || timerData.run_id !== data.run_id || (data.state === "idle" && timerData.state !== "idle")) setTimerDuration(data.duration_sec);
+  timerData = data; timerReceivedAt = performance.now(); renderTimer();
+}
+async function loadTimer(){
+  try { applyTimerSnapshot(await api("/api/timer")); }
+  catch { $("timer-status").textContent = "Timer unavailable"; }
+}
+async function timerCommand(action){
+  if (timerBusy) return;
+  if (!deliveryEnabled && (action === "start" || action === "resume")) return;
+  let body;
+  try { body = action === "start" ? {duration_sec:durationFromParts(timerFields.map(id=>$(id).value))} : {run_id:timerData.run_id}; }
+  catch (err) { toast(err.message,true); return; }
+  timerBusy = true; renderTimer();
+  try { applyTimerSnapshot(await api(`/api/timer/${action}`,{method:"POST",body:JSON.stringify(body)})); }
+  catch (err) { toast(err.message,true); await loadTimer(); }
+  finally { timerBusy = false; renderTimer(); }
+}
+$("timer-toggle").onclick = () => timerCommand(timerData?.state === "running" ? "pause" : (timerData?.state === "paused" ? "resume" : "start"));
+$("timer-reset").onclick = () => timerCommand("reset");
+timerFields.forEach(id => $(id).addEventListener("input",renderTimer));
+document.querySelectorAll(".timer-preset").forEach(button => button.onclick = async () => {
+  if (timerData && !["running","paused","idle"].includes(timerData.state)) await timerCommand("reset");
+  setTimerDuration(+button.dataset.seconds); renderTimer();
+});
+setInterval(renderTimer,250);
+setInterval(() => { if (!document.hidden && performance.now()-timerReceivedAt > 4000) loadTimer(); },2000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadTimer(); });
 
 /* ---------- Day picker ---------- */
 const daysEl = $("days");
@@ -481,6 +658,7 @@ function setDuration(sec){
 function startEdit(a){
   editingId = a.id;
   $("f-label").value = a.label; $("f-time").value = a.time_hhmm; setDuration(a.ring_duration_sec);
+  syncTimePicker();
   $("f-date").value = a.target_date || ""; setDays(a.target_date ? [] : a.weekdays);
   $("f-math").value = String(a.math_mission_difficulty || 0);
   $("f-codered").checked = !!a.code_red; $("cr").classList.toggle("on", !!a.code_red);
@@ -491,11 +669,12 @@ function startEdit(a){
 }
 function endEdit(){
   editingId = null; $("form").reset(); $("f-date").value = ""; setDays([]);
+  syncTimePicker();
   $("cr").classList.toggle("on", $("f-codered").checked);
   $("h-new").textContent = "New alarm"; $("save").textContent = "Save alarm"; $("cancel-edit").hidden = true; render();
 }
 $("cancel-edit").onclick = endEdit;
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("ring").classList.contains("show")) endEdit(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("time-picker").open && !$("ring").classList.contains("show")) endEdit(); });
 
 $("list").addEventListener("click", async (e) => {
   const t = e.target.closest("[data-test],[data-del],[data-edit]"); if (!t) return;
@@ -580,13 +759,14 @@ $("browser-ring").onchange = () => { store.set("browserRing", $("browser-ring").
 /* ---------- Browser siren (phone / other devices) ---------- */
 let ctx = null, sirenTimer = null;
 function unlockAudio(){
+  if (!deliveryEnabled) return;
   try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch {}
   $("unlock").classList.toggle("show", !!ctx && ctx.state !== "running");
 }
 document.addEventListener("pointerdown", unlockAudio, { once: true });
 $("unlock").onclick = unlockAudio;
 function startBrowserSiren(){
-  if (sirenTimer || !$("browser-ring").checked) return;
+  if (!deliveryEnabled || sirenTimer || !$("browser-ring").checked) return;
   unlockAudio(); if (!ctx) return;
   const beep = () => {
     if (ctx.state !== "running") { $("unlock").classList.add("show"); return; }
@@ -602,6 +782,7 @@ function stopBrowserSiren(){ if (sirenTimer) { clearInterval(sirenTimer); sirenT
 /* ---------- Ringing screen ---------- */
 let ringingId = null, needPhrase = false;
 function showRing(msg){
+  if ($("time-picker").open) $("time-picker").close();
   const a = msg.alarm, test = !!a.is_test;
   needPhrase = !!a.code_red && !test;
   if (ringingId !== a.id) {
@@ -609,7 +790,7 @@ function showRing(msg){
     setTimeout(() => (needPhrase ? $("ring-input") : (msg.math_question && !test ? $("ring-math") : $("ring-stop"))).focus(), 50);
   }
   $("ring").classList.add("show");
-  $("ring-kind").textContent = test ? "Preview" : (a.code_red ? "Code Red" : "Alarm");
+  $("ring-kind").textContent = test ? "Preview" : (a.is_timer ? "Timer" : (a.code_red ? "Code Red" : "Alarm"));
   $("ring-title").textContent = a.label;
   const r = Math.max(0, msg.remaining_sec|0);
   $("ring-cd").textContent = `${String(Math.floor(r/60)).padStart(2,"0")}:${String(r%60).padStart(2,"0")}`;
@@ -617,7 +798,7 @@ function showRing(msg){
   $("ring-target").textContent = a.custom_phrase || "";
   const showMath = !!msg.math_question && !test;
   $("ring-math-wrap").hidden = !showMath; $("ring-math-q").textContent = msg.math_question || "";
-  $("ring-stop").textContent = needPhrase ? "Check phrase and stop" : "Stop alarm";
+  $("ring-stop").textContent = needPhrase ? "Check phrase and stop" : (a.is_timer ? "Stop timer" : "Stop alarm");
   $("ring-meta").textContent = test ? "This is a short preview." : "";
   startBrowserSiren();
 }
@@ -630,7 +811,7 @@ $("ring-stop").onclick = async () => {
   try {
     await api("/api/alarms/dismiss", {method:"POST", body: JSON.stringify({ alarm_id: ringingId || "manual",
       typed_phrase: $("ring-input").value, math_answer: $("ring-math").value === "" ? null : parseInt($("ring-math").value, 10) })});
-    hideRing(); toast("Alarm stopped. Good morning.");
+    hideRing(); toast("Stopped.");
   } catch (err) { $("ring-err").textContent = err.message.replace(/^CODE RED LOCK: /, ""); }
   finally { b.disabled = false; }
 };
@@ -657,6 +838,7 @@ function connect(){
   ws.onopen = () => { retry = 0; chip("chip-engine", "ok", "Live"); loadAlarms(); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.timer) applyTimerSnapshot(m.timer);
     if (m.server_time) { const [h,mi] = m.server_time.split(":"); const t = fmt12(`${h}:${mi}`); $("clock").textContent = `${t.t} ${t.ap}`; }
     if (m.server_iso) {
       const eng = new Date(m.server_iso);
@@ -672,7 +854,7 @@ function connect(){
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadAudio(); if (ws && ws.readyState > 1) connect(); } });
 setInterval(() => { if (!document.hidden) loadAlarms(); }, 30000);
 setInterval(loadAudio, 30000);
-syncDate(); loadAlarms(); loadAudio(); connect();
+syncDate(); syncTimePicker(); loadAlarms(); loadAudio(); loadTimer(); connect();
 </script>
 
 <!-- Feedback (sends to the Ultra Suite team) -->

@@ -5,7 +5,7 @@ const html=fs.readFileSync(path.join(__dirname,'../code_red_alarm/frontend/index
 function harness(){
  const fields={};const $=id=>fields[id]??={value:'',checked:false,hidden:false,textContent:'',classList:{toggle(){}}};
  $('days').children=[];$('days').appendChild=b=>$('days').children.push(b);$('f-time').value='07:00';
- const ctx=vm.createContext({$,document:{querySelectorAll:()=>[],createElement:()=>{const attr={};return {dataset:{},setAttribute(k,v){attr[k]=String(v)},getAttribute:k=>attr[k]}}},render(){},editingId:null});
+ const ctx=vm.createContext({$,document:{querySelectorAll:()=>[],createElement:()=>{const attr={};return {dataset:{},setAttribute(k,v){attr[k]=String(v)},getAttribute:k=>attr[k]}}},render(){},syncTimePicker(){},editingId:null});
  const days=html.match(/const DAYS = [^;]+;/)[0];
  vm.runInContext(days+html.slice(html.indexOf('const daysEl ='),html.indexOf('/* ---------- Alarms ---------- */')),ctx);
  $('form').reset=()=>{for(const id of ['f-codered','lock','browser-ring'])$(id).checked=/\bchecked\b/.test(html.match(new RegExp('<input[^>]*id="'+id+'"[^>]*>'))[0]);};

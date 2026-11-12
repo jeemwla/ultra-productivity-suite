@@ -42,6 +42,8 @@ class AlarmRestart(unittest.TestCase):
             "datetime": datetime, "json": json, "sqlite3": sqlite3,
             "DB_PATH": self.path, "Optional": Optional,
             "local_now": lambda: self.now, "due_day": clock.due_day,
+            "claim_due_timer": lambda: None,
+            "alarm_delivery_enabled": lambda: True,
         }
         exec(CODE, self.ns)
         self.ns["init_db"]()

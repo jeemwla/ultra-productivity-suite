@@ -7,7 +7,9 @@ Alarms for people who sleep through alarms. Works with any speaker or headphones
 - **Code Red mode.** The alarm only stops when you type your phrase exactly. Paste and drop are blocked.
 - **Wake-up math** (optional), repeat on weekdays or a single date, ring length from 1 to 30 minutes, and Preview to hear an alarm for 10 seconds.
 - **Edit in place,** with a status on every alarm: "Rings in 3h 20m", "Rang", or "Missed".
-- **Reliable timing.** Alarms follow the Windows clock and time zone. An alarm missed while the PC was busy or waking up still rings, up to 30 minutes late. If the alarm engine's clock ever disagrees with your device, a red banner says so.
+- **Scrolling time picker.** Choose an hour, minute and AM/PM in the app's themed dialog. Arrow keys, Page Up/Down and Home/End work too. Apply confirms the draft; Cancel or Escape leaves it unchanged.
+- **Countdown timer.** Choose a preset or enter 1 second to 24 hours, then Start. Pause, resume and reset are available. The timer is saved locally, keeps counting with the window closed, and uses the chosen alarm speaker for a one-minute completion alert. An alarm already ringing takes priority. A completion missed during sleep or restart is recovered within 30 minutes; older completions are marked finished without sound.
+- **Reliable timing.** Alarms follow the Windows clock and time zone. An alarm missed while the PC was busy, waking up or restarting still rings, up to 30 minutes late. If the alarm engine's clock ever disagrees with your device, a red banner says so.
 - When an alarm rings, its window jumps in front of everything.
 
 ## Parts
@@ -25,3 +27,4 @@ Fresh installations start with no saved sample alarms. A new alarm draft has no 
 Code Red off and Wake-up math off. It uses a single date until repeat days are explicitly chosen.
 Browser ringing and forced full volume are off by default. Public installs use the Windows default audio
 output unless a user chooses another device. Existing saved alarms and explicit audio preferences are preserved.
+The timer starts idle. Dev edition blocks timer delivery and browser playback while retaining saved preferences.
