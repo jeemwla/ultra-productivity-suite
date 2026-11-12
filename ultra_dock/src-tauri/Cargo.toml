@@ -1,6 +1,6 @@
 [package]
 name = "ultra-suite"
-version = "2.2.12"
+version = "2.2.13"
 description = "Ultra Suite: in-taskbar app groups, Code Red Alarm, PC Sentinel"
 edition = "2021"
 
