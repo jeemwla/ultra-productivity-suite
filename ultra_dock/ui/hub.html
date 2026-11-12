@@ -115,7 +115,7 @@ td .btn{padding:5px 12px;font-size:12.5px}
       <label class="capline" for="dock-cap">Apps shown on their own
         <select id="dock-cap" aria-describedby="dock-cap-help"></select></label>
       <div class="small capnote" id="dock-cap-help">The rest go into folders. Automatic groups apps by category.</div>
-      <div class="actions"><button class="btn primary" id="dock-btn">Turn on</button></div>
+      <div class="actions"><button class="btn primary" id="dock-btn">Turn on</button><button class="btn" id="dock-settings-btn">Settings</button></div>
     </section>
     <section class="card" id="c-insights" hidden>
       <div class="head"><img src="hubicons/insights.png" alt="" /><div><h2>Ultra Suite Insights</h2><div class="ed">Owner dashboard</div></div><span class="pill" id="p-insights">Checking</span></div>
@@ -324,6 +324,7 @@ function showCap(){
   sel.value = typeof info.dock_cap === "number" ? String(info.dock_cap) : "auto";
   sel.disabled = !invoke;
 }
+$("dock-settings-btn").onclick = () => { if (invoke) invoke("open_dock_settings").catch(() => {}); };
 $("dock-btn").onclick = async () => {
   if (!invoke) return; const b = $("dock-btn"); b.disabled = true;
   try { await invoke("hub_set_dock", { on: !info.dock_on }); } catch {}

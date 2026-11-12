@@ -14,6 +14,7 @@ mod recovery;
 mod wake;
 mod dock_safety;
 mod dock_layout;
+mod dock_settings;
 mod launch;
 mod edition;
 mod dock_lease;
@@ -1182,6 +1183,7 @@ fn set_app_identity(_app: &AppHandle, _win: &WebviewWindow, _name: &str, _title:
 
 fn open_view(app: &AppHandle, name: &str) {
     if name == "hub" { open_hub(app); return; }
+    if name == "docksettings" { open_dock_settings_window(app); return; }
     let Some(view) = launch::view(name) else { return };
     if let Some(win) = app.get_webview_window(name) { show_view_window(&win); }
     let Some(permit) = LAUNCHES.begin(view) else { return };
@@ -1196,6 +1198,103 @@ fn open_view(app: &AppHandle, name: &str) {
 
 /// The Ultra Suite hub: one launcher window that lists every app with live status cards (hub.html).
 /// It is a local page, so it opens at once even while the core is still starting.
+/// The Dock settings window (ui/dock.html): everything the Dock can be told, without editing a file by hand.
+fn open_dock_settings_window(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("docksettings") { show_view_window(&win); return; }
+    static OPENING: AtomicBool = AtomicBool::new(false);
+    if OPENING.swap(true, Ordering::AcqRel) { return; }
+    let app = app.clone();
+    // same rule as open_view: never build a WebView2 window inside a synchronous callback
+    let spawned = std::thread::Builder::new().name("launch-docksettings".into()).spawn(move || {
+        #[cfg(windows)]
+        let com = unsafe { windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED) }.is_ok();
+        let built = WebviewWindowBuilder::new(&app, "docksettings", WebviewUrl::App("dock.html".into()))
+            .title(format!("{} settings", app_label("dock"))).inner_size(1000.0, 780.0).min_inner_size(380.0, 480.0).center().visible(false).build();
+        match built {
+            Ok(win) => {
+                let w2 = win.clone();
+                win.on_window_event(move |e| { if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w2.hide(); } });
+                if let Ok(img) = tauri::image::Image::from_bytes(art::DOCK) { let _ = win.set_icon(img); }
+                set_app_identity(&app, &win, "hub", profile().product_name());
+                show_view_window(&win);
+            }
+            Err(error) => eprintln!("[launch] Dock settings window creation failed: {error}"),
+        }
+        #[cfg(windows)]
+        if com { unsafe { windows::Win32::System::Com::CoUninitialize(); } }
+        OPENING.store(false, Ordering::Release);
+    });
+    if let Err(error) = spawned { eprintln!("[launch] Dock settings worker could not start: {error}"); OPENING.store(false, Ordering::Release); }
+}
+
+#[tauri::command]
+fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app); }
+
+/// Everything the settings window shows: the saved organizer settings, the bundled defaults, the apps open now
+/// (with the category and keep state the Dock gives each), and the Dock switches.
+#[tauri::command]
+fn dock_settings_get() -> Value {
+    let cfg = org_config();
+    let defaults: Value = serde_json::from_str(DEFAULT_ORG).unwrap_or(Value::Null);
+    let config: Value = std::fs::read_to_string(org_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| defaults.clone());
+    let pins = pinned_apps();
+    #[cfg(windows)]
+    let wins = enum_app_windows();
+    #[cfg(not(windows))]
+    let wins: Vec<(isize, String, String)> = vec![];
+    let mut apps: Vec<Value> = vec![];
+    let mut seen: Vec<String> = vec![];
+    for (h, title, exe) in &wins {
+        let low = exe.to_lowercase();
+        if seen.contains(&low) { continue; }
+        seen.push(low.clone());
+        let file = low.rsplit('\\').next().unwrap_or(&low).to_string();
+        apps.push(json!({ "exe": exe, "hwnd": h, "title": title, "name": pretty_name(exe), "file": file,
+            "category": categorize(exe, &cfg), "kept": is_kept(exe, &cfg), "pinned": is_pinned(exe, &pins),
+            "overridden": cfg.overrides.contains_key(&file), "keep_entry": dock_settings::keep_entry(exe) }));
+    }
+    apps.sort_by(|a, b| a["name"].as_str().unwrap_or("").to_lowercase().cmp(&b["name"].as_str().unwrap_or("").to_lowercase()));
+    #[cfg(windows)]
+    let covered = all_taskbars_covered();
+    #[cfg(not(windows))]
+    let covered = false;
+    let note = if STRIP_HIDDEN.load(Ordering::Relaxed) { Some("The Dock is off. Your taskbar shows every button as usual.") }
+        else if !ORGANIZE.load(Ordering::Relaxed) { Some("Folders are off: every app keeps its normal taskbar button.") }
+        else if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible for now.") }
+        else if !HEALTHY.load(Ordering::Relaxed) { Some("Not enough room on the taskbar right now, so every button stays visible.") }
+        else { None };
+    json!({ "config": config, "defaults": defaults, "apps": apps, "cap": dock_cap(), "cap_max": CAP_MAX,
+            "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed), "organize": ORGANIZE.load(Ordering::Relaxed),
+            "grouping": covered && HEALTHY.load(Ordering::Relaxed), "note": note, "path": org_path().display().to_string() })
+}
+
+fn write_org(text: &str) -> Result<(), String> {
+    let p = org_path();
+    if let Some(d) = p.parent() { let _ = std::fs::create_dir_all(d); }
+    let tmp = p.with_extension("json.tmp");
+    std::fs::write(&tmp, text).map_err(|e| format!("Could not save the settings: {e}"))?;
+    std::fs::rename(&tmp, &p).map_err(|e| format!("Could not save the settings: {e}"))?;
+    if let Ok(mut g) = ORG_CACHE.lock() { *g = None; }  // the Dock picks the change up on its next pass
+    Ok(())
+}
+
+/// Save from the settings window. The document is checked and cleaned first (dock_settings::sanitize), then
+/// written in one step, so a half-written or invalid file can never reach the Dock.
+#[tauri::command]
+fn dock_settings_save(config: Value) -> Result<Value, String> {
+    let help = serde_json::from_str::<Value>(DEFAULT_ORG).ok().and_then(|d| d["_help"].as_str().map(String::from)).unwrap_or_default();
+    let doc = dock_settings::sanitize(&config, &help)?;
+    write_org(&serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?)?;
+    Ok(doc)
+}
+
+/// Back to the categories, keep list and order Ultra Dock ships with.
+#[tauri::command]
+fn dock_settings_reset() -> Result<Value, String> {
+    write_org(DEFAULT_ORG)?;
+    serde_json::from_str(DEFAULT_ORG).map_err(|e| e.to_string())
+}
+
 fn open_hub(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("hub") { show_view_window(&win); return; }
     static HUB_OPENING: AtomicBool = AtomicBool::new(false);
@@ -1872,7 +1971,8 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let sentinel = MenuItem::with_id(app, "sentinel", format!("Open {}", app_label("sentinel")), true, None::<&str>)?;
     let alarm = MenuItem::with_id(app, "alarm", format!("Open {}", app_label("alarm")), true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", format!("Quit {product}"), true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&dock, &PredefinedMenuItem::separator(app)?, &hub, &sentinel, &alarm,
+    let dock_settings = MenuItem::with_id(app, "docksettings", format!("{} settings", app_label("dock")), true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&dock, &dock_settings, &PredefinedMenuItem::separator(app)?, &hub, &sentinel, &alarm,
                                        &PredefinedMenuItem::separator(app)?, &quit_item])?;
     if let Ok(mut g) = DOCK_ITEM.lock() { *g = Some(dock); }
     TrayIconBuilder::with_id("ultra-suite")
@@ -1883,6 +1983,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "dock" => set_dock_enabled(STRIP_HIDDEN.load(Ordering::Relaxed)),  // hidden now: turn it on, and the reverse
             "hub" => open_view(app, "hub"),
+            "docksettings" => open_view(app, "docksettings"),
             "sentinel" => open_view(app, "sentinel"),
             "alarm" => open_view(app, "alarm"),
             "quit" => quit(app.clone()),
@@ -2020,7 +2121,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, dock_settings_get, dock_settings_save, dock_settings_reset])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {

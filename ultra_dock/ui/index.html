@@ -260,7 +260,7 @@ function render(){
       <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
       ${capControl()}
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
-      <button class="act" data-act="edit">Edit</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
+      <button class="act" data-act="edit" title="Dock settings: folders, categories, apps to keep and more">Settings</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
   $("strip").innerHTML = html + menu;
   if (oldFocus && document.hasFocus()) {
     const replacement = [...$("strip").querySelectorAll("button")].find(button => focusKey(button) === oldFocus && !button.closest("[inert]"));
@@ -321,7 +321,7 @@ $("strip").addEventListener("click", async (e) => {
     if (k === "cap-" || k === "cap+") { await setCap(nextCap(capOf(), k === "cap+" ? 1 : -1, looseNow())); return; }
     if (k === "capauto") { if (capOf() !== null) await setCap(null); return; }
     if (k === "sentinel" || k === "alarm") invoke && invoke("open_app_view", { name: k });
-    if (k === "edit") invoke && invoke("open_config");
+    if (k === "edit") invoke && invoke("open_dock_settings");
     if (k === "quit") invoke && invoke("quit");
     if (k === "update") { installUpdate(); return; }  // keep the menu open so the progress text stays visible
     setTimeout(() => setOpen(null), 150);

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dock settings</title>
+<style>
+/* Dock settings: every option of Ultra Dock in one window. Same look as the Ultra Suite hub. */
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel-2:#1e222b; --panel-3:#252a35; --line:rgba(255,255,255,.08);
+  --ink:#f2f4f8; --ink-2:rgba(242,244,248,.74); --ink-3:rgba(242,244,248,.52);
+  --accent:#60cdff; --accent-ink:#00131c; --ok:#4cc38a; --warn:#f2b84b; --bad:#ff6b6b;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; --radius:12px;
+}
+@media (prefers-color-scheme: light){:root{
+  --bg:#f3f4f7; --panel:#ffffff; --panel-2:#f6f7fa; --panel-3:#eceef3; --line:rgba(0,0,0,.09);
+  --ink:#111318; --ink-2:rgba(17,19,24,.72); --ink-3:rgba(17,19,24,.55);
+  --accent:#005fb8; --accent-ink:#ffffff; --ok:#1d7f52; --warn:#9a6300; --bad:#c42b1c; }}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{min-height:100%;background:var(--bg)}
+body{font:14px/1.45 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{border:0;background:none;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{max-width:980px;margin:0 auto;padding:24px 24px 48px}
+.hero{display:flex;align-items:center;gap:16px;border-radius:16px;padding:20px 22px;margin-bottom:18px;border:1px solid var(--line);
+  background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 20%,transparent) 0%,transparent 55%),var(--panel)}
+.hero img{width:48px;height:48px;border-radius:12px}
+.hero h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.hero p{color:var(--ink-2);font-size:13.5px}
+.hero .grow{flex:1;min-width:0}
+.pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--panel-2);color:var(--ink-2);white-space:nowrap}
+.pill.on{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.off{color:var(--ink-3)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+.card h2{font-size:16px;font-weight:650;margin-bottom:2px}
+.card .lead{color:var(--ink-3);font-size:13px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:14px;padding:11px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .txt{flex:1;min-width:0}
+.row .txt b{display:block;font-weight:600}
+.row .txt span{display:block;color:var(--ink-3);font-size:12.5px}
+select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+select{min-width:170px}
+/* Switch */
+.sw{position:relative;width:44px;height:24px;border-radius:99px;background:var(--panel-3);border:1px solid var(--line);flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--ink-2);transition:transform .18s cubic-bezier(.2,.9,.25,1),background .15s}
+.sw[aria-checked=true]{background:var(--accent);border-color:transparent}
+.sw[aria-checked=true]::after{transform:translateX(20px);background:var(--accent-ink)}
+.sw:disabled{opacity:.45;cursor:default}
+.btn{padding:7px 14px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);font-weight:600;white-space:nowrap}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.icon-btn{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:var(--ink-2);flex:none}
+.icon-btn:hover{background:var(--panel-2);color:var(--ink)}
+.icon-btn:disabled{opacity:.3;cursor:default}
+.icon-btn svg{width:16px;height:16px}
+/* Open apps */
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.toolbar input{flex:1;min-width:160px}
+.app img,.app .ph{width:28px;height:28px;border-radius:6px;flex:none}
+.app .ph{background:var(--panel-3)}
+.app .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.tag{font-size:11.5px;color:var(--ink-3);background:var(--panel-2);border-radius:6px;padding:1px 7px}
+.tag.pin{color:var(--accent)}
+.keepbox{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);flex:none}
+/* Categories */
+.cat{display:grid;grid-template-columns:auto 1fr auto;gap:10px 12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+.cat:first-of-type{border-top:0}
+.cat .moves{display:flex;flex-direction:column;gap:2px}
+.cat .name{display:flex;gap:8px;align-items:center}
+.cat .name input{font-weight:600;max-width:240px}
+.cat .count{font-size:12px;color:var(--ink-3)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--panel-2);border:1px solid var(--line);border-radius:99px;padding:2px 4px 2px 10px;font-size:12.5px}
+.chip button{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3);font-size:13px;line-height:1}
+.chip button:hover{background:var(--panel-3);color:var(--ink)}
+.chips input{width:150px;padding:3px 10px;border-radius:99px;font-size:12.5px}
+.muted{color:var(--ink-3)}
+.status{position:fixed;right:20px;bottom:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;
+  box-shadow:0 10px 28px rgba(0,0,0,.25);opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none}
+.status.show{opacity:1;transform:none}
+.status.err{color:var(--bad)}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--ink-2);word-break:break-all}
+@media (max-width:640px){main{padding:16px}.hero{flex-wrap:wrap}.hero .grow{flex:1 1 calc(100% - 64px)}.row{flex-wrap:wrap}.cat{grid-template-columns:1fr auto}.cat .moves{flex-direction:row;grid-column:1/-1}select{min-width:0;width:100%}}
+@media (prefers-reduced-motion:reduce){.sw,.sw::after,.status{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <section class="hero" aria-labelledby="title">
+    <img src="hubicons/dock.png" alt="" />
+    <div class="grow"><h1 id="title">Dock settings</h1><p id="note">Loading…</p></div>
+    <span class="pill" id="pill">Checking</span>
+    <button class="sw" role="switch" id="dock-on" aria-checked="false" aria-label="Ultra Dock on"></button>
+  </section>
+
+  <section class="card" aria-labelledby="h-layout">
+    <h2 id="h-layout">Layout</h2>
+    <p class="lead">How the Dock shows the apps you have open. Folders hold up to 6 apps and never just one.</p>
+    <div class="row">
+      <div class="txt"><b>Group apps into folders</b><span>Off: every app keeps its normal taskbar button.</span></div>
+      <button class="sw" role="switch" id="organize" aria-checked="false" aria-label="Group apps into folders"></button>
+    </div>
+    <div class="row">
+      <label class="txt" for="cap"><b>Apps shown on their own</b><span>The first apps get their own button; the rest go into folders. Automatic groups apps by category.</span></label>
+      <select id="cap"></select>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-apps">
+    <h2 id="h-apps">Open apps</h2>
+    <p class="lead">Choose each app's folder, or keep it as a normal taskbar button. Apps you pinned in Windows always stay as they are.</p>
+    <div class="toolbar"><input type="text" id="find" placeholder="Find an app" aria-label="Find an app" />
+      <button class="btn small" id="refresh">Refresh</button></div>
+    <div id="apps"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-cats">
+    <h2 id="h-cats">Categories</h2>
+    <p class="lead">Folders appear in this order. An app goes into the category whose word matches the most of its file path (for example "steam" or "discord"). Apps that match nothing go to Other.</p>
+    <div id="cats"></div>
+    <div class="toolbar" style="margin-top:12px"><input type="text" id="new-cat" placeholder="New category name" aria-label="New category name" />
+      <button class="btn small" id="add-cat">Add category</button></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-keep">
+    <h2 id="h-keep">Always keep on the taskbar</h2>
+    <p class="lead">Apps whose file path contains one of these keep their normal taskbar button and never go into a folder.</p>
+    <div class="chips" id="keep"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-adv">
+    <h2 id="h-adv">Advanced</h2>
+    <div class="row">
+      <div class="txt"><b>Edit the settings file directly</b><span>For people who prefer text. Opens it in Notepad: <code id="path"></code></span></div>
+      <button class="btn" id="open-file">Open file</button>
+    </div>
+    <div class="row">
+      <div class="txt"><b>Reset to the defaults</b><span>Puts back the categories, order and keep list Ultra Dock ships with. Your Dock on/off and app count stay as they are.</span></div>
+      <div class="confirm" id="reset-box"><button class="btn danger" id="reset">Reset</button></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="status" role="status" aria-live="polite"></div>
+<script>
+const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const UP = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>';
+const DOWN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
+const BIN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>';
+const OTHER = "Other";
+
+/* The page keeps one copy of the settings and saves it (checked and cleaned by the app) shortly after each change. */
+let S = { config: { keep: [], order: [], categories: {}, overrides: {} }, apps: [], cap: null, cap_max: 30, dock_on: true, organize: true, grouping: false, note: null, path: "" };
+let saveTimer = 0, saving = false, dirty = false;
+const icons = new Map();
+
+function status(text, err){ const s = $("status"); s.textContent = text; s.className = "status show" + (err ? " err" : ""); clearTimeout(status.t); status.t = setTimeout(() => s.className = "status", err ? 5000 : 1600); }
+
+/* ---------- pure helpers (tested in tests/dock_settings.test.cjs) ---------- */
+function categoryNames(cfg){ const names = Object.keys(cfg.categories || {}); const order = (cfg.order || []).filter(o => o === OTHER || names.includes(o)); for (const n of names) if (!order.includes(n)) order.push(n); if (!order.includes(OTHER)) order.push(OTHER); return order; }
+function moveCategory(cfg, name, dir){ const order = categoryNames(cfg); const i = order.indexOf(name), j = i + dir; if (i < 0 || j < 0 || j >= order.length) return { ...cfg, order }; [order[i], order[j]] = [order[j], order[i]]; return { ...cfg, order }; }
+function renameCategory(cfg, from, to){
+  to = String(to || "").trim(); if (!to || to === from || from === OTHER) return { cfg, error: null };
+  const names = categoryNames(cfg);
+  if (names.some(n => n.toLowerCase() === to.toLowerCase())) return { cfg, error: `There is already a category called "${to}".` };
+  if (to.startsWith("__")) return { cfg, error: `"${to}" cannot be used as a category name.` };
+  const categories = {}; for (const [k, v] of Object.entries(cfg.categories || {})) categories[k === from ? to : k] = v;
+  const overrides = {}; for (const [k, v] of Object.entries(cfg.overrides || {})) overrides[k] = v === from ? to : v;
+  return { cfg: { ...cfg, categories, overrides, order: categoryNames(cfg).map(n => n === from ? to : n) }, error: null };
+}
+function removeCategory(cfg, name){
+  if (name === OTHER) return cfg;
+  const categories = { ...(cfg.categories || {}) }; delete categories[name];
+  const overrides = {}; for (const [k, v] of Object.entries(cfg.overrides || {})) if (v !== name) overrides[k] = v;
+  return { ...cfg, categories, overrides, order: categoryNames(cfg).filter(n => n !== name) };
+}
+function addCategory(cfg, name){
+  name = String(name || "").trim(); if (!name) return { cfg, error: null };
+  if (categoryNames(cfg).some(n => n.toLowerCase() === name.toLowerCase())) return { cfg, error: `There is already a category called "${name}".` };
+  if (name.startsWith("__")) return { cfg, error: `"${name}" cannot be used as a category name.` };
+  const order = categoryNames(cfg); const at = order.indexOf(OTHER); order.splice(at < 0 ? order.length : at, 0, name);
+  return { cfg: { ...cfg, categories: { ...(cfg.categories || {}), [name]: [] }, order }, error: null };
+}
+function setKeywords(cfg, name, words){ return { ...cfg, categories: { ...(cfg.categories || {}), [name]: [...new Set(words.map(w => String(w).trim().toLowerCase()).filter(Boolean))] } }; }
+function setAppCategory(cfg, file, cat){ const overrides = { ...(cfg.overrides || {}) }; if (cat) overrides[file] = cat; else delete overrides[file]; return { ...cfg, overrides }; }
+function setKeep(cfg, entry, on){
+  const keep = (cfg.keep || []).filter(k => k.toLowerCase() !== entry.toLowerCase());
+  if (on) keep.push(entry);
+  return { ...cfg, keep };
+}
+function capOptions(max){ return [["auto", "Automatic"]].concat(Array.from({ length: max + 1 }, (_, n) => [String(n), n === 0 ? "None (all in folders)" : n === 1 ? "1 app" : `${n} apps`])); }
+
+/* ---------- saving ---------- */
+function change(next){ S.config = next; dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(save, 450); }
+async function save(){
+  if (!invoke) { dirty = false; status("Preview only: nothing was saved"); return; }
+  if (saving) { saveTimer = setTimeout(save, 300); return; }
+  saving = true;
+  try { S.config = await invoke("dock_settings_save", { config: S.config }); dirty = false; status("Saved"); await refresh(true); }
+  catch (e) { status(String(e || "Could not save"), true); }
+  finally { saving = false; }
+}
+
+/* ---------- rendering ---------- */
+function iconFor(app){
+  if (icons.has(app.exe)) return icons.get(app.exe);
+  icons.set(app.exe, null);
+  if (invoke) invoke("get_icon", { target: app.exe, hwnd: app.hwnd ?? null }).then(u => { if (!u) return; icons.set(app.exe, u);
+    document.querySelectorAll(`[data-icon="${CSS.escape(app.exe)}"]`).forEach(el => { const i = document.createElement("img"); i.src = u; i.alt = ""; i.dataset.icon = app.exe; el.replaceWith(i); }); }).catch(() => {});
+  return null;
+}
+function renderTop(){
+  const on = S.dock_on, p = $("pill");
+  p.textContent = !on ? "Off" : S.grouping ? "On" : "Standing by"; p.className = "pill " + (!on ? "off" : S.grouping ? "on" : "warn");
+  $("note").textContent = S.note || "The Dock is organizing your taskbar.";
+  $("dock-on").setAttribute("aria-checked", String(on));
+  $("organize").setAttribute("aria-checked", String(S.organize)); $("organize").disabled = !on;
+  const sel = $("cap");
+  if (!sel.options.length) sel.innerHTML = capOptions(S.cap_max || 30).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
+  if (document.activeElement !== sel) sel.value = typeof S.cap === "number" ? String(S.cap) : "auto";
+  $("path").textContent = S.path || "";
+}
+function renderApps(){
+  const q = $("find").value.trim().toLowerCase(), names = categoryNames(S.config);
+  const list = S.apps.filter(a => !q || a.name.toLowerCase().includes(q) || a.file.includes(q));
+  if (!S.apps.length) { $("apps").innerHTML = `<p class="muted">No open apps found${invoke ? "" : " (preview)"}.</p>`; return; }
+  if (!list.length) { $("apps").innerHTML = `<p class="muted">No open app matches "${esc(q)}".</p>`; return; }
+  $("apps").innerHTML = list.map(a => {
+    const u = iconFor(a), ov = (S.config.overrides || {})[a.file];
+    const keepOn = a.pinned || (S.config.keep || []).some(k => a.exe.toLowerCase().includes(k.toLowerCase()));
+    const auto = ov ? "Automatic" : `Automatic (${a.category})`;
+    return `<div class="row app" data-file="${esc(a.file)}">
+      ${u ? `<img src="${u}" alt="" data-icon="${esc(a.exe)}">` : `<span class="ph" data-icon="${esc(a.exe)}"></span>`}
+      <div class="txt"><b>${esc(a.name)}</b><div class="meta"><span class="tag">${esc(a.file)}</span>${a.pinned ? '<span class="tag pin">Pinned in Windows</span>' : keepOn ? '<span class="tag">Kept on the taskbar</span>' : `<span class="tag">In ${esc(ov || a.category)}</span>`}</div></div>
+      <select data-act="cat" aria-label="Folder for ${esc(a.name)}" ${keepOn ? "disabled" : ""}>
+        <option value="">${esc(auto)}</option>${names.map(n => `<option value="${esc(n)}" ${ov === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+      <span class="keepbox">Keep<button class="sw" role="switch" data-act="keep" data-entry="${esc(a.keep_entry)}" aria-checked="${keepOn}" aria-label="Keep ${esc(a.name)} as a normal taskbar button" ${a.pinned ? "disabled" : ""}></button></span>
+    </div>`;
+  }).join("");
+}
+function renderCats(){
+  const names = categoryNames(S.config), counts = {};
+  for (const a of S.apps) { const c = (S.config.overrides || {})[a.file] || a.category; counts[c] = (counts[c] || 0) + 1; }
+  $("cats").innerHTML = names.map((n, i) => {
+    const words = (S.config.categories || {})[n] || [], other = n === OTHER;
+    return `<div class="cat" data-cat="${esc(n)}">
+      <div class="moves"><button class="icon-btn" data-act="up" aria-label="Move ${esc(n)} up" ${i === 0 ? "disabled" : ""}>${UP}</button>
+        <button class="icon-btn" data-act="down" aria-label="Move ${esc(n)} down" ${i === names.length - 1 ? "disabled" : ""}>${DOWN}</button></div>
+      <div><div class="name">${other ? `<b>${OTHER}</b>` : `<input type="text" data-act="rename" value="${esc(n)}" aria-label="Category name">`}
+        <span class="count">${counts[n] ? `${counts[n]} open` : ""}</span></div>
+        ${other ? `<p class="muted" style="font-size:12.5px;margin-top:6px">Apps that match no other category.</p>` : `<div class="chips">${words.map(w =>
+          `<span class="chip">${esc(w)}<button data-act="unword" data-word="${esc(w)}" aria-label="Remove ${esc(w)}">×</button></span>`).join("")}
+          <input type="text" data-act="word" placeholder="Add a word" aria-label="Add a word to ${esc(n)}"></div>`}</div>
+      ${other ? "<span></span>" : `<button class="icon-btn" data-act="delete" aria-label="Remove the ${esc(n)} category" title="Remove category">${BIN}</button>`}
+    </div>`;
+  }).join("");
+}
+function renderKeep(){
+  const keep = S.config.keep || [];
+  $("keep").innerHTML = keep.map(k => `<span class="chip">${esc(k)}<button data-act="unkeep" data-entry="${esc(k)}" aria-label="Stop keeping ${esc(k)}">×</button></span>`).join("")
+    + `<input type="text" id="keep-add" placeholder="Add, e.g. \\Spotify.exe" aria-label="Add an app to keep on the taskbar">`;
+}
+function renderAll(){ renderTop(); renderApps(); renderCats(); renderKeep(); }
+
+/* ---------- loading ---------- */
+async function refresh(keepConfig){
+  if (!invoke) { renderAll(); return; }
+  try {
+    const d = await invoke("dock_settings_get");
+    const typing = document.activeElement && /INPUT|SELECT/.test(document.activeElement.tagName);
+    S = { ...S, ...d, config: keepConfig || dirty ? S.config : d.config };
+    renderTop();
+    if (!typing) { renderApps(); renderCats(); renderKeep(); }
+  } catch { $("note").textContent = "Could not read the Dock settings. Open this window from Ultra Suite."; }
+}
+
+/* ---------- events ---------- */
+$("dock-on").onclick = async () => { if (!invoke) return; const on = !S.dock_on; S.dock_on = on; renderTop(); try { await invoke("hub_set_dock", { on }); } catch {} refresh(true); };
+$("organize").onclick = async () => { if (!invoke || !S.dock_on) return; S.organize = !S.organize; renderTop(); try { await invoke("set_organize", { on: S.organize }); } catch {} refresh(true); };
+$("cap").onchange = async () => { const v = $("cap").value, cap = v === "auto" ? null : Number(v); S.cap = cap; if (invoke) { try { await invoke("set_dock_cap", { cap }); status("Saved"); } catch {} } };
+$("find").oninput = renderApps;
+$("refresh").onclick = () => refresh();
+$("apps").addEventListener("change", e => { const sel = e.target.closest('[data-act="cat"]'); if (!sel) return; const file = sel.closest(".app").dataset.file; change(setAppCategory(S.config, file, sel.value)); renderApps(); renderCats(); });
+$("apps").addEventListener("click", e => { const b = e.target.closest('[data-act="keep"]'); if (!b || b.disabled) return; change(setKeep(S.config, b.dataset.entry, b.getAttribute("aria-checked") !== "true")); renderApps(); renderKeep(); });
+$("cats").addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return; const cat = b.closest(".cat").dataset.cat, a = b.dataset.act;
+  if (a === "up" || a === "down") { change(moveCategory(S.config, cat, a === "up" ? -1 : 1)); renderCats(); renderApps(); }
+  if (a === "delete") { change(removeCategory(S.config, cat)); renderCats(); renderApps(); status(`Removed ${cat}; its apps now match other categories`); }
+  if (a === "unword") { change(setKeywords(S.config, cat, ((S.config.categories || {})[cat] || []).filter(w => w !== b.dataset.word))); renderCats(); }
+});
+$("cats").addEventListener("keydown", e => {
+  const inp = e.target.closest('input[data-act="word"]'); if (!inp || e.key !== "Enter") return; e.preventDefault();
+  const cat = inp.closest(".cat").dataset.cat, w = inp.value.trim(); if (!w) return;
+  change(setKeywords(S.config, cat, [...((S.config.categories || {})[cat] || []), w])); renderCats();
+  const again = document.querySelector(`.cat[data-cat="${CSS.escape(cat)}"] input[data-act="word"]`); if (again) again.focus();
+});
+$("cats").addEventListener("change", e => {
+  const inp = e.target.closest('input[data-act="rename"]'); if (!inp) return;
+  const r = renameCategory(S.config, inp.closest(".cat").dataset.cat, inp.value);
+  if (r.error) { status(r.error, true); inp.value = inp.closest(".cat").dataset.cat; return; }
+  change(r.cfg); renderCats(); renderApps();
+});
+$("add-cat").onclick = () => { const r = addCategory(S.config, $("new-cat").value); if (r.error) { status(r.error, true); return; } $("new-cat").value = ""; change(r.cfg); renderCats(); renderApps(); };
+$("new-cat").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("add-cat").click(); } });
+$("keep").addEventListener("click", e => { const b = e.target.closest('[data-act="unkeep"]'); if (!b) return; change(setKeep(S.config, b.dataset.entry, false)); renderKeep(); renderApps(); });
+$("keep").addEventListener("keydown", e => { if (e.target.id !== "keep-add" || e.key !== "Enter") return; e.preventDefault(); const v = e.target.value.trim(); if (!v) return; change(setKeep(S.config, v, true)); renderKeep(); renderApps(); $("keep-add").focus(); });
+$("open-file").onclick = () => { if (invoke) invoke("open_config").catch(() => status("Could not open the file", true)); };
+/* Reset asks once inline (no browser dialog), then puts the shipped categories back */
+function resetIdle(){ $("reset-box").innerHTML = `<button class="btn danger" id="reset">Reset</button>`; $("reset").onclick = resetAsk; }
+function resetAsk(){
+  $("reset-box").innerHTML = `<span class="muted" style="font-size:13px">Reset categories, order and keep list?</span><button class="btn danger" id="reset-yes">Reset</button><button class="btn" id="reset-no">Cancel</button>`;
+  $("reset-no").onclick = resetIdle;
+  $("reset-yes").onclick = async () => {
+    if (invoke) { try { S.config = await invoke("dock_settings_reset"); dirty = false; status("Back to the defaults"); await refresh(true); renderAll(); } catch (e) { status(String(e), true); } }
+    resetIdle();
+  };
+  $("reset-yes").focus();
+}
+$("reset").onclick = resetAsk;
+
+/* Dev edition: its black icon and "(Dev)" name, as in the hub */
+async function loadEdition(){
+  if (!invoke) return;
+  try {
+    const e = await invoke("edition_info");
+    if (!e || e.edition !== "Dev") return;
+    document.querySelectorAll('img[src^="hubicons/"]').forEach(i => { i.src = i.getAttribute("src").replace("hubicons/", "hubicons/dev/"); });
+    const name = (e.names && e.names.dock) || "Ultra Dock (Dev)";
+    $("title").textContent = `${name} settings`; document.title = `${name} settings`;
+  } catch {}
+}
+loadEdition(); renderAll(); refresh(); setInterval(() => { if (!dirty && !saving) refresh(); }, 5000);
+</script>
+</body>
+</html>

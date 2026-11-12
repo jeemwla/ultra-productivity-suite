@@ -1,5 +1,5 @@
 {
-  "_help": "Ultra Dock organizes the apps you have OPEN. Apps listed in 'keep' keep their normal taskbar button; every other open app is tucked into a category next to your taskbar icons. Match is by a piece of the app's file path (case doesn't matter). 'overrides' puts an app (by file name) into a category of your choice. Save, then choose Reload from the ... button.",
+  "_help": "Ultra Dock organizes the apps you have OPEN. Apps listed in 'keep' keep their normal taskbar button; every other open app is tucked into a category next to your taskbar icons. Match is by a piece of the app's file path (case doesn't matter). 'overrides' puts an app (by file name) into a category of your choice. Easiest: open Dock settings from the Dock's menu or the tray icon. Changes made here apply within a second of saving.",
   "keep": ["\\Opera\\opera.exe", "\\Opera developer\\opera.exe", "\\explorer.exe", "\\Discord.exe", "\\DiscordPTB.exe", "\\Spotify.exe"],
   "order": ["Games", "Chat", "AI", "Web", "Create", "Tools", "Other"],
   "categories": {
