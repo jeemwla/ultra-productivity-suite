@@ -72,7 +72,7 @@ class VPNTogglePayload(BaseModel):
 
 @app.get("/")
 async def serve_dashboard():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html"))
+    return FileResponse(os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html"), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/snapshot")

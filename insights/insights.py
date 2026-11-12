@@ -125,7 +125,7 @@ async def github_stats():
 
 @dashboard.get("/")
 async def page():
-    return FileResponse(os.path.join(HERE, "dashboard.html"))
+    return FileResponse(os.path.join(HERE, "dashboard.html"), headers={"Cache-Control": "no-cache"})
 
 
 def bucket_keys(now: float, days: int):

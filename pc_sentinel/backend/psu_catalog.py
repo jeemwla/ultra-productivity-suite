@@ -91,4 +91,4 @@ def register(app):
 
     @app.get("/psu_picker.js", include_in_schema=False)
     def picker_script():
-        return FileResponse(Path(__file__).parent.parent / "frontend/psu_picker.js", media_type="text/javascript")
+        return FileResponse(Path(__file__).parent.parent / "frontend/psu_picker.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})

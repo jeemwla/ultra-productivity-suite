@@ -260,7 +260,7 @@ def fetch_all_alarms() -> List[dict]:
 @app.get("/")
 async def serve_ui():
     frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
-    return FileResponse(frontend_path)
+    return FileResponse(frontend_path, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/ring")
