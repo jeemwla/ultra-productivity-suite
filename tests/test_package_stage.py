@@ -28,7 +28,8 @@ _spec.loader.exec_module(ps)
 
 # The data inputs build_release.ps1 passes to PyInstaller with --add-data (folders and single files).
 PACKAGED_INPUTS = ["code_red_alarm/backend", "code_red_alarm/frontend", "pc_sentinel/backend", "pc_sentinel/frontend",
-                   "insights", "core/feedback.py", "core/devtools.py", "core/static", "VERSION"]
+                   "insights", "core/feedback.py", "core/devtools.py", "core/static", "VERSION",
+                   "core/editions.py", "core/edition_profiles.json", "core/edition_runtime.py"]
 
 LISTED = ["VERSION", "app/backend/__init__.py", "app/backend/main.py", "app/frontend/index.html", "core/static/icons/a.png"]
 

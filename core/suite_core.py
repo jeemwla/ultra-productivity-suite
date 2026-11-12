@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Ultra Suite core: runs every background service in one process (bundled as ultrasuite-core.exe).
+Ultra Suite core: runs every background service in one process.
 
-  127.0.0.1:8091  speaker helper (output picker, volume lock, OneScript)
-  127.0.0.1:8081  Code Red Alarm API + UI
-  127.0.0.1:8084  PC Sentinel API + UI
-  127.0.0.1:8300/8301  Insights collector + dashboard (owner's PC only, ULTRASUITE_OWNER=1)
+Two editions share this file (core/edition_profiles.json has every name, folder and port):
+  Public  ultrasuite-core.exe      8081 alarm, 8084 Sentinel, 8091 speaker helper, 8093 add-on, 8300/8301 Insights
+  Dev     ultrasuite-dev-core.exe  18081, 18084, 18091, 18093, 18300/18301; alarms never ring, no GitHub updates,
+          no telemetry
+The frozen core picks its edition from its own file name; a source run takes --edition Public|Dev (default Public).
+--describe prints the edition's folders and ports as JSON and exits without creating anything.
 
 Settings:  %APPDATA%\\UltraSuite\\settings.env   (created on first run; the repo's .env wins in dev)
 Data:      %LOCALAPPDATA%\\UltraSuite\\data       (alarms, speaker choice, logs)
@@ -38,10 +40,22 @@ def fix_local_time():
 
 fix_local_time()
 ROOT = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APPDATA = os.environ.get("APPDATA", os.path.expanduser("~"))
-LOCALAPPDATA = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-CONF_DIR = os.path.join(APPDATA, "UltraSuite")
-DATA_DIR = os.path.join(LOCALAPPDATA, "UltraSuite", "data")
+_CORE_DIR = os.path.join(ROOT, "core")
+if _CORE_DIR not in sys.path:
+    sys.path.insert(0, _CORE_DIR)
+import editions  # noqa: E402  (pure contract: no side effects)
+import edition_runtime  # noqa: E402  (pure helpers: no side effects)
+
+# The edition comes only from this executable's name (frozen) or an explicit --edition (source), never from the
+# environment, so a Public process cannot start a Dev core on Public data or the reverse.
+PROFILE = editions.resolve_profile(sys.executable, FROZEN, sys.argv[1:])
+REMOVED_ENV = edition_runtime.sanitize_environment(PROFILE, os.environ)
+CONF_DIR, DATA_DIR = edition_runtime.folders(PROFILE, os.environ)
+PORTS = PROFILE.ports
+if __name__ == "__main__" and "--describe" in sys.argv[1:]:
+    import json as _json
+    print(_json.dumps({**edition_runtime.describe(PROFILE, CONF_DIR, DATA_DIR), "removed_env": REMOVED_ENV}))
+    sys.exit(0)
 os.makedirs(CONF_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -85,8 +99,7 @@ def _gateway():
 
 def load_settings():
     """Dev: repo .env. Installed: %APPDATA%\\UltraSuite\\settings.env (created with safe defaults)."""
-    dev_env = os.path.join(ROOT, ".env")
-    path = dev_env if (not FROZEN and os.path.exists(dev_env)) else os.path.join(CONF_DIR, "settings.env")
+    path = edition_runtime.settings_file(PROFILE, ROOT, FROZEN, CONF_DIR)  # Dev never reads the repo's .env
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8") as f:
             f.write("# Ultra Suite settings (private to this PC)\n"
@@ -105,8 +118,8 @@ def load_settings():
         os.environ.setdefault(k, v)
     fix_local_time()
     os.environ.setdefault("ULTRASUITE_DATA", DATA_DIR)
-    os.environ["HOST_AUDIO_BRIDGE_URL"] = "http://127.0.0.1:8091"
-    os.environ["ONESCRIPT_WEBHOOK_URL"] = "http://127.0.0.1:8091/run-onescript"
+    # edition-owned values win over anything inherited or read from settings (Dev: its own data, no collector)
+    os.environ.update(edition_runtime.edition_environment(PROFILE, CONF_DIR, DATA_DIR))
     os.environ["LHM_REMOTE_URL"] = os.environ.get("LHM_REMOTE_URL_OVERRIDE", "http://127.0.0.1:8085/data.json")
     os.environ["ULTRASUITE_SETTINGS"] = path
     os.environ.setdefault("ULTRASUITE_COLLECTOR", "https://jimpc.tail95b9d9.ts.net:10000/ultrasuite/v1/event")
@@ -138,23 +151,34 @@ def port_busy(port):
 
 
 def run_services():
-    if port_busy(8081) and port_busy(8084):
+    alarm_port, sentinel_port, audio_port = PORTS["alarm"], PORTS["sentinel"], PORTS["audio"]
+    if port_busy(alarm_port) and port_busy(sentinel_port):
         print("[core] already running")
         return 0
+    delivery = PROFILE.capabilities.alarm_delivery_enabled
+    print(f"[core] {PROFILE.product_name}: settings {CONF_DIR}, data {DATA_DIR}, "
+          f"alarm delivery {'on' if delivery else 'off'}")
     from http.server import ThreadingHTTPServer
     bridge = load_module("ultra_audio_bridge", os.path.join(ROOT, "code_red_alarm", "backend", "audio_enforcer.py"))
-    if not port_busy(8091):
-        threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", 8091), bridge.Handler).serve_forever, daemon=True).start()
+    handler = bridge.Handler if delivery else edition_runtime.gated_bridge_handler(bridge.Handler, getattr(bridge, "siren", None))
+    if not port_busy(audio_port):
+        threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", audio_port), handler).serve_forever, daemon=True).start()
     start_local_addons(ThreadingHTTPServer)
 
     load_package("alarm_backend", os.path.join(ROOT, "code_red_alarm", "backend"))
     load_package("sentinel_backend", os.path.join(ROOT, "pc_sentinel", "backend"))
     import importlib
-    alarm_app = importlib.import_module("alarm_backend.main").app
+    alarm_module = importlib.import_module("alarm_backend.main")
+    if not delivery:  # Dev: the scheduler, sound tests and wake requests can never ring (fails closed)
+        edition_runtime.gate_alarm_delivery(alarm_module)
+        edition_runtime.add_alarm_delivery_guard(alarm_module.app, PROFILE.edition)
+    alarm_app = alarm_module.app
     sentinel_app = importlib.import_module("sentinel_backend.main").app
 
     insights = None
-    if os.environ.get("ULTRASUITE_OWNER") == "1":  # only on the owner's PC
+    # Public: only on the owner's PC. Dev is an owner-only build, so its local Insights sandbox always runs
+    # (its own ports and database, never the public collector or Funnel).
+    if os.environ.get("ULTRASUITE_OWNER") == "1" or PROFILE.is_dev:
         try:
             insights = load_module("ultra_insights", os.path.join(ROOT, "insights", "insights.py"))
         except Exception as exc:
@@ -166,10 +190,11 @@ def run_services():
 
     # The alarm gets its own thread and event loop, so a slow or blocking Sentinel/Insights handler can't delay the
     # alarm scheduler. This is thread isolation inside one process: a crash of the whole core still stops both.
-    alarm_servers = [] if port_busy(8081) else [server(alarm_app, 8081, "on")]
-    other_servers = [] if port_busy(8084) else [server(sentinel_app, 8084, "on")]
+    alarm_servers = [] if port_busy(alarm_port) else [server(alarm_app, alarm_port, "on")]
+    other_servers = [] if port_busy(sentinel_port) else [server(sentinel_app, sentinel_port, "on")]
     if insights:
-        other_servers += [server(app_, port) for app_, port in ((insights.collector, 8300), (insights.dashboard, 8301))
+        other_servers += [server(app_, port) for app_, port in ((insights.collector, PORTS["insights_collector"]),
+                                                                (insights.dashboard, PORTS["insights_dashboard"]))
                           if not port_busy(port)]
     groups = [g for g in (ServiceLoop("alarm", alarm_servers), ServiceLoop("services", other_servers)) if g.servers]
 
@@ -344,12 +369,13 @@ def start_local_addons(server_cls):
     served on 127.0.0.1:8093. When no such file exists, nothing runs.
     """
     places = [os.environ.get("ULTRASUITE_LOCAL_ADDON", ""), os.path.join(CONF_DIR, "local", "volume_knob_daemon.py")]
-    path = next((p for p in places if os.path.isfile(p)), None)
-    if not path or port_busy(8093):
+    path = next((p for p in places if p and os.path.isfile(p)), None)
+    port = PORTS["addon"]  # 8093, Dev 18093 (Dev ignores the inherited ULTRASUITE_LOCAL_ADDON)
+    if not path or port_busy(port):
         return
     try:
         knobs = load_module("ultra_knob_daemon", path)
-        threading.Thread(target=server_cls(("127.0.0.1", 8093), knobs.KnobDaemonHandler).serve_forever, daemon=True).start()
+        threading.Thread(target=server_cls(("127.0.0.1", port), knobs.KnobDaemonHandler).serve_forever, daemon=True).start()
         print(f"[core] local add-on: knob service from {path}")
     except Exception as exc:
         print(f"[core] local add-on failed: {exc}")
