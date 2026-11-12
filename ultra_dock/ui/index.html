@@ -20,7 +20,12 @@ body{font:12px/1 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased
 button{font:inherit;color:inherit;border:0;background:none;cursor:default;outline:none}
 button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 
-.strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap}
+.strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+/* Small screens: the strip never grows past the taskbar's free space (max-width is set from the measured room).
+   An open folder or menu that needs more room hides the other folders until it closes, and scrolls with the wheel. */
+.strip.focus > .group:not(.keep){display:none}
+.strip.tight .act{padding:0 7px}
 /* Nothing in the strip may shrink: the window is narrow while a folder or window list opens, and a shrunken
    strip would measure (and request) too little width, cutting off everything after it. */
 .strip > .group, .group > *, .inner > *, .pick > *{flex:none}
@@ -179,21 +184,47 @@ function appButton(exe, wins){
     `<button class="wt ${w.active ? "active" : ""}" role="menuitem" data-h="${w.hwnd}" title="${esc(w.title)}">${esc(shortTitle(w.title, i + 1))}</button>`).join("")}</span>`;
 }
 
+/* Free taskbar space for the strip in CSS pixels, measured by the app (Infinity until measured) */
+const room = () => (typeof state.avail === "number" && state.avail >= 0 ? state.avail : Infinity);
+/* The folders and apps to show, planned by the app to fit the free space (max 6 apps per folder, no one-app
+   folders, "More apps" folders when space is short). Without a plan (older app, preview) group by category. */
+function layoutItems(){
+  if (state.layout && Array.isArray(state.layout.items)) return state.layout.items;
+  return groups().map(([cat, ws]) => { const exes = [...new Set(ws.map(w => w.exe))]; return { key: cat, label: cat, folder: exes.length > 1, exes }; });
+}
+let shownHwnds = [], baseW = 0;
+/* An open folder, menu or window list wider than the free space: show only it until it closes */
+function applyFocus(){
+  const s = $("strip");
+  s.classList.remove("focus"); s.querySelectorAll(".group.keep").forEach(g => g.classList.remove("keep"));
+  s.classList.toggle("tight", room() < 360);
+  s.style.maxWidth = isFinite(room()) ? room() + "px" : "";
+  const target = open ? [...s.children].find(g => g.dataset.cat === open) : pick ? s.querySelector('.win[aria-expanded="true"]')?.closest(".group") : null;
+  if (!target) return;
+  const tray = open && target.querySelector(".tray"), inner = tray && tray.querySelector(".inner");
+  const extra = inner ? Math.max(0, inner.scrollWidth - tray.offsetWidth) : 0;
+  if (s.scrollWidth + extra + 2 > room()) { target.classList.add("keep"); s.classList.add("focus"); s.scrollLeft = 0; }
+}
 function render(){
   const activeElement = document.activeElement;
   const focusKey = el => [el.classList.contains("grp") ? "grp" : el.classList.contains("more") ? "more" : el.classList.contains("wt") ? "wt" : el.classList.contains("win") ? "win" : "act",el.dataset.cat,el.dataset.exe,el.dataset.h,el.dataset.act].join("|");
   const oldFocus = $("strip").contains(activeElement) && activeElement.tagName === "BUTTON" ? focusKey(activeElement) : null;
-  const gs = groups();
-  const html = gs.map(([cat, ws], index) => {
-    const uniq = []; const seen = new Set(); for (const w of ws) if (!seen.has(w.exe)) { seen.add(w.exe); uniq.push(w); }
+  const items = layoutItems(), shown = new Set();
+  const html = items.map((it, index) => {
+    const ws = state.windows.filter(w => it.exes.includes(w.exe));
+    if (!ws.length) return "";
+    ws.forEach(w => shown.add(w.hwnd));
+    const cat = it.key, label = it.label || it.key;
+    const uniq = it.exes.map(e => ws.find(w => w.exe === e)).filter(Boolean);
     const active = ws.some(w => w.active);
-    // One app in a category: a folder would only add a click, so show the app itself
-    if (uniq.length === 1) return `<div class="group solo" data-cat="${esc(cat)}">${appButton(uniq[0].exe, ws)}</div>`;
+    // One app: a folder would only add a click, so show the app itself (never a one-app folder)
+    if (!it.folder || uniq.length === 1) return `<div class="group solo" data-cat="${esc(cat)}">${appButton(uniq[0].exe, ws.filter(w => w.exe === uniq[0].exe))}</div>`;
     return `<div class="group" data-cat="${esc(cat)}">
-      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + cat)}" title="${esc(open === cat ? `Collapse ${cat} back into a folder` : cat + ': ' + ws.map(w => w.title).slice(0,6).join(' · '))}">
-        <span class="folder" aria-hidden="true">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${ws.length > 4 ? `<span class="more-n">${ws.length}</span>` : ""}</span><span class="collapse-mark" aria-hidden="true"></span><span class="runbar"></span></button>
+      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" data-label="${esc(label)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + label)}" title="${esc(open === cat ? `Collapse ${label} back into a folder` : label + ': ' + ws.map(w => w.title).slice(0,6).join(' · '))}">
+        <span class="folder" aria-hidden="true">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${uniq.length > 4 ? `<span class="more-n">${uniq.length}</span>` : ""}</span><span class="collapse-mark" aria-hidden="true"></span><span class="runbar"></span></button>
       <div id="group-tray-${index}" class="tray ${open === cat ? "open now" : ""}" aria-hidden="${open !== cat}" ${open !== cat ? "inert" : ""}><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
+  shownHwnds = [...shown];
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
   const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || (update ? `Ultra Dock: version ${update.latest} is available` : "Ultra Dock"))}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
     <div class="tray ${open === "__menu" ? "open now" : ""}" aria-hidden="${open !== "__menu"}" ${open !== "__menu" ? "inert" : ""}><div class="inner">${upAct}
@@ -207,9 +238,17 @@ function render(){
   }
   // keep any open tray at its natural width
   $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
+  applyFocus();
   requestAnimationFrame(report);
 }
-function report(){ if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth) + 2, rendered: state.windows.map(w => w.hwnd) }); }
+/* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
+function report(){
+  if (!invoke) return;
+  const full = Math.ceil($("strip").scrollWidth) + 2;
+  if (!open && !pick) baseW = full;
+  else if (state.layout && state.layout.width) baseW = Math.ceil(state.layout.width);
+  invoke("set_strip_width", { width: Math.min(full, room() + 2), rendered: shownHwnds, base: baseW });
+}
 
 function setOpen(cat){
   const prev = open; open = cat;
@@ -219,18 +258,21 @@ function setOpen(cat){
     b.setAttribute("aria-expanded", isOpen);
     if (b.classList.contains("grp")) {
       b.classList.remove("now");
-      b.setAttribute("aria-label", (isOpen ? "Collapse " : "Expand ") + g.dataset.cat);
-      b.title = isOpen ? `Collapse ${g.dataset.cat} back into a folder` : `Expand ${g.dataset.cat}`;
+      const label = (b.dataset && b.dataset.label) || g.dataset.cat;
+      b.setAttribute("aria-label", (isOpen ? "Collapse " : "Expand ") + label);
+      b.title = isOpen ? `Collapse ${label} back into a folder` : `Expand ${label}`;
     }
     tray.inert = !isOpen;
     tray.setAttribute("aria-hidden", !isOpen);
     tray.classList.remove("now");  // opening and closing by click slide as usual
     if (isOpen) { // grow the window first, then slide in
       const w = tray.querySelector(".inner").scrollWidth;
-      if (invoke) invoke("set_strip_width", { width: Math.ceil($("strip").scrollWidth + w) + 4 });
+      applyFocus();
+      if (invoke) invoke("set_strip_width", { width: Math.min(Math.ceil($("strip").scrollWidth + w) + 4, room() + 2) });
       requestAnimationFrame(() => { if (!g.isConnected || open !== g.dataset.cat) return; tray.style.width = w + "px"; tray.classList.add("open"); });
     } else { tray.style.width = "0px"; tray.classList.remove("open"); }
   });
+  if (cat === null) applyFocus();
   setTimeout(report, 340); // settle the measured native width after either transition
 }
 
@@ -259,12 +301,14 @@ function closeAll(){
 }
 $("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 1200); });
 $("strip").addEventListener("mouseenter", () => clearTimeout(closeTimer));
+/* A strip wider than the free space (an open folder on a small screen) scrolls sideways with the wheel */
+$("strip").addEventListener("wheel", e => { const s = $("strip"); if (s.scrollWidth > s.clientWidth + 1) { s.scrollLeft += e.deltaY || e.deltaX; e.preventDefault(); } }, { passive: false });
 $("strip").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeAll(); } });
 
 async function poll(){
   try {
     const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
-    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title])]);
+    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout && s.layout.items, s.avail]);
     state = s;
     // Commit the signature only after a successful render. Otherwise a transient
     // render exception would prevent retries while polling still looked healthy.

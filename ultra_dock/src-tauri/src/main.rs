@@ -13,6 +13,7 @@ use base64::Engine;
 mod recovery;
 mod wake;
 mod dock_safety;
+mod dock_layout;
 mod launch;
 mod edition;
 use serde::Serialize;
@@ -33,6 +34,14 @@ const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
 static STRIP_W: AtomicU32 = AtomicU32::new(60);
 static STRIP_FITS: AtomicBool = AtomicBool::new(false);
 static RENDER_OVERFLOW: AtomicBool = AtomicBool::new(false);
+/// Measured free taskbar space for the strip, in CSS pixels (u32::MAX until the first measurement).
+static AVAIL_CSS: AtomicU32 = AtomicU32::new(u32::MAX);
+/// Space the folder plan may use: the measured space plus what hiding the pending native buttons will free.
+static LAYOUT_CSS: AtomicU32 = AtomicU32::new(u32::MAX);
+/// Collapsed strip width the page last measured (no folder open), in CSS pixels.
+static STRIP_BASE_W: AtomicU32 = AtomicU32::new(0);
+/// Distinct apps the Dock is about to group whose native buttons are still showing.
+static PENDING_APPS: AtomicU32 = AtomicU32::new(0);
 static UI_RENDERED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static RENDERED_WINDOWS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 fn uptime_secs() -> u64 {
@@ -352,8 +361,19 @@ fn organizer_loop() {
     let mut last_guard_retry = Instant::now();
     let started = Instant::now();
     let mut listing = dock_safety::StripListing::default();
+    let mut burst = dock_layout::RehideBurst::default();
+    let mut hidden_now: std::collections::HashSet<isize> = Default::default();
     loop {
-        std::thread::sleep(Duration::from_millis(700));
+        // Between full passes, watch the foreground window: activating a window makes Windows put its hidden
+        // taskbar button back, so hide it again right away (and for a short burst after) instead of 4 s later.
+        for _ in 0..5 {
+            std::thread::sleep(Duration::from_millis(140));
+            if !(ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed)) { continue; }
+            let fg = unsafe { GetForegroundWindow().0 as isize };
+            if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
+                recovery::hide_window(h, true, &tbl);
+            }
+        }
         let cfg = org_config();
         let pins = pinned_apps();
         let wins = enum_app_windows();
@@ -365,11 +385,14 @@ fn organizer_loop() {
         let mut snap = vec![];
         let reapply = last_reapply.elapsed() > Duration::from_secs(4);
         let now_ms = started.elapsed().as_millis() as u64;
+        let mut pending: std::collections::HashSet<&str> = Default::default();
+        hidden_now.clear();
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
             // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
             let hidden = on && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
-            if !hidden { recovery::restore_window(*h, &tbl); }
+            if !hidden { recovery::restore_window(*h, &tbl); } else { hidden_now.insert(*h); }
+            if !kept && !hidden { pending.insert(exe.as_str()); }
             // List a window only while its native button is hidden (or briefly while hiding is first tried), so an
             // app never shows twice: native button plus strip copy.
             if !kept && ORGANIZE.load(Ordering::Relaxed) && listing.decide(*h, now_ms, on, hidden) {
@@ -378,6 +401,7 @@ fn organizer_loop() {
             }
         }
         listing.retain(&wins.iter().map(|w| w.0).collect());
+        PENDING_APPS.store(if ORGANIZE.load(Ordering::Relaxed) { pending.len() as u32 } else { 0 }, Ordering::Relaxed);
         if !on { recovery::restore_all(&tbl); }
         if !guarded && last_guard_retry.elapsed() > Duration::from_secs(10) {
             spawn_guard();
@@ -618,7 +642,25 @@ fn get_windows() -> Value {
         else if !covered { Some("Native taskbar mode: multiple taskbars need their own Dock strips.") }
         else if !HEALTHY.load(Ordering::Relaxed) { Some("Native taskbar mode until the Dock is visible, fits, and finishes rendering.") }
         else { None };
-    json!({ "organize": ORGANIZE.load(Ordering::Relaxed), "windows": wins, "order": org_config().order, "fallback_reason": reason })
+    let layout = strip_plan(&wins);
+    let avail = AVAIL_CSS.load(Ordering::Relaxed);
+    json!({ "organize": ORGANIZE.load(Ordering::Relaxed), "windows": wins, "order": org_config().order, "fallback_reason": reason,
+            "layout": layout, "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
+}
+
+/// Group the listed windows into the folders and apps the strip shows, sized to the taskbar's free space.
+fn strip_plan(wins: &[WinInfo]) -> Value {
+    let mut groups: Vec<(String, Vec<String>)> = vec![];
+    for w in wins {  // already sorted by category order, then name
+        let pos = match groups.iter().position(|g| g.0 == w.category) { Some(p) => p, None => { groups.push((w.category.clone(), vec![])); groups.len() - 1 } };
+        if !groups[pos].1.contains(&w.exe) { groups[pos].1.push(w.exe.clone()); }
+    }
+    let room = LAYOUT_CSS.load(Ordering::Relaxed);
+    let plan = dock_layout::plan(&groups, if room == u32::MAX { f64::INFINITY } else { room as f64 });
+    json!({
+        "items": plan.items.iter().map(|i| json!({ "key": i.key, "label": i.label, "folder": i.folder, "exes": i.exes })).collect::<Vec<_>>(),
+        "width": plan.width, "compacted": plan.compacted, "over_six": plan.over_six, "left_out": plan.left_out,
+    })
 }
 
 /// Bring another app's window forward. Runs on a throwaway thread and only uses calls that don't wait on the
@@ -771,8 +813,9 @@ async fn get_icon(target: String, hwnd: Option<isize>) -> Option<String> {
 }
 
 #[tauri::command]
-fn set_strip_width(width: f64, rendered: Option<Vec<isize>>) {
+fn set_strip_width(width: f64, rendered: Option<Vec<isize>>, base: Option<f64>) {
     if !width.is_finite() || width < 0.0 { return; }
+    if let Some(b) = base.filter(|b| b.is_finite() && *b >= 0.0) { STRIP_BASE_W.store(b.ceil().min(1800.0) as u32, Ordering::Relaxed); }
     RENDER_OVERFLOW.store(width > 1800.0, Ordering::Relaxed);
     STRIP_W.store(width.ceil().max(20.0).min(1800.0) as u32, Ordering::Relaxed);
     if let Some(windows) = rendered {
@@ -1254,7 +1297,11 @@ fn taskbar_tracker(_app: AppHandle) {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let uia: Option<IUIAutomation> = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok();
-        let (mut icons_right, mut tray_left): (Option<i32>, Option<i32>) = (None, None);
+        // Latest UI Automation reading of the taskbar: Start, the native buttons and the notification area
+        let mut geom = dock_layout::TaskbarGeom::default();
+        let (mut buttons, mut button_w) = (0usize, 0f64);
+        let mut gate = dock_layout::FitGate::default();
+        let started = Instant::now();
         let mut last_uia = Instant::now() - Duration::from_secs(10);
         let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false);
         loop {
@@ -1279,35 +1326,61 @@ fn taskbar_tracker(_app: AppHandle) {
             if tb_visible && last_uia.elapsed() > Duration::from_millis(350) {
                 last_uia = Instant::now();
                 if let Some(u) = uia.as_ref() {
-                    let res = (|| -> windows::core::Result<(i32, Option<i32>)> {
+                    let res = (|| -> windows::core::Result<(dock_layout::TaskbarGeom, usize, f64)> {
                         let el = u.ElementFromHandle(tb)?;
-                        // right edge of the last taskbar button (or of Start if no apps are shown)
-                        let mut right = {
-                            let sc = u.CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from("StartButton"))?;
-                            el.FindFirst(TreeScope_Descendants, &sc)?.CurrentBoundingRectangle()?.right
-                        };
+                        let mut g = dock_layout::TaskbarGeom { left: r.left, right: r.right, scale, ..Default::default() };
+                        let sc = u.CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from("StartButton"))?;
+                        if let Ok(rc) = el.FindFirst(TreeScope_Descendants, &sc).and_then(|e| e.CurrentBoundingRectangle()) {
+                            g.start_left = Some(rc.left); g.start_right = Some(rc.right);
+                        }
+                        // right edge of the last native taskbar button
+                        let (mut n, mut total) = (0usize, 0i64);
                         let bc = u.CreatePropertyCondition(UIA_ClassNamePropertyId, &VARIANT::from("Taskbar.TaskListButtonAutomationPeer"))?;
                         if let Ok(arr) = el.FindAll(TreeScope_Descendants, &bc) {
                             for i in 0..arr.Length().unwrap_or(0) {
-                                if let Ok(b) = arr.GetElement(i) { if let Ok(rc) = b.CurrentBoundingRectangle() { if rc.right > right && rc.right - rc.left > 4 { right = rc.right; } } }
+                                if let Ok(rc) = arr.GetElement(i).and_then(|b| b.CurrentBoundingRectangle()) {
+                                    if rc.right - rc.left > 4 {
+                                        g.buttons_right = Some(g.buttons_right.map_or(rc.right, |v| v.max(rc.right)));
+                                        n += 1; total += (rc.right - rc.left) as i64;
+                                    }
+                                }
                             }
                         }
-                        let tc = u.CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from("SystemTrayIcon"))?;
-                        let tray = el.FindFirst(TreeScope_Descendants, &tc).ok().and_then(|t| t.CurrentBoundingRectangle().ok()).map(|rc| rc.left);
-                        Ok((right, tray))
+                        // the notification area: "Show hidden icons", tray icons, and the Widgets button when the
+                        // taskbar is left-aligned (it then sits next to the tray)
+                        for id in ["SystemTrayIcon", "NotifyItemIcon", "WidgetsButton"] {
+                            let c = u.CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from(id))?;
+                            if let Ok(rc) = el.FindFirst(TreeScope_Descendants, &c).and_then(|e| e.CurrentBoundingRectangle()) {
+                                if rc.right - rc.left > 2 { g.obstacles.push(rc.left); }
+                            }
+                        }
+                        let avg = if n > 0 { total as f64 / n as f64 } else { 44.0 * scale };
+                        Ok((g, n, avg))
                     })();
-                    if let Ok((rt, tl)) = res { icons_right = Some(rt); tray_left = tl; }
+                    if let Ok((g, n, avg)) = res { geom = g; buttons = n; button_w = avg; }
                 }
             }
             let h = (r.bottom - r.top).max(1) as u32;
-            let mut w = (STRIP_W.load(Ordering::Relaxed) as f64 * scale).round() as u32;
-            let requested_w = w;
-            let gap = (2.0 * scale).round() as i32;
-            let x = icons_right.map(|v| v + gap).unwrap_or(r.left + (r.right - r.left) / 2);
-            let limit = tray_left.unwrap_or(r.right - (480.0 * scale) as i32) - (8.0 * scale) as i32;
-            if x + w as i32 > limit { w = (limit - x).max(0) as u32; }
+            // The legacy notification-area window is a second, cheap reading of where the tray starts.
+            let mut g = dock_layout::TaskbarGeom { left: r.left, right: r.right, scale, ..geom.clone() };
+            if let Ok(tn) = FindWindowExW(Some(tb), None, w!("TrayNotifyWnd"), None) {
+                let mut tr = RECT::default();
+                if GetWindowRect(tn, &mut tr).is_ok() && tr.right - tr.left > 4 { g.obstacles.push(tr.left); }
+            }
+            let span = dock_layout::free_span(&g);
+            let room = span.width();
+            let now_ms = started.elapsed().as_millis() as u64;
+            let gain = if gate.projection_on(now_ms) {
+                dock_layout::projected_gain(buttons, PENDING_APPS.load(Ordering::Relaxed) as usize, button_w, dock_layout::is_centered(&g))
+            } else { 0.0 };
+            AVAIL_CSS.store((room as f64 / scale).floor() as u32, Ordering::Relaxed);
+            LAYOUT_CSS.store(((room as f64 + gain) / scale).floor() as u32, Ordering::Relaxed);
+            let x = span.x;
+            let w = ((STRIP_W.load(Ordering::Relaxed) as f64 * scale).round() as i32).min(room).max(0) as u32;
+            let base = STRIP_BASE_W.load(Ordering::Relaxed) as f64 * scale;
+            let fits = gate.update(base, room as f64, gain, now_ms);
             let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && w > 8;
-            STRIP_FITS.store(show && w == requested_w, Ordering::Relaxed);
+            STRIP_FITS.store(show && fits, Ordering::Relaxed);
             STRIP_SHOWN.store(show, Ordering::Relaxed);
             let state = (x, r.top, w, h, show);
             if state == last { continue; }
@@ -1369,7 +1442,7 @@ fn set_autostart() {
 }
 
 // ----------------------------------------------------------------------------- dock on/off (tray icon)
-/// The "Ultra Dock" switch in the tray icon's menu (Windows' hidden-icons area). Off: every app goes back to the
+/// The "Dock" switch in the tray icon's menu (Windows' hidden-icons area). Off: every app goes back to the
 /// normal taskbar and the strip disappears. On: folders come back. Remembered in %APPDATA%\UltraSuite\dock.txt.
 static DOCK_ITEM: Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>> = Mutex::new(None);
 
@@ -1387,7 +1460,7 @@ fn set_dock_enabled(on: bool) {
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
-    let dock = CheckMenuItem::with_id(app, "dock", "Ultra Dock", true, dock_saved_on(), None::<&str>)?;
+    let dock = CheckMenuItem::with_id(app, "dock", "Dock", true, dock_saved_on(), None::<&str>)?;
     let hub = MenuItem::with_id(app, "hub", "Open Ultra Suite", true, None::<&str>)?;
     let sentinel = MenuItem::with_id(app, "sentinel", "Open PC Sentinel", true, None::<&str>)?;
     let alarm = MenuItem::with_id(app, "alarm", "Open Code Red Alarm", true, None::<&str>)?;

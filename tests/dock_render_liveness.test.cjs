@@ -20,7 +20,7 @@ test('rapid folder close cannot be undone by a stale animation frame',()=>{
  const tray={style:{width:'0px'},attrs:{},inert:true,classList:{remove:()=>{},add:()=>{}},setAttribute(k,v){this.attrs[k]=v;},querySelector:()=>({scrollWidth:80})};
  const group={dataset:{cat:'Tools'},isConnected:true,querySelector:s=>s==='.tray'?tray:button};
  const strip={scrollWidth:44,querySelectorAll:()=>[group]};
- const context=vm.createContext({$:()=>strip,invoke:()=>{},requestAnimationFrame:cb=>frames.push(cb),setTimeout:()=>{},report:()=>{},render:()=>{}});
+ const context=vm.createContext({$:()=>strip,invoke:()=>{},requestAnimationFrame:cb=>frames.push(cb),setTimeout:()=>{},report:()=>{},render:()=>{},applyFocus:()=>{},room:()=>Infinity});
  vm.runInContext("let open=null,pick=null;\n"+source,context);
  context.setOpen('Tools');assert.equal(tray.inert,false);assert.equal(button.attrs['aria-label'],'Collapse Tools');
  context.setOpen(null);assert.equal(tray.inert,true);assert.equal(button.attrs['aria-label'],'Expand Tools');
