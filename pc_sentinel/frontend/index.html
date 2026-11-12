@@ -275,6 +275,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 .psu-opt-name{font-weight:600;color:var(--ink)}.psu-opt-meta{font-size:12.5px;color:var(--ink-2)}
 #psu-suggest mark{background:none;color:var(--accent);font-weight:700}
 .psu-or{margin:12px 0 0}
+.maxp-list{margin:8px 0 0 18px;display:grid;gap:3px}
 .form-actions{display:flex;flex-wrap:wrap;gap:8px}
 .toggle{position:relative;width:40px;height:22px;flex:none}.toggle input{position:absolute;inset:0;opacity:0;z-index:1;cursor:pointer}
 .toggle span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .2s}
@@ -413,7 +414,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <div class="meter" id="psu-meter" hidden><i style="width:0"></i></div><div style="margin-top:12px"><span class="status idle" id="psu-st">Whole-system power is not measured</span><p class="muted" id="psu-peak"></p></div></div></section>
           <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">How Windows balances speed and power</span></div><div class="cb">
             <div id="pmode-wrap" hidden><div class="muted" style="margin-bottom:6px">Power mode (the slider in Windows Settings)</div><div class="seg" id="pmode" style="margin-bottom:16px"><button data-pm="efficiency">Best efficiency</button><button data-pm="balanced">Balanced</button><button data-pm="performance">Best performance</button></div></div>
-            <div class="plans" id="plans"><div class="empty">Loading…</div></div><div class="maxp mt" id="maxp" hidden><h3>Max Performance (optional)</h3><p class="muted">A copy of Ultimate Performance that also keeps every core unparked, holds the processor at 100% and turns off PCIe, USB and disk power saving while plugged in. Battery settings stay as they are. Expect small gains in some games and tasks, and more heat and power use. Your other plans are not changed.</p><div class="mt form-actions"><button class="btn primary" type="button" id="maxp-use">Create and use Max Performance</button><button class="btn" type="button" id="maxp-back" hidden>Go back to my previous plan</button></div><p class="muted mt" id="maxp-status" role="status"></p></div></div></section>
+            <div class="plans" id="plans"><div class="empty">Loading…</div></div><div class="maxp mt" id="maxp" hidden><h3>Max Performance (optional)</h3><p class="muted" id="maxp-desc"></p><ul class="muted maxp-list" id="maxp-list"></ul><p class="muted">Tuned for this PC: laptops, Windows on Arm, Modern Standby laptops, hybrid Intel CPUs and dual-CCD Ryzen X3D chips each get only the settings that help them. Battery settings and your other plans are never changed. Expect small gains in some games and tasks, and more heat and power use.</p><div class="mt form-actions"><button class="btn primary" type="button" id="maxp-use">Create and use Max Performance</button><button class="btn" type="button" id="maxp-back" hidden>Go back to my previous plan</button></div><p class="muted mt" id="maxp-status" role="status"></p></div></div></section>
         </div>
         <section class="card mt"><div class="ch"><h2>Displays</h2><span class="sub">Lower refresh rates save power; higher feel smoother</span></div><div class="cb"><div class="grid g2" id="disps"></div></div></section>
       </section>
@@ -729,11 +730,16 @@ let maxp = null;
 async function loadPower(){ try { [plans, disps, pmode, maxp] = await Promise.all([api("/api/power/plans"), api("/api/display"), api("/api/power/mode").catch(() => null), api("/api/power/max").catch(() => null)]); renderPowerCtl(); renderMaxp(); } catch {} }
 function renderMaxp(){ const box = $("maxp"); if (!box) return; box.hidden = !(maxp && maxp.available);
   if (!maxp || !maxp.available) return;
-  $("maxp-use").textContent = maxp.active ? "Max Performance is in use" : maxp.exists ? "Use Max Performance" : "Create and use Max Performance"; $("maxp-use").disabled = !!maxp.active;
+  const pf = maxp.profile || {}, viaMode = pf.method === "power_mode";
+  $("maxp-desc").textContent = pf.title ? `Detected: ${pf.title}. ${pf.why}` : "";
+  $("maxp-list").innerHTML = (pf.settings || []).map(t => `<li>${esc(t)}</li>`).join("") + (pf.skipped && pf.skipped.length && !viaMode ? `<li class="muted">Left to Windows on this PC: ${esc(pf.skipped.join(", "))}</li>` : "");
+  $("maxp-use").textContent = maxp.active ? (viaMode ? "Best performance is in use" : "Max Performance is in use") : viaMode ? "Use Best performance" : maxp.exists ? "Use Max Performance" : "Create and use Max Performance";
+  $("maxp-use").disabled = !!maxp.active || (viaMode && !maxp.mode_available);
+  $("maxp-back").textContent = viaMode ? "Go back to my previous power mode" : "Go back to my previous plan";
   $("maxp-back").hidden = !(maxp.active && maxp.previous); }
 async function maxpAction(path, body){ for (const id of ["maxp-use","maxp-back"]) $(id).disabled = true; $("maxp-status").textContent = "Working…";
   try { maxp = { ...(await api(path, { method: "POST", body: JSON.stringify(body || {}) })), available: true };
-    $("maxp-status").textContent = maxp.failed_settings && maxp.failed_settings.length ? `Done. Windows did not accept: ${maxp.failed_settings.join(", ")}.` : (maxp.active ? "Max Performance is now active. Choose Go back to restore your previous plan." : "Your previous plan is active again.");
+    $("maxp-status").textContent = maxp.failed_settings && maxp.failed_settings.length ? `Done. Windows did not accept: ${maxp.failed_settings.join(", ")}.` : (maxp.active ? (maxp.profile && maxp.profile.method === "power_mode" ? "Best performance is on. Choose Go back to restore your previous power mode." : "Max Performance is now active. Choose Go back to restore your previous plan.") : "Your previous setting is active again.");
     plans = await api("/api/power/plans"); renderPowerCtl(); }
   catch (err) { $("maxp-status").textContent = err.message; } finally { $("maxp-back").disabled = false; renderMaxp(); } }
 $("maxp-use").addEventListener("click", () => maxpAction("/api/power/max", { activate: true }));
