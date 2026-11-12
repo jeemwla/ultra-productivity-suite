@@ -5,14 +5,15 @@
       "exe": "atieclxx",
       "title": "AMD External Events Utility",
       "publisher": "Advanced Micro Devices",
-      "explanation": "A known AMD Radeon driver bug makes this service copy its own file about once a second on some PCs, which can add hundreds of gigabytes of writes a day. AMD has confirmed it and plans a fix in Adrenalin 26.11.1.",
-      "fixed_in": {"component": "amd_adrenalin", "version": "26.11.1"},
+      "explanation": "AMD advisory PA-365 acknowledges possible excessive SSD writes at idle on Radeon RX 7000 and RX 9000 products. As checked on November 12, 2026, a resolution is under development; the advisory names no fixed version. A matching process name does not establish that these writes have this cause. A quiet sample does not rule out the issue at another time.",
+      "fixed_in": {"component": "amd_adrenalin", "version": "26.11.1", "status": "reported_target"},
       "fixes": [
-        {"title": "Update the AMD driver (official fix)", "steps": "When Adrenalin 26.11.1 or later is out, check its Fixed Issues list for the External Events Utility, then update through AMD Software or amd.com. Keep the current installer to roll back if needed."},
-        {"title": "Disable the AMD External Events Utility service (until the fix)", "steps": "Win+R, services.msc, open AMD External Events Utility, Stop, set Startup type to Disabled, Apply. Reported side effects: Adrenalin hotkeys, monitor hot-plug detection and some FreeSync behavior can stop working. Undo: set Startup type back to Automatic and Start.", "command": "Set-Service -Name \"AMD External Events Utility\" -StartupType Disabled; Stop-Service -Name \"AMD External Events Utility\"", "undo": "Set-Service -Name \"AMD External Events Utility\" -StartupType Automatic; Start-Service -Name \"AMD External Events Utility\""}
+        {"title": "Check AMD's advisory and official release notes", "steps": "Adrenalin 26.11.1 is an unconfirmed reported target, not a verified fix. The version target comes from the secondary reports linked below. Before considering a compatible driver update, check AMD's advisory and official release notes for explicit confirmation of this issue's resolution. Record the current package and a supported rollback route, then compare passive samples after an owner-approved update."},
+        {"title": "Investigate sustained writes before considering a workaround", "steps": "Compare timed process I/O deltas across stable process identities and corroborate file destinations and drive host writes before assigning a cause. Process I/O is not NAND wear. If the symptom is reproduced, a temporary service A/B test can be considered with owner approval and display/hotkey checks. Record the exact service startup and running state first and restore both afterward. PA-365 does not prescribe disabling this service. Sentinel never changes services itself."}
       ],
       "check": "Get-CimInstance Win32_Process -Filter \"Name='atieclxx.exe'\" | Select-Object ProcessId, CreationDate, WriteTransferCount",
       "sources": [
+        {"title": "AMD PA-365: official SSD Write Issue advisory", "url": "https://www.amd.com/en/resources/support-articles/faqs/PA-365.html"},
         {"title": "VideoCardz: AMD confirms Radeon driver bug causing constant SSD writes", "url": "https://videocardz.com/newz/amd-confirms-radeon-driver-bug-causing-constant-ssd-writes-fix-planned-for-adrenalin-26-11-1"},
         {"title": "Hardware Busters: AMD confirms Radeon driver bug that keeps SSDs writing at idle", "url": "https://hwbusters.com/news/amd-confirms-radeon-driver-bug-that-keeps-ssds-writing-at-idle-fix-due-in-adrenalin-26-11-1/"}
       ],

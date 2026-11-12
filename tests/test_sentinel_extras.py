@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import call, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "pc_sentinel"))
@@ -46,11 +47,26 @@ class SensorGuide(unittest.TestCase):
 
 class Benchmark(unittest.TestCase):
     def test_short_run_is_bounded_and_complete(self):
-        r = bm.run("test", passes=2, cpu_seconds=0.15, wakes=20)
-        self.assertLess(r["seconds"], 5)
-        for k in ("single_mbps", "multi_mbps", "wake_us", "wake_p95_us"):
-            self.assertGreater(r[k], 0, k)
-        self.assertGreaterEqual(r["multi_mbps"], r["single_mbps"] * 0.5)
+        # Exercise orchestration, deadline forwarding and aggregation without hashing,
+        # threads or sleeps. The old test ran a real multi-core workload.
+        with patch.object(bm.time, "perf_counter", side_effect=[100, 101.5]), \
+                patch.object(bm.os, "cpu_count", return_value=8), \
+                patch.object(bm, "cpu_pass", side_effect=[100, 800, 120, 880]) as cpu, \
+                patch.object(bm, "wake_pass", side_effect=[[40, 10, 30, 20], [80, 20, 60, 40]]) as wake:
+            r = bm.run("test", passes=2, cpu_seconds=0.15, wakes=20, clock=lambda: 1234)
+        deadline = 100 + bm.HARD_LIMIT_S
+        self.assertEqual(cpu.call_args_list, [call(1, .15, deadline), call(8, .15, deadline)] * 2)
+        self.assertEqual(wake.call_args_list, [call(20, deadline)] * 2)
+        self.assertEqual((r["single_mbps"], r["multi_mbps"], r["wake_us"], r["wake_p95_us"]), (110, 840, 37.5, 60))
+        self.assertEqual((r["seconds"], r["ts"], r["threads"], r["passes"], r["label"]), (1.5, 1234, 8, 2, "test"))
+        self.assertEqual(r["single_spread_pct"], 18.2)
+        self.assertFalse(bm._lock.locked())
+
+    def test_failed_fake_workload_releases_the_measurement_lock(self):
+        with patch.object(bm, "cpu_pass", side_effect=ValueError("fixture")):
+            with self.assertRaisesRegex(ValueError, "fixture"):
+                bm.run("test")
+        self.assertFalse(bm._lock.locked())
 
     def test_compare_calls_a_change_real_only_beyond_the_noise(self):
         before = {"single_mbps": 2000, "single_spread_pct": 2, "multi_mbps": 9000, "multi_spread_pct": 15, "wake_us": 40, "wake_spread_pct": 5}

@@ -25,16 +25,33 @@ const amd={name:'atieclxx',level:'warning',avg_bps_1h:2.5e6,active_share_1h:0.98
 test('writers card: empty state, warm-up, flagged rows with plain sentences and real tables',()=>{
  assert.match(P.writersHtml(null),/Reading/);assert.match(P.writersHtml({available:false}),/aren't available/);
  const quiet=P.writersHtml({available:true,observed_minutes_1h:60,top:[{name:'chrome',level:null,avg_bps_1h:1000,active_share_1h:.2,bytes_today:5e8,per_day_estimate:8.6e7}]});
- assert.match(quiet,/No process is writing continuously/);assert.match(quiet,/<th scope="col">Program<\/th>/);assert.match(quiet,/Normal/);
+ assert.match(quiet,/No sustained writer flagged in the available samples/);assert.match(quiet,/<th scope="col">Program<\/th>/);assert.match(quiet,/Normal/);
  assert.match(P.writersHtml({available:true,observed_minutes_1h:12,top:[]}),/12 of the 60 minutes/);
  const hit=P.writersHtml({available:true,observed_minutes_1h:60,top:[amd],drive_write_bps:3e6});
- assert.match(hit,/AMD External Events Utility is writing 2\.5 MB\/s almost all the time \(98% of the last hour\), a known issue/);assert.match(hit,/216\.0 GB a day/);assert.match(hit,/>Warning</);assert.match(hit,/All drives together: 3\.0 MB\/s/);assert.match(hit,/not flash wear/);
+ assert.match(hit,/AMD External Events Utility is writing 2\.5 MB\/s almost all the time \(98% of the last hour\)/);assert.match(hit,/does not establish/);assert.match(hit,/216\.0 GB a day/);assert.match(hit,/>Warning</);assert.match(hit,/All drives together: 3\.0 MB\/s/);assert.match(hit,/not flash wear/);
  const ignored=P.writersHtml({available:true,observed_minutes_1h:60,top:[amd]},['atieclxx']);assert.doesNotMatch(ignored,/is writing 2/);assert.match(ignored,/show again/);
 });
 test('writer detail shows fixes with undo and sources, never an action button that changes Windows',()=>{
  const d=P.writerDetail(amd);assert.match(d,/Set-Service x/);assert.match(d,/Undo/);assert.match(d,/videocardz\.com/);assert.match(d,/Ignore this app/);assert.doesNotMatch(d,/data-wr-stop|Stop service/);
- const retired=P.writerDetail({...amd,known_issue:{...amd.known_issue,retired:true,installed_version:'26.11.1'}});assert.match(retired,/likely a different cause/);assert.doesNotMatch(retired,/Set-Service x/);
+ const fixed_in={version:'2.1',status:'confirmed',source_url:'https://vendor.example/fix',confirmed_on:'2026-11-12'};
+ const retired=P.writerDetail({...amd,known_issue:{...amd.known_issue,fixed_in,retired:true,installed_version:'2.1'}});assert.match(retired,/at or past the documented fix/);assert.doesNotMatch(retired,/likely a different cause|Set-Service x/);assert.match(retired,/vendor\.example\/fix/);assert.match(retired,/Sources:/);
  assert.match(P.writerDetail({...amd,known_issue:null,name:'logger'}),/never stops programs/);
+});
+test('AMD reported target retains advisory, date and investigation guidance even past its version',()=>{
+ const entry=require('../pc_sentinel/backend/known_writers.json').entries[0];
+ for(const installed_version of [null,'26.11.1','27.1.1']){
+  // Also reject a stale or contradictory retired flag from an older backend.
+  const row={...amd,known_issue:{...entry,installed_version,retired:true}};
+  const html=P.writerDetail(row);
+  assert.match(html,/Candidate fix: 26\.11\.1 is an unconfirmed reported target/);
+  assert.match(html,/PA-365/);assert.match(html,/2026-11-12/);assert.match(html,/amd\.com\/en\/resources\/support-articles\/faqs\/PA-365\.html/);
+  assert.match(html,/under development/);assert.match(html,/before considering a workaround/);
+  assert.doesNotMatch(html,/Vendor-confirmed fix|likely a different cause|official fix|once a second|Set-Service/);
+  assert.match(P.writerSentence(row),/does not establish/);
+ }
+ const quiet=P.writersHtml({available:true,observed_minutes_1h:60,top:[{...amd,level:null,avg_bps_1h:0,bytes_today:0}]});
+ assert.match(quiet,/quiet sample does not rule out/);assert.match(quiet,/do not identify a destination drive/);
+ assert.doesNotMatch(P.writerDetail({...amd,known_issue:{...entry,explanation:'<img src=x>',fixed_in:{version:'<script>',status:'reported_target'}}}),/<img src=x>|<script>/);
 });
 test('overview pill only for warning or heavy and not when ignored',()=>{
  assert.equal(P.overviewPill({flagged:[{...amd,level:'notice'}]}),'');

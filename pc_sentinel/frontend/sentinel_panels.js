@@ -64,12 +64,14 @@
 
   const WINDOWS_PARTS = { system: "Windows kernel (System)", registry: "Windows registry", "memory compression": "Windows memory compression" };
   const exe = n => WINDOWS_PARTS[n] || `${n}.exe`;
+  const confirmedFix = ki => ki && ki.fixed_in && ki.fixed_in.status === "confirmed" && ki.fixed_in.source_url && ki.fixed_in.confirmed_on;
+  const retiredIssue = ki => ki && ki.retired && confirmedFix(ki);
 
   function writerSentence(r) {
-    const ki = r.known_issue && !r.known_issue.retired ? r.known_issue : null;
+    const ki = r.known_issue && !retiredIssue(r.known_issue) ? r.known_issue : null;
     const who = ki ? esc(ki.title) : `<b>${esc(r.name)}</b>`;
     if (!r.level) return `${who} wrote ${bytes(r.bytes_today)} today.`;
-    return `${who} is writing ${rate(r.avg_bps_1h)} almost all the time (${n0(r.active_share_1h * 100)}% of the last hour)${ki ? ", a known issue" : ""}. At this pace that is about ${bytes(r.per_day_estimate)} a day.`;
+    return `${who} is writing ${rate(r.avg_bps_1h)} almost all the time (${n0(r.active_share_1h * 100)}% of the last hour). At this pace that is about ${bytes(r.per_day_estimate)} a day.${ki ? " A matching process name does not establish that the known issue caused these writes." : ""}`;
   }
 
   function writersHtml(rep, ignored) {
@@ -84,19 +86,23 @@
       <td>${r.level ? `<span class="pill ${LEVEL_CLASS[r.level]}">${LEVEL_TEXT[r.level]}</span>` : `<span class="pill good">Normal</span>`}</td>
       <td><button class="btn" type="button" data-wr-detail="${esc(r.name)}">Details</button></td></tr>`).join("")}</tbody></table>` : "";
     const head = flagged.length ? flagged.map(r => `<div class="banner ${r.level === "notice" ? "info" : "warning"} mt"><div class="ic">!</div><div><div class="t">${LEVEL_TEXT[r.level]}: constant background writes</div><div class="s">${writerSentence(r)}</div></div></div>`).join("")
-      : `<p>No process is writing continuously.</p>`;
+      : `<p>No sustained writer flagged in the available samples.</p>`;
     const drive = fin(rep.drive_write_bps) ? `<p class="muted mt">All drives together: ${rate(rep.drive_write_bps)} right now.</p>` : "";
     const ign = ignored.length ? `<p class="muted mt">Ignored: ${ignored.map(n => `${esc(n)} <button class="linkbtn" type="button" data-wr-unignore="${esc(n)}">show again</button>`).join(", ")}</p>` : "";
-    return `${head}${warm}${table}${drive}${ign}<p class="muted mt">Counts all write requests a program makes (files and devices). Host writes are not flash wear, and a steady low rate on a modern SSD is usually not urgent.</p>`;
+    return `${head}${warm}${table}${drive}${ign}<p class="muted mt">Counts all write requests a program makes (files and devices). These counters do not identify a destination drive. Host writes are not flash wear. A quiet sample does not rule out an issue at another time.</p>`;
   }
 
   function writerDetail(r) {
     if (!r) return "";
     const ki = r.known_issue;
-    const fixes = ki && !ki.retired ? (ki.fixes || []).map(f => `<li><b>${esc(f.title)}</b><p>${esc(f.steps)}</p>${f.command ? `<p class="muted">Command (run in an administrator PowerShell yourself):</p><pre>${esc(f.command)}</pre><p class="muted">Undo:</p><pre>${esc(f.undo || "")}</pre>` : ""}</li>`).join("") : "";
+    const retired = retiredIssue(ki), fixed = ki && ki.fixed_in;
+    const fixStatus = !fixed ? "" : confirmedFix(ki)
+      ? `<p>Vendor-confirmed fix: ${esc(fixed.version)} (confirmed ${esc(fixed.confirmed_on)}). <a href="${esc(fixed.source_url)}" target="_blank" rel="noopener">Official confirmation</a></p>`
+      : `<p>Candidate fix: ${esc(fixed.version)} is an unconfirmed reported target. A version number alone does not confirm a fix.</p>`;
+    const fixes = ki && !retired ? (ki.fixes || []).map(f => `<li><b>${esc(f.title)}</b><p>${esc(f.steps)}</p>${f.command ? `<p class="muted">Command (run in an administrator PowerShell yourself):</p><pre>${esc(f.command)}</pre><p class="muted">Undo:</p><pre>${esc(f.undo || "")}</pre>` : ""}</li>`).join("") : "";
     const sources = ki ? (ki.sources || []).map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join("<br>") : "";
     return `<div class="wr-detail"><h3>${esc(ki ? ki.title : r.name)}</h3><p class="muted">${esc(exe(r.name))} · ${rate(r.avg_bps_1h)} average over the last hour · active ${n0(r.active_share_1h * 100)}% of minutes · ${bytes(r.bytes_today)} today</p>
-      ${ki ? (ki.retired ? `<p>Windows reports a driver version (${esc(ki.installed_version)}) at or past the fix, so this is likely a different cause.</p>` : `<p>${esc(ki.explanation)}</p><ol>${fixes}</ol>${ki.check ? `<p class="muted">Check it yourself (no admin needed):</p><pre>${esc(ki.check)}</pre>` : ""}<p class="muted">Sources:<br>${sources}</p>`)
+      ${ki ? `<p>${esc(ki.explanation)}</p>${fixStatus}${retired ? `<p>Windows reports a driver version (${esc(ki.installed_version)}) at or past the documented fix. Observed writes still need investigation; a version match does not identify their cause.</p>` : `<ol>${fixes}</ol>${ki.check ? `<p class="muted">Check it yourself (no admin needed):</p><pre>${esc(ki.check)}</pre>` : ""}`}<p class="muted">Last reviewed: ${esc(ki.last_reviewed || "unknown")}. Sources:<br>${sources}</p>`
         : `<p>This program writes steadily. Common reasons: logging, sync or backup tools, browser caches, or a stuck update. Check its settings, update it, or ask its maker. Sentinel never stops programs itself.</p>`}
       <p><button class="btn" type="button" data-wr-ignore="${esc(r.name)}">Ignore this app</button></p></div>`;
   }

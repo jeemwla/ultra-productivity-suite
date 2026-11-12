@@ -4,11 +4,15 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "pc_sentinel"))
 
-from backend import storage_writers as sw  # noqa: E402
+with tempfile.TemporaryDirectory() as _import_dir, patch.dict(os.environ, {
+    "APPDATA": _import_dir, "ULTRASUITE_CONF": _import_dir,
+}):
+    from backend import storage_writers as sw  # noqa: E402
 
 T0 = 1_794_000_000.0  # fixed epoch, a whole minute
 
@@ -27,7 +31,7 @@ def level_of(tracker, now, name="atieclxx"):
 
 
 class Rule(unittest.TestCase):
-    def test_steady_amd_bug_rate_is_a_notice_after_an_hour(self):
+    def test_synthetic_steady_rate_is_a_notice_after_an_hour(self):
         tr = sw.WriterTracker()
         now = stream(tr, 3600, lambda t: 0.65e6)
         self.assertEqual(level_of(tr, now), "notice")
@@ -101,15 +105,37 @@ class Rule(unittest.TestCase):
 
 
 class KnownIssues(unittest.TestCase):
-    def test_amd_entry_matches_and_retires_by_version(self):
+    def test_amd_reported_target_never_retires_by_version_alone(self):
         entries = sw.known_issues()
         hit = sw.match_issue("atieclxx#2", entries, {})
         self.assertEqual(hit["title"], "AMD External Events Utility")
         self.assertFalse(hit["retired"], "unknown driver version keeps the warning")
         self.assertFalse(sw.match_issue("atieclxx", entries, {"amd_adrenalin": "26.10.2"})["retired"])
-        self.assertTrue(sw.match_issue("atieclxx", entries, {"amd_adrenalin": "26.11.1"})["retired"])
-        self.assertTrue(sw.match_issue("atieclxx", entries, {"amd_adrenalin": "27.1.1"})["retired"])
+        self.assertFalse(sw.match_issue("atieclxx", entries, {"amd_adrenalin": "26.11.1"})["retired"])
+        self.assertFalse(sw.match_issue("atieclxx", entries, {"amd_adrenalin": "27.1.1"})["retired"])
         self.assertIsNone(sw.match_issue("chrome", entries, {}))
+
+    def test_only_vendor_confirmed_fix_with_dated_source_can_retire(self):
+        fixed = {"component": "fixture", "version": "2.1", "status": "confirmed",
+                 "source_url": "https://vendor.example/release-notes", "confirmed_on": "2026-11-12"}
+        def match(fix, version="2.1"):
+            return sw.match_issue("fixture", [{"exe": "fixture", "fixed_in": fix}], {"fixture": version})
+        self.assertTrue(match(fixed)["retired"])
+        self.assertTrue(match(fixed, "3.0")["retired"])
+        for version in (None, "unknown", "2.0"):
+            self.assertFalse(match(fixed, version)["retired"])
+        for status in (None, "planned", "reported_target"):
+            self.assertFalse(match({**fixed, "status": status})["retired"])
+        for field in ("source_url", "confirmed_on", "version", "component"):
+            self.assertFalse(match({k: v for k, v in fixed.items() if k != field})["retired"])
+
+    def test_amd_advisory_attribution_and_verification_limit(self):
+        entry = sw.known_issues()[0]
+        self.assertEqual(entry["fixed_in"]["status"], "reported_target")
+        self.assertIn("PA-365", entry["sources"][0]["title"])
+        self.assertIn("under development", entry["explanation"])
+        self.assertEqual(entry["last_reviewed"], "2026-11-12")
+        self.assertNotIn("once a second", entry["explanation"])
 
     def test_every_entry_has_sources_and_undo_for_commands(self):
         for e in sw.known_issues():

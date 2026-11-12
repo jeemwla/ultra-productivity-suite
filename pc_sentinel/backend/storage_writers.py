@@ -163,12 +163,15 @@ def known_issues(path=None):
 
 
 def match_issue(name, entries, versions):
-    """Known-issue entry for a process name, with "retired" when the installed component is at or past the fix."""
+    """Name match is context, not a diagnosis. Retire only against a dated vendor-confirmed fix."""
     for e in entries:
         if base_name(e["exe"]) == base_name(name):
             fixed = e.get("fixed_in") or {}
             have, need = _version_tuple((versions or {}).get(fixed.get("component"))), _version_tuple(fixed.get("version"))
-            return {**e, "retired": bool(have and need and have >= need), "installed_version": (versions or {}).get(fixed.get("component"))}
+            confirmed = (fixed.get("status") == "confirmed" and fixed.get("source_url")
+                         and fixed.get("confirmed_on"))
+            return {**e, "retired": bool(confirmed and have and need and have >= need),
+                    "installed_version": (versions or {}).get(fixed.get("component"))}
     return None
 
 
@@ -197,7 +200,8 @@ class Sampler:
     def __init__(self, store_path=None):
         self.tracker = WriterTracker()
         self.lock = threading.Lock()
-        self.store_path = Path(store_path) if store_path else Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite/sentinel_writers.json"
+        conf = os.environ.get("ULTRASUITE_CONF") or Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite"
+        self.store_path = Path(store_path) if store_path else Path(conf) / "sentinel_writers.json"
         self.fast_until = 0.0
         self.live = {}
         self.live_started = None

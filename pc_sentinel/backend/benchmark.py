@@ -123,7 +123,8 @@ def compare(before, after):
 
 
 def results_path():
-    return Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite/sentinel_benchmark.json"
+    conf = os.environ.get("ULTRASUITE_CONF") or Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "UltraSuite"
+    return Path(conf) / "sentinel_benchmark.json"
 
 
 def load_results(path=None):
