@@ -28,8 +28,17 @@ test('writers card: empty state, warm-up, flagged rows with plain sentences and 
  assert.match(quiet,/No sustained writer flagged in the available samples/);assert.match(quiet,/<th scope="col">Program<\/th>/);assert.match(quiet,/Normal/);
  assert.match(P.writersHtml({available:true,observed_minutes_1h:12,top:[]}),/12 of the 60 minutes/);
  const hit=P.writersHtml({available:true,observed_minutes_1h:60,top:[amd],drive_write_bps:3e6});
- assert.match(hit,/AMD External Events Utility is writing 2\.5 MB\/s almost all the time \(98% of the last hour\)/);assert.match(hit,/does not establish/);assert.match(hit,/216\.0 GB a day/);assert.match(hit,/>Warning</);assert.match(hit,/All drives together: 3\.0 MB\/s/);assert.match(hit,/not flash wear/);
- const ignored=P.writersHtml({available:true,observed_minutes_1h:60,top:[amd]},['atieclxx']);assert.doesNotMatch(ignored,/is writing 2/);assert.match(ignored,/show again/);
+ assert.match(hit,/AMD External Events Utility is writing up to 2\.5 MB\/s almost all the time \(98% of the last hour\)/);assert.match(hit,/does not establish/);assert.match(hit,/up to 216\.0 GB a day/);assert.match(hit,/>Warning</);assert.match(hit,/All drives together: 3\.0 MB\/s/);assert.match(hit,/not flash wear/);
+ assert.match(hit,/capped every minute by what all drives actually received/);assert.doesNotMatch(hit,/traffic between programs, not drive writes/);
+ const ignored=P.writersHtml({available:true,observed_minutes_1h:60,top:[amd]},['atieclxx']);assert.doesNotMatch(ignored,/is writing up to 2/);assert.match(ignored,/show again/);
+});
+test('writers card: capped rows explain the gap, hosted helpers name their app, sandboxed traffic is reported apart',()=>{
+ const wv={name:'msedgewebview2 (ultra suite)',self:true,level:null,avg_bps_1h:2e4,issued_bps_1h:4.1e6,capped:true,active_share_1h:1,bytes_today:1.7e9,per_day_estimate:1.7e9};
+ const card=P.writersHtml({available:true,observed_minutes_1h:60,top:[wv],sandboxed_bps:3.4e5});
+ assert.match(card,/msedgewebview2\.exe, used by ultra suite\.exe · this app/);assert.match(card,/Sandboxed browser helpers moved 340 KB\/s/);assert.match(card,/>Normal</);
+ const d=P.writerDetail(wv);assert.match(d,/sent 4\.1 MB\/s of write requests, but the drives received less/);assert.match(d,/part of Ultra Suite/);assert.match(d,/up to 20 KB\/s/);
+ const warn=P.writerSentence({...wv,self:false,level:'warning',avg_bps_1h:2.2e6,per_day_estimate:1.9e11,issued_bps_1h:9e6});assert.match(warn,/up to 2\.2 MB\/s/);assert.match(warn,/sent 9\.0 MB\/s of write requests/);
+ assert.doesNotMatch(P.writerDetail({...wv,self:false,capped:false}),/part of Ultra Suite|traffic between programs, not drive writes/);
 });
 test('writer detail shows fixes with undo and sources, never an action button that changes Windows',()=>{
  const d=P.writerDetail(amd);assert.match(d,/Set-Service x/);assert.match(d,/Undo/);assert.match(d,/videocardz\.com/);assert.match(d,/Ignore this app/);assert.doesNotMatch(d,/data-wr-stop|Stop service/);

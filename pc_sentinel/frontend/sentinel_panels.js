@@ -63,7 +63,9 @@
   const LEVEL_CLASS = { heavy: "critical", warning: "warning", notice: "" };
 
   const WINDOWS_PARTS = { system: "Windows kernel (System)", registry: "Windows registry", "memory compression": "Windows memory compression" };
-  const exe = n => WINDOWS_PARTS[n] || `${n}.exe`;
+  const hosted = n => /^(.+?) \((.+)\)$/.exec(n);  // "msedgewebview2 (ultra suite)": a helper named after its host app
+  const exe = n => { const h = hosted(n); return WINDOWS_PARTS[n] || (h ? `${h[1]}.exe, used by ${h[2]}.exe` : `${n}.exe`); };
+  const cappedNote = r => r.capped && fin(r.issued_bps_1h) ? ` It sent ${rate(r.issued_bps_1h)} of write requests, but the drives received less than that in total, so the rest was traffic between programs, not drive writes.` : "";
   const confirmedFix = ki => ki && ki.fixed_in && ki.fixed_in.status === "confirmed" && ki.fixed_in.source_url && ki.fixed_in.confirmed_on;
   const retiredIssue = ki => ki && ki.retired && confirmedFix(ki);
 
@@ -71,7 +73,7 @@
     const ki = r.known_issue && !retiredIssue(r.known_issue) ? r.known_issue : null;
     const who = ki ? esc(ki.title) : `<b>${esc(r.name)}</b>`;
     if (!r.level) return `${who} wrote ${bytes(r.bytes_today)} today.`;
-    return `${who} is writing ${rate(r.avg_bps_1h)} almost all the time (${n0(r.active_share_1h * 100)}% of the last hour). At this pace that is about ${bytes(r.per_day_estimate)} a day.${ki ? " A matching process name does not establish that the known issue caused these writes." : ""}`;
+    return `${who} is writing up to ${rate(r.avg_bps_1h)} almost all the time (${n0(r.active_share_1h * 100)}% of the last hour). At this pace that is up to ${bytes(r.per_day_estimate)} a day.${cappedNote(r)}${ki ? " A matching process name does not establish that the known issue caused these writes." : ""}`;
   }
 
   function writersHtml(rep, ignored) {
@@ -89,7 +91,8 @@
       : `<p>No sustained writer flagged in the available samples.</p>`;
     const drive = fin(rep.drive_write_bps) ? `<p class="muted mt">All drives together: ${rate(rep.drive_write_bps)} right now.</p>` : "";
     const ign = ignored.length ? `<p class="muted mt">Ignored: ${ignored.map(n => `${esc(n)} <button class="linkbtn" type="button" data-wr-unignore="${esc(n)}">show again</button>`).join(", ")}</p>` : "";
-    return `${head}${warm}${table}${drive}${ign}<p class="muted mt">Counts all write requests a program makes (files and devices). These counters do not identify a destination drive. Host writes are not flash wear. A quiet sample does not rule out an issue at another time.</p>`;
+    const sandboxed = fin(rep.sandboxed_bps) && rep.sandboxed_bps > 0 ? ` Sandboxed browser helpers moved ${rate(rep.sandboxed_bps)} between processes; they cannot write files, so they are left out.` : "";
+    return `${head}${warm}${table}${drive}${ign}<p class="muted mt">Each program's write requests, capped every minute by what all drives actually received, so a program is never shown writing more than the drives did. Requests can include traffic between programs and network sends, so real drive writes can be lower still.${sandboxed} These counters do not identify a destination drive. Host writes are not flash wear. A quiet sample does not rule out an issue at another time.</p>`;
   }
 
   function writerDetail(r) {
@@ -101,7 +104,7 @@
       : `<p>Candidate fix: ${esc(fixed.version)} is an unconfirmed reported target. A version number alone does not confirm a fix.</p>`;
     const fixes = ki && !retired ? (ki.fixes || []).map(f => `<li><b>${esc(f.title)}</b><p>${esc(f.steps)}</p>${f.command ? `<p class="muted">Command (run in an administrator PowerShell yourself):</p><pre>${esc(f.command)}</pre><p class="muted">Undo:</p><pre>${esc(f.undo || "")}</pre>` : ""}</li>`).join("") : "";
     const sources = ki ? (ki.sources || []).map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join("<br>") : "";
-    return `<div class="wr-detail"><h3>${esc(ki ? ki.title : r.name)}</h3><p class="muted">${esc(exe(r.name))} · ${rate(r.avg_bps_1h)} average over the last hour · active ${n0(r.active_share_1h * 100)}% of minutes · ${bytes(r.bytes_today)} today</p>
+    return `<div class="wr-detail"><h3>${esc(ki ? ki.title : r.name)}</h3><p class="muted">${esc(exe(r.name))} · up to ${rate(r.avg_bps_1h)} average over the last hour · active ${n0(r.active_share_1h * 100)}% of minutes · up to ${bytes(r.bytes_today)} today</p>${r.capped ? `<p class="muted">${cappedNote(r).trim()}</p>` : ""}${r.self ? `<p>This is part of Ultra Suite. Most of this number is traffic between the app's own windows and processes, not files on your drive.</p>` : ""}
       ${ki ? `<p>${esc(ki.explanation)}</p>${fixStatus}${retired ? `<p>Windows reports a driver version (${esc(ki.installed_version)}) at or past the documented fix. Observed writes still need investigation; a version match does not identify their cause.</p>` : `<ol>${fixes}</ol>${ki.check ? `<p class="muted">Check it yourself (no admin needed):</p><pre>${esc(ki.check)}</pre>` : ""}`}<p class="muted">Last reviewed: ${esc(ki.last_reviewed || "unknown")}. Sources:<br>${sources}</p>`
         : `<p>This program writes steadily. Common reasons: logging, sync or backup tools, browser caches, or a stuck update. Check its settings, update it, or ask its maker. Sentinel never stops programs itself.</p>`}
       <p><button class="btn" type="button" data-wr-ignore="${esc(r.name)}">Ignore this app</button></p></div>`;
