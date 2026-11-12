@@ -237,6 +237,20 @@ mod win {
 
     pub fn restore_window(hwnd: isize, taskbar: &ITaskbarList) { let _ = restore_current(Some(hwnd), taskbar); }
     pub fn restore_all(taskbar: &ITaskbarList) -> io::Result<()> { restore_current(None, taskbar) }
+    /// Read-only view of this process's unacknowledged intents, for recovery access in the strip.
+    /// This neither acknowledges recovery nor reads profile files. Unknown identity stays pending;
+    /// closed/recycled windows are omitted. A busy/poisoned state is unknown, never an empty set.
+    pub fn own_pending_windows() -> io::Result<Vec<isize>> {
+        let state = state().and_then(|s| s.try_lock().ok()).ok_or_else(|| io::Error::other("recovery view unavailable"))?;
+        Ok(state.journal.windows.iter().filter(|w| {
+            let h = HWND(w.hwnd as _);
+            if !unsafe { IsWindow(Some(h)).as_bool() } { return false; }
+            let mut pid = 0;
+            unsafe { GetWindowThreadProcessId(h, Some(&mut pid)); }
+            if pid == 0 { return true; }
+            pid == w.process.pid && process_owner(pid).is_none_or(|owner| owner == w.process)
+        }).map(|w| w.hwnd).collect())
+    }
     pub fn prune_closed() {
         let Some(mut state) = state().and_then(|s| s.lock().ok()) else { return; };
         let owner = state.journal.owner;
@@ -458,7 +472,7 @@ mod win {
 }
 
 #[cfg(windows)]
-pub use win::{hide_window, process_owner, prune_closed, recover_owner, recover_previous, restore_all, restore_window};
+pub use win::{hide_window, own_pending_windows, process_owner, prune_closed, recover_owner, recover_previous, restore_all, restore_window};
 
 #[cfg(test)]
 mod tests {

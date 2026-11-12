@@ -4,12 +4,24 @@
 //! Windows lets only the owning thread release a mutex. The Dock the user turned on most recently wins: when the other
 //! edition asks for the taskbar, the holder turns itself off, puts every button back, and only then releases the lease.
 //! A Dock without the lease never hides a button and keeps its strip hidden.
-//! Visible legacy strips block takeover, but this is not proof of safety against pre-lease Docks or their guards.
+//! Matching legacy/unknown strips block takeover even when hidden. The marker is a compatibility declaration,
+//! not authentication or protection against older guards that do not implement checked journal recovery.
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const LEASE_NAME: &str = "Local\\UltraSuite.DockLease";
 /// Titles of the strip windows of both editions (older Docks used the first one).
 pub const STRIP_TITLES: [&str; 2] = ["Ultra Dock", "Ultra Dock (Dev)"];
+/// v1 declares the shared lease and checked cross-edition journal protocol, including release-pending visibility.
+const CAPABILITY_VERSION: usize = 1;
+
+/// Missing, inaccessible and future/unknown markers are all unproven capability.
+fn strip_blocks(visible: bool, capability: Option<usize>) -> bool {
+    visible || capability != Some(CAPABILITY_VERSION)
+}
+
+fn compatibility_blocks(own_registered: bool, scan_complete: bool, strips: &[(bool, Option<usize>)]) -> bool {
+    !own_registered || !scan_complete || strips.iter().any(|(visible, capability)| strip_blocks(*visible, *capability))
+}
 
 /// Organizer-owned state. Neither elapsed time nor a new enable request acknowledges restoration.
 #[derive(Debug, Default)]
@@ -52,7 +64,7 @@ pub enum Step {
 pub struct Inputs {
     pub want: bool,
     pub held: bool,
-    pub other_strip_visible: bool,
+    pub compatibility_blocked: bool,
     pub other_requested_later: bool,
     pub recovery_pending: bool,
     pub release_pending: bool,
@@ -61,11 +73,11 @@ pub struct Inputs {
 pub fn decide(i: Inputs) -> Step {
     if i.held {
         if !i.want || i.release_pending { return Step::Release; }
-        if i.other_requested_later || i.other_strip_visible { return Step::Yield; }
+        if i.other_requested_later || i.compatibility_blocked { return Step::Yield; }
         if i.recovery_pending { return Step::Recover; }
         return Step::Organize;
     }
-    if i.want && !i.other_strip_visible { Step::Acquire } else { Step::Wait }
+    if i.want && !i.compatibility_blocked { Step::Acquire } else { Step::Wait }
 }
 
 /// "<edition> <unix ms>": which edition the user turned on last.
@@ -104,15 +116,50 @@ pub fn read_request() -> Option<(String, u128)> {
 }
 
 #[cfg(windows)]
-pub use win::{other_strip_visible, Lease};
+pub use win::{other_strip_blocks, register_strip, Lease};
 
 #[cfg(windows)]
 mod win {
     use super::*;
-    use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, WAIT_ABANDONED, WAIT_OBJECT_0};
+    use windows::core::{w, BOOL, PCWSTR};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LRESULT, WPARAM, WAIT_ABANDONED, WAIT_OBJECT_0};
     use windows::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
-    use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetWindowThreadProcessId, IsWindowVisible};
+    use windows::Win32::UI::WindowsAndMessaging::*;
+
+    const CAPABILITY_PROPERTY: PCWSTR = w!("UltraSuite.Dock.LeaseCapability.v1");
+    static PREVIOUS_STRIP_PROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+    static REGISTERED: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "system" fn strip_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        // SetProp's contract requires removal before returning from WM_NCDESTROY.
+        if msg == WM_NCDESTROY {
+            REGISTERED.store(false, Ordering::Release);
+            let _ = RemovePropW(h, CAPABILITY_PROPERTY);
+        }
+        let previous = PREVIOUS_STRIP_PROC.load(Ordering::Relaxed);
+        CallWindowProcW(Some(std::mem::transmute::<isize, unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT>(previous)), h, msg, wp, lp)
+    }
+
+    /// Called on the strip's owning UI thread, before the organizer starts. Never publishes on failure.
+    pub fn register_strip(h: HWND) -> bool {
+        REGISTERED.store(false, Ordering::Release);
+        if PREVIOUS_STRIP_PROC.load(Ordering::Relaxed) != 0 { return false; }
+        let mut pid = 0;
+        unsafe {
+            if GetWindowThreadProcessId(h, Some(&mut pid)) == 0 || pid != std::process::id() { return false; }
+            // Save a valid chain target before installing the hook, including for any reentrant messages.
+            let original = GetWindowLongPtrW(h, GWLP_WNDPROC);
+            if original == 0 { return false; }
+            PREVIOUS_STRIP_PROC.store(original, Ordering::Relaxed);
+            let previous = SetWindowLongPtrW(h, GWLP_WNDPROC, strip_proc as *const () as isize);
+            if previous == 0 { PREVIOUS_STRIP_PROC.store(0, Ordering::Relaxed); return false; }
+            PREVIOUS_STRIP_PROC.store(previous, Ordering::Relaxed);
+            if SetPropW(h, CAPABILITY_PROPERTY, Some(HANDLE(CAPABILITY_VERSION as *mut _))).is_err() { return false; }
+            let registered = GetPropW(h, CAPABILITY_PROPERTY).0 as usize == CAPABILITY_VERSION;
+            REGISTERED.store(registered, Ordering::Release);
+            registered
+        }
+    }
 
     /// Must stay on the thread that created it (the organizer thread).
     pub struct Lease {
@@ -157,22 +204,31 @@ mod win {
         }
     }
 
-    /// A visible Dock strip owned by another process (an older Dock, or the other edition).
-    pub fn other_strip_visible() -> bool {
-        let me = std::process::id();
-        for title in STRIP_TITLES {
-            let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-            let mut after: Option<HWND> = None;
-            for _ in 0..32 {
-                let Ok(h) = (unsafe { FindWindowExW(None, after, PCWSTR::null(), PCWSTR(wide.as_ptr())) }) else { break };
-                if h.is_invalid() { break; }
-                let mut pid = 0u32;
-                unsafe { GetWindowThreadProcessId(h, Some(&mut pid)); }
-                if pid != me && unsafe { IsWindowVisible(h) }.as_bool() { return true; }
-                after = Some(h);
+    /// Enumerate hidden as well as visible top-level desktop strips. Failure/overflow cannot authorize grouping.
+    pub fn other_strip_blocks(own_strip: isize) -> bool {
+        struct Scan { strips: Vec<(bool, Option<usize>)>, count: usize, complete: bool }
+        unsafe extern "system" fn inspect(h: HWND, lp: LPARAM) -> BOOL {
+            let scan = &mut *(lp.0 as *mut Scan);
+            scan.count += 1;
+            if scan.count > 10_000 { scan.complete = false; return false.into(); }
+            let mut title = [0u16; 128];
+            let len = InternalGetWindowText(h, &mut title);
+            if len <= 0 || !STRIP_TITLES.contains(&String::from_utf16_lossy(&title[..len as usize]).as_str()) { return true.into(); }
+            let mut pid = 0;
+            if GetWindowThreadProcessId(h, Some(&mut pid)) == 0 || pid == 0 {
+                scan.complete = false;
+            } else if pid != std::process::id() {
+                let capability = GetPropW(h, CAPABILITY_PROPERTY).0 as usize;
+                scan.strips.push((IsWindowVisible(h).as_bool(), (capability != 0).then_some(capability)));
             }
+            true.into()
         }
-        false
+        let own = HWND(own_strip as _);
+        let registered = REGISTERED.load(Ordering::Acquire) && own_strip != 0
+            && unsafe { IsWindow(Some(own)).as_bool() && GetPropW(own, CAPABILITY_PROPERTY).0 as usize == CAPABILITY_VERSION };
+        let mut scan = Scan { strips: vec![], count: 0, complete: true };
+        let complete = unsafe { EnumWindows(Some(inspect), LPARAM(&mut scan as *mut Scan as isize)).is_ok() } && scan.complete;
+        compatibility_blocks(registered, complete, &scan.strips)
     }
 }
 
@@ -191,14 +247,57 @@ mod tests {
         let base = Inputs::default();
         assert_eq!(decide(base), Step::Wait, "off and not held");
         assert_eq!(decide(Inputs { want: true, ..base }), Step::Acquire);
-        assert_eq!(decide(Inputs { want: true, other_strip_visible: true, ..base }), Step::Wait, "an older Dock shows its strip");
+        assert_eq!(decide(Inputs { want: true, compatibility_blocked: true, ..base }), Step::Wait, "an older Dock exists, including hidden standby strips");
         assert_eq!(decide(Inputs { want: true, held: true, ..base }), Step::Organize);
         assert_eq!(decide(Inputs { want: true, held: true, recovery_pending: true, ..base }), Step::Recover);
         assert_eq!(decide(Inputs { want: false, held: true, ..base }), Step::Release);
         assert_eq!(decide(Inputs { want: true, held: true, other_requested_later: true, ..base }), Step::Yield);
-        assert_eq!(decide(Inputs { want: true, held: true, other_strip_visible: true, ..base }), Step::Yield);
+        assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: true, ..base }), Step::Yield);
         // turning off always wins, even while the other edition asks
         assert_eq!(decide(Inputs { want: false, held: true, other_requested_later: true, ..base }), Step::Release);
+    }
+
+    #[test]
+    fn hidden_legacy_and_unknown_strips_block_even_on_multi_monitor_standby() {
+        for capability in [None, Some(0), Some(2), Some(usize::MAX)] {
+            for visible in [false, true] {
+                let blocked = compatibility_blocks(true, true, &[(visible, capability)]);
+                assert!(blocked, "unproven strip: visible={visible}, marker={capability:?}");
+                assert_eq!(decide(Inputs { want: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Wait);
+                assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Yield);
+            }
+        }
+    }
+
+    #[test]
+    fn only_hidden_capable_strips_allow_normal_edition_handover() {
+        for (mine, other) in [("Public", "Dev"), ("Dev", "Public")] {
+            assert!(!compatibility_blocks(true, true, &[(false, Some(1))]));
+            assert!(compatibility_blocks(true, true, &[(true, Some(1))]));
+            let mut first = Inputs { want: true, held: true,
+                other_requested_later: requested_by_other(Some((other.into(), 20)), mine, 10), ..Inputs::default() };
+            assert_eq!(decide(first), Step::Yield);
+            first.release_pending = true;
+            first.other_requested_later = false;
+            assert_eq!(decide(first), Step::Release, "retry restoration before handing off");
+            assert_eq!(decide(Inputs { want: true, ..Inputs::default() }), Step::Acquire);
+            assert_eq!(decide(Inputs { want: true, held: true, recovery_pending: true, ..Inputs::default() }), Step::Recover);
+            assert_eq!(decide(Inputs { want: true, held: true, ..Inputs::default() }), Step::Organize);
+        }
+    }
+
+    #[test]
+    fn registration_and_query_failures_cannot_authorize_grouping() {
+        for (registered, complete) in [(false, true), (true, false), (false, false)] {
+            for strips in [vec![], vec![(false, Some(1))]] {
+                let blocked = compatibility_blocks(registered, complete, &strips);
+                assert!(blocked);
+                assert_eq!(decide(Inputs { want: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Wait);
+                assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Yield);
+            }
+        }
+        assert!(compatibility_blocks(true, true, &[(false, Some(1)), (false, None)]), "one capable neighbor cannot excuse an unknown one");
+        assert!(!compatibility_blocks(true, true, &[]));
     }
 
     #[test]

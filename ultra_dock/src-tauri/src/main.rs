@@ -54,6 +54,8 @@ fn uptime_secs() -> u64 {
 }
 static STRIP_HIDDEN: AtomicBool = AtomicBool::new(false);
 static ORGANIZE: AtomicBool = AtomicBool::new(true);
+/// Cleared only by checked restoration. Off/yield must preserve access before changing the desired state.
+static RESTORATION_PENDING: AtomicBool = AtomicBool::new(true);
 static CORE: Mutex<Option<Child>> = Mutex::new(None);
 static GUARD: Mutex<Option<Child>> = Mutex::new(None);
 static ICONS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
@@ -384,7 +386,13 @@ fn taskbar_list() -> Option<windows::Win32::UI::Shell::ITaskbarList> {
 fn restore_all() {
     use windows::Win32::System::Com::*;
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
-    if let Some(t) = taskbar_list() { recovery::restore_all(&t); }
+    RESTORATION_PENDING.store(true, Ordering::Release);
+    if let Some(t) = taskbar_list() {
+        match recovery::restore_all(&t) {
+            Ok(()) => { /* The organizer clears the recovery view after checking its own gate. */ }
+            Err(e) => eprintln!("[dock] taskbar restoration remains pending: {e}"),
+        }
+    } else { eprintln!("[dock] taskbar restoration remains pending: taskbar interface unavailable"); }
 }
 
 #[cfg(windows)]
@@ -409,21 +417,39 @@ fn organizer_loop() {
         if let Some(l) = lease.as_mut() {
             let step = dock_lease::decide(dock_lease::Inputs {
                 want, held: l.held(),
-                other_strip_visible: dock_lease::other_strip_visible(),
+                compatibility_blocked: dock_lease::other_strip_blocks(STRIP_HWND.load(Ordering::Relaxed)),
                 other_requested_later: l.held() && dock_lease::requested_by_other(dock_lease::read_request(), mine, l.acquired_ms()),
                 recovery_pending: l.gate.recovery_pending(), release_pending: l.gate.release_pending(),
             });
             match step {
-                dock_lease::Step::Acquire => { if l.try_take() { println!("[dock] this Dock now manages the taskbar"); } }
-                dock_lease::Step::Recover => l.gate.acknowledge(recovery::recover_previous(&tbl)),
+                dock_lease::Step::Acquire => {
+                    if l.try_take() { RESTORATION_PENDING.store(true, Ordering::Release); println!("[dock] this Dock now manages the taskbar"); }
+                }
+                dock_lease::Step::Recover => {
+                    RESTORATION_PENDING.store(true, Ordering::Release);
+                    let result = recovery::recover_previous(&tbl);
+                    if result.is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                    l.gate.acknowledge(result);
+                }
                 dock_lease::Step::Organize => may_organize = true,
                 dock_lease::Step::Yield => {
                     // the user turned the other edition's Dock on: turn this one off (remembered), give every button back
                     println!("[dock] another Ultra Dock was turned on: handing the taskbar over");
                     set_dock_enabled_local(false);
-                    l.release_when_restored(|| recovery::restore_all(&tbl));
+                    l.release_when_restored(|| {
+                        let result = recovery::restore_all(&tbl);
+                        if result.is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                        result
+                    });
                 }
-                dock_lease::Step::Release => l.release_when_restored(|| recovery::restore_all(&tbl)),
+                dock_lease::Step::Release => {
+                    RESTORATION_PENDING.store(true, Ordering::Release);
+                    l.release_when_restored(|| {
+                        let result = recovery::restore_all(&tbl);
+                        if result.is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                        result
+                    });
+                }
                 dock_lease::Step::Wait => {}
             }
             dock_lease::publish(l.held(), ORGANIZE.load(Ordering::Relaxed));
@@ -432,7 +458,7 @@ fn organizer_loop() {
         // taskbar button back, so hide it again right away (and for a short burst after) instead of 4 s later.
         for _ in 0..5 {
             std::thread::sleep(Duration::from_millis(140));
-            if !(may_organize && ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed)) { continue; }
+            if !grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire)) { continue; }
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 recovery::hide_window(h, true, &tbl);
@@ -444,7 +470,19 @@ fn organizer_loop() {
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
         let guarded = guard_running();
-        let on = may_organize && guarded && ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed);
+        let on = guarded && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
+        if !on {
+            RESTORATION_PENDING.store(true, Ordering::Release);
+            match recovery::restore_all(&tbl) {
+                Ok(()) => {
+                    let prior_unknown = lease.as_ref().is_some_and(|l| l.held() && l.gate.recovery_pending());
+                    RESTORATION_PENDING.store(prior_unknown, Ordering::Release);
+                }
+                Err(_) => {
+                    if let Some(l) = lease.as_mut().filter(|l| l.held()) { l.gate.require_recovery(); }
+                }
+            }
+        }
         let rendered = RENDERED_WINDOWS.lock().map(|r| r.clone()).unwrap_or_default();
         let mut snap = vec![];
         let reapply = last_reapply.elapsed() > Duration::from_secs(4);
@@ -456,8 +494,10 @@ fn organizer_loop() {
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
             // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
-            let hidden = on && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
-            if !hidden { recovery::restore_window(*h, &tbl); } else { hidden_now.insert(*h); }
+            let hidden = on && ORGANIZE.load(Ordering::Relaxed) && !RESTORATION_PENDING.load(Ordering::Acquire)
+                && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
+            if hidden { hidden_now.insert(*h); }
+            else if on { recovery::restore_window(*h, &tbl); }
             if !kept {
                 let cat = categorize(exe, &cfg);
                 cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone()));
@@ -471,9 +511,25 @@ fn organizer_loop() {
             }
         }
         listing.retain(&wins.iter().map(|w| w.0).collect());
+        let recovery_view = !on || RESTORATION_PENDING.load(Ordering::Acquire);
+        if recovery_view {
+            let previous = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
+            let live: Vec<_> = wins.iter().map(|(h, title, exe)| WinInfo { hwnd: *h, title: title.clone(), exe: exe.clone(),
+                name: pretty_name(exe), category: categorize(exe, &cfg), active: *h == fg }).collect();
+            let pending = recovery::own_pending_windows().ok();
+            snap = recovery_snapshot(&previous, &live, pending.as_deref());
+        }
         cands.sort();
         let mut groups: Vec<(String, Vec<String>)> = vec![];
-        if ORGANIZE.load(Ordering::Relaxed) {
+        if recovery_view {
+            // Plan only remaining recovery entries. No layout reservation may authorize another hide.
+            for w in &snap {
+                match groups.iter_mut().find(|g| g.0 == w.category) {
+                    Some(g) => if !g.1.contains(&w.exe) { g.1.push(w.exe.clone()); },
+                    None => groups.push((w.category.clone(), vec![w.exe.clone()])),
+                }
+            }
+        } else if ORGANIZE.load(Ordering::Relaxed) {
             for (_, _, cat, exe) in cands {
                 match groups.iter_mut().find(|g| g.0 == cat) {
                     Some(g) => if !g.1.contains(&exe) { g.1.push(exe) },
@@ -481,13 +537,9 @@ fn organizer_loop() {
                 }
             }
         }
-        let pending: std::collections::HashSet<String> = pending.difference(&hidden_exes).cloned().collect();
+        let pending: std::collections::HashSet<String> = if recovery_view { Default::default() }
+            else { pending.difference(&hidden_exes).cloned().collect() };
         if let Ok(mut c) = CANDIDATES.lock() { *c = Some(Candidates { groups, pending, hidden_apps: hidden_exes.len() }); }
-        if !on {
-            if recovery::restore_all(&tbl).is_err() {
-                if let Some(l) = lease.as_mut().filter(|l| l.held()) { l.gate.require_recovery(); }
-            }
-        }
         if !guarded && last_guard_retry.elapsed() > Duration::from_secs(10) {
             spawn_guard();
             last_guard_retry = Instant::now();
@@ -699,15 +751,103 @@ mod watchdog_tests {
 /// empty the strip, so it does not flicker while it resizes.
 fn strip_lists_windows(organize: bool, all_taskbars_covered: bool) -> bool { organize && all_taskbars_covered }
 
+fn grouping_allowed(lease_allows: bool, organize: bool, healthy: bool, restoring: bool) -> bool {
+    lease_allows && organize && healthy && !restoring
+}
+
+/// Known pending intents select fresh live metadata. Unknown state preserves only previously offered live apps.
+/// Never add unrelated windows during recovery, and never carry a closed/recycled entry into the next snapshot.
+fn recovery_snapshot(previous: &[WinInfo], live: &[WinInfo], pending: Option<&[isize]>) -> Vec<WinInfo> {
+    live.iter().filter(|w| match pending {
+        Some(ids) => ids.contains(&w.hwnd),
+        None => previous.iter().any(|old| old.hwnd == w.hwnd && old.exe == w.exe),
+    }).cloned().collect()
+}
+
+fn offered_snapshot(snapshot: &[WinInfo], organize: bool, covered: bool, restoring: bool, pending: Option<&[isize]>) -> Vec<WinInfo> {
+    if restoring || !organize {
+        snapshot.iter().filter(|w| pending.is_none_or(|ids| ids.contains(&w.hwnd))).cloned().collect()
+    } else if strip_lists_windows(organize, covered) { snapshot.to_vec() } else { vec![] }
+}
+
+fn strip_display_requested(hidden: bool, held: bool, restoring: bool) -> bool { held && (!hidden || restoring) }
+
+const RECOVERY_NOTE: &str = "Taskbar restoration is pending. Remaining entries are kept in the Dock while it retries; some native buttons may already be visible.";
+
+fn dock_fallback_reason(organize: bool, covered: bool, healthy: bool, restoring: bool) -> Option<&'static str> {
+    if restoring { Some(RECOVERY_NOTE) }
+    else if !organize { Some("Grouping is off; native taskbar buttons stay visible.") }
+    else if !covered { Some("Native taskbar mode: multiple taskbars need their own Dock strips.") }
+    else if !healthy { Some("Native taskbar mode until the Dock is visible, fits, and finishes rendering.") }
+    else { None }
+}
+
 #[cfg(test)]
 mod strip_listing_tests {
-    use super::strip_lists_windows;
+    use super::*;
+    fn app(hwnd: isize) -> WinInfo {
+        WinInfo { hwnd, title: format!("Fake {hwnd}"), exe: format!("fake-{hwnd}.exe"), name: format!("Fake {hwnd}"), category: "Test".into(), active: false }
+    }
+    fn ids(windows: &[WinInfo]) -> Vec<isize> { windows.iter().map(|w| w.hwnd).collect() }
     #[test]
     fn apps_are_listed_only_where_native_buttons_can_be_replaced() {
         assert!(strip_lists_windows(true, true));
         assert!(!strip_lists_windows(true, false), "an uncovered taskbar keeps native buttons, so no duplicates");
         assert!(!strip_lists_windows(false, true), "grouping off: native buttons only");
         assert!(!strip_lists_windows(false, false));
+    }
+
+    #[test]
+    fn partial_restoration_keeps_only_pending_apps_accessible_through_off_and_yield_retries() {
+        let original = vec![app(1), app(2), app(3)];
+        let live = vec![app(1), app(2), app(3), app(4)];
+        // Fake AddTab succeeded for 1, failed for 2, and 3 closed. Durable intent 2 remains.
+        let remaining = [2];
+        let snapshot = recovery_snapshot(&original, &live, Some(&remaining));
+        assert_eq!(ids(&snapshot), vec![2]);
+        for want in [false, true] {
+            for covered in [false, true] {
+                assert_eq!(ids(&offered_snapshot(&original, want, covered, true, Some(&remaining))), vec![2], "get_windows filters even before the organizer refreshes its snapshot");
+                assert_eq!(ids(&offered_snapshot(&snapshot, want, covered, true, Some(&remaining))), vec![2]);
+                assert!(strip_display_requested(true, true, true), "off/yield must not deliberately hide the pending strip");
+                assert!(!grouping_allowed(true, want, true, true), "including burst re-hides after a quick re-enable");
+                assert_eq!(dock_lease::decide(dock_lease::Inputs { want, held: true, release_pending: true, ..Default::default() }), dock_lease::Step::Release);
+                assert_eq!(dock_fallback_reason(want, covered, true, true), Some(RECOVERY_NOTE));
+            }
+        }
+    }
+
+    #[test]
+    fn failed_persistence_retains_access_until_durable_acknowledgement_without_rehiding() {
+        let original = vec![app(1), app(2)];
+        // AddTab may have succeeded, but failed persistence leaves both durable intents unacknowledged.
+        let unacknowledged = [1, 2];
+        let snapshot = recovery_snapshot(&original, &original, Some(&unacknowledged));
+        assert_eq!(ids(&snapshot), vec![1, 2]);
+        assert!(!grouping_allowed(true, true, true, true), "restored native buttons stay restored");
+        assert_eq!(dock_fallback_reason(false, true, true, true), Some(RECOVERY_NOTE));
+        // Fake persistence retry succeeds: get_windows must clear even a not-yet-refreshed snapshot.
+        assert!(offered_snapshot(&snapshot, false, true, true, Some(&[])).is_empty());
+        assert!(recovery_snapshot(&snapshot, &original, Some(&[])).is_empty());
+        assert!(!strip_display_requested(true, false, false));
+        assert!(!strip_display_requested(true, true, false));
+        assert_eq!(dock_fallback_reason(false, true, true, false), Some("Grouping is off; native taskbar buttons stay visible."));
+    }
+
+    #[test]
+    fn unknown_recovery_preserves_existing_live_access_without_adding_unrelated_apps() {
+        let original = vec![app(1), app(2), app(3)];
+        let mut recycled = app(2);
+        recycled.exe = "different-process.exe".into();
+        let live = vec![app(1), recycled, app(4)];
+        let snapshot = recovery_snapshot(&original, &live, None);
+        assert_eq!(ids(&snapshot), vec![1], "closed 3 and recycled 2 disappear, new 4 is never added");
+        assert_eq!(ids(&offered_snapshot(&snapshot, false, false, true, None)), vec![1]);
+        assert!(!grouping_allowed(true, true, true, true));
+        assert_eq!(dock_fallback_reason(true, false, false, true), Some(RECOVERY_NOTE));
+        assert!(strip_display_requested(true, true, true));
+        assert!(!strip_display_requested(false, false, true), "recovery never bypasses the mutex");
+        assert!(recovery_snapshot(&snapshot, &[], None).is_empty(), "unknown state cannot keep closed entries forever");
     }
 }
 
@@ -718,18 +858,18 @@ fn get_windows() -> Value {
     let covered = all_taskbars_covered();
     #[cfg(not(windows))]
     let covered = false;
-    let wins = if strip_lists_windows(ORGANIZE.load(Ordering::Relaxed), covered) {
-        SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default()
-    } else {
-        vec![]
-    };
-    let reason = if !ORGANIZE.load(Ordering::Relaxed) { Some("Grouping is off; native taskbar buttons stay visible.") }
-        else if !covered { Some("Native taskbar mode: multiple taskbars need their own Dock strips.") }
-        else if !HEALTHY.load(Ordering::Relaxed) { Some("Native taskbar mode until the Dock is visible, fits, and finishes rendering.") }
-        else { None };
+    let organize = ORGANIZE.load(Ordering::Acquire);
+    let restoring = RESTORATION_PENDING.load(Ordering::Acquire);
+    #[cfg(windows)]
+    let pending = if restoring || !organize { recovery::own_pending_windows().ok() } else { None };
+    #[cfg(not(windows))]
+    let pending: Option<Vec<isize>> = None;
+    let snapshot = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
+    let wins = offered_snapshot(&snapshot, organize, covered, restoring, pending.as_deref());
+    let reason = dock_fallback_reason(organize, covered, HEALTHY.load(Ordering::Relaxed), restoring);
     let layout = strip_plan(&wins);
     let avail = AVAIL_CSS.load(Ordering::Relaxed);
-    json!({ "organize": ORGANIZE.load(Ordering::Relaxed), "windows": wins, "order": org_config().order, "fallback_reason": reason,
+    json!({ "organize": organize, "windows": wins, "order": org_config().order, "fallback_reason": reason,
             "layout": layout, "cap": dock_cap(), "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
 }
 
@@ -768,7 +908,10 @@ fn activate(hwnd: isize) {
 }
 
 #[tauri::command]
-fn set_organize(on: bool) { ORGANIZE.store(on, Ordering::Relaxed); }
+fn set_organize(on: bool) {
+    if !on { RESTORATION_PENDING.store(true, Ordering::Release); }
+    ORGANIZE.store(on, Ordering::Release);
+}
 
 // ----------------------------------------------------------------------------- icons
 #[cfg(windows)]
@@ -1108,16 +1251,18 @@ fn hub_info() -> Value {
     let covered = all_taskbars_covered();
     #[cfg(not(windows))]
     let covered = false;
-    let on = !STRIP_HIDDEN.load(Ordering::Relaxed);
+    let on = !STRIP_HIDDEN.load(Ordering::Acquire);
     // Why the Dock is on but leaving the taskbar as it is (the same reasons the strip's menu shows)
-    let dock_note = if on && dock_lease::waiting_for_other() { Some("The other edition's Ultra Dock manages the taskbar. Turning this one on again takes it over.") }
+    let restoring = RESTORATION_PENDING.load(Ordering::Acquire);
+    let dock_note = if restoring { Some(RECOVERY_NOTE) }
+        else if on && dock_lease::waiting_for_other() { Some("The other edition's Ultra Dock manages the taskbar. Turning this one on again takes it over.") }
         else if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible.") }
         else if !HEALTHY.load(Ordering::Relaxed) { Some("Not enough room on the taskbar right now, so every button stays visible.") }
         else { None };
     let editions: Vec<Value> = ["Public", "Dev"].iter().filter_map(|e| edition::profile(e).ok()).map(edition_json).collect();
     let dev_installed = editions.iter().any(|e| e["edition"] == "Dev" && (e["installed"] == true || e["current"] == true));
     json!({"version": env!("CARGO_PKG_VERSION"), "edition": profile().edition(), "product": profile().product_name(),
-           "dock_on": on, "dock_grouping": on && dock_lease::held() && covered && HEALTHY.load(Ordering::Relaxed),
+           "dock_on": on, "dock_grouping": on && !restoring && dock_lease::held() && covered && HEALTHY.load(Ordering::Relaxed),
            "dock_note": dock_note, "dock_cap": dock_cap(), "insights_installed": insights, "dev_installed": dev_installed,
            "editions": editions})
 }
@@ -1594,7 +1739,8 @@ fn taskbar_tracker(_app: AppHandle) {
             let w = requested.min(room).max(0) as u32;
             // A strip that cannot show even its menu is hidden rather than drawn as a sliver beside the tray,
             // unless room is on its way (the fit check's short grace while buttons are being hidden).
-            let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && dock_lease::held() && w > 8 && (w as i32 >= requested || fits);
+            let show = tb_visible && !fullscreen && strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire))
+                && w > 8 && (w as i32 >= requested || fits);
             STRIP_FITS.store(show && fits, Ordering::Relaxed);
             STRIP_SHOWN.store(show, Ordering::Relaxed);
             let state = (x, r.top, w, h, show);
@@ -1710,8 +1856,9 @@ fn set_dock_enabled(on: bool) {
 }
 
 fn set_dock_enabled_local(on: bool) {
-    ORGANIZE.store(on, Ordering::Relaxed);    // off: the organizer gives every button back
-    STRIP_HIDDEN.store(!on, Ordering::Relaxed);
+    if !on { RESTORATION_PENDING.store(true, Ordering::Release); }
+    ORGANIZE.store(on, Ordering::Release);    // off: the organizer gives every button back
+    STRIP_HIDDEN.store(!on, Ordering::Release);
     let _ = std::fs::write(appdata("dock.txt"), if on { "on" } else { "off" });
     if let Ok(g) = DOCK_ITEM.lock() { if let Some(item) = g.as_ref() { let _ = item.set_checked(on); } }
 }
@@ -1769,7 +1916,13 @@ fn handle_args(app: &AppHandle, args: &[String]) {
 fn restore_from_last_run() {
     use windows::Win32::System::Com::*;
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
-    if let Some(t) = taskbar_list() { recovery::recover_previous(&t); }
+    RESTORATION_PENDING.store(true, Ordering::Release);
+    if let Some(t) = taskbar_list() {
+        match recovery::recover_previous(&t) {
+            Ok(()) => { RESTORATION_PENDING.store(false, Ordering::Release); }
+            Err(e) => eprintln!("[dock] startup recovery remains pending: {e}"),
+        }
+    } else { eprintln!("[dock] startup recovery remains pending: taskbar interface unavailable"); }
 }
 
 fn run_survey() {
@@ -1819,7 +1972,11 @@ fn main() {
                 }).build()?;
             #[cfg(windows)]
             make_noactivate(&strip);
-            if let Ok(h) = strip.hwnd() { STRIP_HWND.store(h.0 as isize, Ordering::Relaxed); }
+            if let Ok(h) = strip.hwnd() {
+                #[cfg(windows)]
+                if !dock_lease::register_strip(windows::Win32::Foundation::HWND(h.0)) { eprintln!("[dock] lease capability registration failed; grouping blocked"); }
+                STRIP_HWND.store(h.0 as isize, Ordering::Relaxed);
+            }
             if !dock_saved_on() { ORGANIZE.store(false, Ordering::Relaxed); STRIP_HIDDEN.store(true, Ordering::Relaxed); }
             load_dock_cap();
             if let Err(e) = build_tray(app) { println!("[tray] not available: {e}"); }
