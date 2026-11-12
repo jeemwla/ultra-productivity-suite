@@ -5,12 +5,15 @@ use std::io;
 const MAX_WINDOWS: usize = 4096;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct Owner { pub pid: u32, pub started: u64 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 struct Window { hwnd: isize, process: Owner }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct Journal { version: u32, owner: Owner, windows: Vec<Window> }
 
 impl Journal {
@@ -40,10 +43,30 @@ impl Journal {
     fn restore_with(&mut self, restore: impl Fn(&Window) -> bool, persist: impl FnOnce(&Self) -> io::Result<()>) -> io::Result<()> {
         let previous = self.windows.clone();
         self.windows.retain(|w| !restore(w));
-        if self.windows == previous { return Ok(()); }
-        if let Err(error) = persist(self) { self.windows = previous; return Err(error); }
-        Ok(())
+        if self.windows != previous {
+            if let Err(error) = persist(self) { self.windows = previous; return Err(error); }
+        }
+        if self.windows.is_empty() { Ok(()) } else { Err(io::Error::other("restoration is incomplete")) }
     }
+}
+
+/// All journals must already have been decoded under the shared transaction lock.
+/// Unknown ownership cannot authorize AddTab, even when a known live claim also exists.
+fn other_claim(window: &Window, others: &[Journal], alive: impl Fn(Owner) -> Option<bool>) -> Option<bool> {
+    let mut claimed = false;
+    for journal in others.iter().filter(|j| j.windows.contains(window)) {
+        match alive(journal.owner) { Some(true) => claimed = true, None => return None, Some(false) => {} }
+    }
+    Some(claimed)
+}
+
+fn restore_unclaimed(journal: &mut Journal, others: &[Journal], alive: impl Fn(Owner) -> Option<bool>,
+    restore: impl Fn(&Window) -> bool, persist: impl FnOnce(&Journal) -> io::Result<()>) -> io::Result<()> {
+    journal.restore_with(|w| match other_claim(w, others, &alive) {
+        Some(true) => true, // another live owner durably accepted responsibility; never call AddTab
+        Some(false) => restore(w),
+        None => false,
+    }, persist)
 }
 
 #[cfg(windows)]
@@ -70,7 +93,10 @@ mod win {
     fn lock_generation(_owner: Owner) -> Option<GenerationLock> {
         // All generations share a transaction lock. A late old guard must see a
         // newly persisted claim before it decides whether to restore that HWND.
-        let name: Vec<u16> = "Local\\UltraSuite.DockJournal.Transactions\0".encode_utf16().collect();
+        lock_named("Local\\UltraSuite.DockJournal.Transactions")
+    }
+    fn lock_named(name: &str) -> Option<GenerationLock> {
+        let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
         let handle = Handle(unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())).ok()? });
         let result = unsafe { WaitForSingleObject(handle.0, 1_000) };
         if result == WAIT_OBJECT_0 || result == WAIT_ABANDONED { Some(GenerationLock(handle)) } else { None }
@@ -104,7 +130,45 @@ mod win {
         match unsafe { WaitForSingleObject(handle.0, 0) }.0 { 0 => Some(false), 258 => Some(true), _ => None }
     }
 
-    fn journal_path(owner: Owner) -> PathBuf { crate::appdata(&format!("dock-recovery-v1-{}-{}.json", owner.pid, owner.started)) }
+    fn journal_path(owner: Owner) -> PathBuf { crate::appdata(&journal_name(owner)) }
+    fn journal_name(owner: Owner) -> String { format!("dock-recovery-v1-{}-{}.json", owner.pid, owner.started) }
+
+    fn journal_roots() -> io::Result<Vec<PathBuf>> {
+        // A missing environment or invalid contract cannot stand for an empty journal set.
+        let root = std::env::var_os("APPDATA").filter(|s| !s.is_empty()).map(PathBuf::from)
+            .ok_or_else(|| io::Error::other("APPDATA is unavailable"))?;
+        ["Public", "Dev"].iter().map(|edition| {
+            crate::edition::profile(edition).map(|p| p.paths(&root, &root).roaming).map_err(io::Error::other)
+        }).collect()
+    }
+
+    struct Record { path: PathBuf, journal: Journal }
+    fn scan_roots(roots: &[PathBuf]) -> io::Result<Vec<Record>> {
+        let mut records = vec![];
+        for root in roots {
+            let files = match fs::read_dir(root) {
+                Ok(files) => files,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            };
+            for (count, entry) in files.enumerate() {
+                if count >= 10_000 { return Err(io::Error::other("recovery directory scan limit exceeded")); }
+                let entry = entry?;
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if !name.to_ascii_lowercase().starts_with("dock-recovery-") { continue; }
+                // Unknown versions, interrupted writes, invalid filenames and malformed documents block the gate.
+                let owner = name.strip_prefix("dock-recovery-v1-").and_then(|s| s.strip_suffix(".json"))
+                    .and_then(|s| s.split_once('-')).and_then(|(pid, started)| Some(Owner { pid: pid.parse().ok()?, started: started.parse().ok()? }))
+                    .filter(|owner| journal_name(*owner) == name)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unknown recovery journal filename"))?;
+                if !entry.file_type()?.is_file() { return Err(io::Error::other("recovery journal is not a regular file")); }
+                let path = entry.path();
+                records.push(Record { journal: load(&path, owner)?, path });
+            }
+        }
+        Ok(records)
+    }
 
     fn atomic_save(path: &Path, journal: &Journal) -> io::Result<()> {
         if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
@@ -167,8 +231,8 @@ mod win {
         success || previously_hidden
     }
 
-    pub fn restore_window(hwnd: isize, taskbar: &ITaskbarList) { restore_current(Some(hwnd), taskbar); }
-    pub fn restore_all(taskbar: &ITaskbarList) { restore_current(None, taskbar); }
+    pub fn restore_window(hwnd: isize, taskbar: &ITaskbarList) { let _ = restore_current(Some(hwnd), taskbar); }
+    pub fn restore_all(taskbar: &ITaskbarList) -> io::Result<()> { restore_current(None, taskbar) }
     pub fn prune_closed() {
         let Some(mut state) = state().and_then(|s| s.lock().ok()) else { return; };
         let owner = state.journal.owner;
@@ -178,63 +242,187 @@ mod win {
         let outstanding: HashSet<_> = state.journal.windows.iter().copied().collect();
         state.hidden.retain(|w| outstanding.contains(w));
     }
-    fn restore_current(only: Option<isize>, taskbar: &ITaskbarList) {
-        let Some(mut state) = state().and_then(|s| s.lock().ok()) else { return; };
-        if state.journal.windows.is_empty() { return; }
-        if let Some(hwnd) = only { if !state.journal.windows.iter().any(|w| w.hwnd == hwnd) { return; } }
+    fn restore_current(only: Option<isize>, taskbar: &ITaskbarList) -> io::Result<()> {
+        let mut state = state().and_then(|s| s.lock().ok()).ok_or_else(|| io::Error::other("recovery state lock unavailable"))?;
+        // Per-window maintenance has no side effect when there is no own intent.
+        // Full restoration must still check disk, including when memory is empty.
+        if only.is_some_and(|hwnd| !state.journal.windows.iter().any(|w| w.hwnd == hwnd)) { return Ok(()); }
         let owner = state.journal.owner;
-        let Some(_lock) = lock_generation(owner) else { return; };
+        let _lock = lock_generation(owner).ok_or_else(|| io::Error::other("recovery transaction lock unavailable"))?;
         let path = journal_path(owner);
-        let _ = state.journal.restore_with(|w| (only.is_none() || only == Some(w.hwnd)) && restore(w, taskbar), |j| atomic_save(&path, j));
+        let records = scan_roots(&journal_roots()?)?;
+        // A durable own intent missing from memory must never be acknowledged as restored.
+        if records.iter().any(|r| r.path == path && r.journal.windows != state.journal.windows) {
+            return Err(io::Error::other("own recovery journal disagrees with memory"));
+        }
+        let others: Vec<_> = records.into_iter().filter(|r| r.path != path).map(|r| r.journal).collect();
+        let result = restore_unclaimed(&mut state.journal, &others, owner_alive,
+            |w| (only.is_none() || only == Some(w.hwnd)) && restore(w, taskbar), |j| atomic_save(&path, j));
         let outstanding: HashSet<_> = state.journal.windows.iter().copied().collect();
         state.hidden.retain(|w| outstanding.contains(w));
+        result
     }
 
     pub fn recover_owner(owner: Owner, taskbar: &ITaskbarList) {
         let Some(_lock) = lock_generation(owner) else { return; };
         if owner_alive(owner) != Some(false) { return; }
-        let path = journal_path(owner);
-        let Ok(mut journal) = load(&path, owner) else { return; }; // malformed and unknown versions stay on disk
-        if journal.restore_with(|w| match other_claim(w, owner) {
-            Some(true) => true, // a live newer owner has durably accepted responsibility
-            Some(false) => restore(w, taskbar),
-            None => false, // uncertain identity: retain for retry
-        }, |j| atomic_save(&path, j)).is_ok() && journal.windows.is_empty() {
-            let _ = fs::remove_file(path);
-        }
-    }
-
-    fn owners() -> Vec<Owner> {
-        let Ok(files) = fs::read_dir(crate::appdata("")) else { return vec![]; };
-        let mut owners = vec![];
-        for entry in files.flatten().take(10_000) {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let Some(body) = name.strip_prefix("dock-recovery-v1-").and_then(|s| s.strip_suffix(".json")) else { continue; };
-            let Some((pid, started)) = body.split_once('-') else { continue; };
-            if let (Ok(pid), Ok(started)) = (pid.parse(), started.parse()) { owners.push(Owner { pid, started }); }
-        }
-        owners
-    }
-
-    fn other_claim(window: &Window, previous: Owner) -> Option<bool> {
-        for owner in owners().into_iter().filter(|owner| *owner != previous) {
-            let Ok(journal) = load(&journal_path(owner), owner) else { continue; };
-            if journal.windows.contains(window) {
-                match owner_alive(owner) { Some(true) => return Some(true), None => return None, _ => {} }
+        let Ok(roots) = journal_roots() else { return; };
+        let Ok(mut records) = scan_roots(&roots) else { return; };
+        for index in 0..records.len() {
+            if records[index].journal.owner == owner {
+                let _ = recover_record(&mut records, index, owner_alive, |w| restore(w, taskbar), atomic_save);
             }
         }
-        Some(false)
     }
 
-    pub fn recover_previous(taskbar: &ITaskbarList) {
-        for owner in owners() { recover_owner(owner, taskbar); }
+    fn recover_record(records: &mut [Record], index: usize, alive: impl Fn(Owner) -> Option<bool>,
+        restore: impl Fn(&Window) -> bool, persist: impl Fn(&Path, &Journal) -> io::Result<()>) -> io::Result<()> {
+        let others: Vec<_> = records.iter().enumerate().filter(|(i, _)| *i != index).map(|(_, r)| r.journal.clone()).collect();
+        let record = &mut records[index];
+        // Keep the durable empty document as acknowledgement, avoiding unchecked deletion failures.
+        restore_unclaimed(&mut record.journal, &others, alive, restore, |j| persist(&record.path, j))
+    }
+
+    /// The organizer holds the Dock lease and cannot hide until this returns Ok.
+    /// The startup best-effort caller is also safe: every restore is serialized with durable claims.
+    pub fn recover_previous(taskbar: &ITaskbarList) -> io::Result<()> {
+        // Finish any interrupted own restoration first. Failure retains the lease's recovery gate.
+        restore_all(taskbar)?;
+        let me = process_owner(std::process::id()).ok_or_else(|| io::Error::other("current process identity unavailable"))?;
+        let _lock = lock_generation(me).ok_or_else(|| io::Error::other("recovery transaction lock unavailable"))?;
+        let mut records = scan_roots(&journal_roots()?)?;
+        recover_records(&mut records, owner_alive, |w| restore(w, taskbar), atomic_save)
+    }
+
+    fn recover_records(records: &mut [Record], alive: impl Fn(Owner) -> Option<bool>,
+        restore: impl Fn(&Window) -> bool, persist: impl Fn(&Path, &Journal) -> io::Result<()>) -> io::Result<()> {
+        let mut complete = true;
+        for index in 0..records.len() {
+            if records[index].journal.windows.is_empty() { continue; }
+            match alive(records[index].journal.owner) {
+                Some(false) => { if recover_record(records, index, &alive, &restore, &persist).is_err() { complete = false; } }
+                _ => complete = false, // a live or inaccessible prior owner is not restoration acknowledgement
+            }
+        }
         // Old HWND-only files cannot establish process identity. Leave them for the
         // old guard or the explicit legacy restore tool instead of trusting them here.
+        if complete { Ok(()) } else { Err(io::Error::other("prior recovery is incomplete")) }
     }
 
     #[cfg(test)]
     mod file_tests {
         use super::*;
+        use std::cell::Cell;
+
+        struct Fixture(PathBuf);
+        impl Fixture {
+            fn new() -> Self {
+                let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+                let root = std::env::temp_dir().join(format!("dock-lease-fake-{}-{stamp}", std::process::id()));
+                fs::create_dir_all(root.join("Public")).unwrap();
+                fs::create_dir_all(root.join("Dev")).unwrap();
+                Self(root)
+            }
+            fn roots(&self) -> Vec<PathBuf> { vec![self.0.join("Public"), self.0.join("Dev")] }
+            fn write(&self, edition: &str, journal: &Journal) -> PathBuf {
+                let path = self.0.join(edition).join(journal_name(journal.owner));
+                atomic_save(&path, journal).unwrap();
+                path
+            }
+        }
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                // Only remove the generated child of this test process's disposable TEMP.
+                let root = self.0.canonicalize().unwrap();
+                assert_eq!(root.parent(), Some(std::env::temp_dir().canonicalize().unwrap().as_path()));
+                assert!(root.file_name().unwrap().to_string_lossy().starts_with("dock-lease-fake-"));
+                let _ = fs::remove_dir_all(root);
+            }
+        }
+        fn owner(pid: u32) -> Owner { Owner { pid, started: 1000 + pid as u64 } }
+        fn window(hwnd: isize) -> Window { Window { hwnd, process: owner(7) } }
+
+        #[test]
+        fn checked_gate_retries_partial_dead_owner_recovery_and_failed_persistence() {
+            let fixture = Fixture::new();
+            let dead = Journal { windows: vec![window(1), window(2)], ..Journal::new(owner(1)) };
+            let path = fixture.write("Public", &dead);
+            let mut records = scan_roots(&fixture.roots()).unwrap();
+            assert!(recover_records(&mut records, |_| Some(false), |w| w.hwnd == 1, atomic_save).is_err());
+            assert_eq!(load(&path, owner(1)).unwrap().windows, vec![window(2)]);
+            assert!(recover_records(&mut records, |_| Some(false), |_| true, |_, _| Err(io::Error::other("disk full"))).is_err());
+            assert_eq!(records[0].journal.windows, vec![window(2)]);
+            assert_eq!(load(&path, owner(1)).unwrap().windows, vec![window(2)]);
+            // Restart from disk, rather than relying on an in-memory success flag.
+            let mut records = scan_roots(&fixture.roots()).unwrap();
+            recover_records(&mut records, |_| Some(false), |_| true, atomic_save).unwrap();
+            assert!(load(&path, owner(1)).unwrap().windows.is_empty());
+        }
+
+        #[test]
+        fn delayed_guard_observes_both_edition_claims_without_adding_a_tab() {
+            for (old, new) in [("Public", "Dev"), ("Dev", "Public")] {
+                let fixture = Fixture::new();
+                let previous = Journal { windows: vec![window(42)], ..Journal::new(owner(1)) };
+                fixture.write(old, &previous);
+                let current = Journal { owner: owner(2), ..previous.clone() };
+                fixture.write(new, &current);
+                let mut records = scan_roots(&fixture.roots()).unwrap();
+                let index = records.iter().position(|r| r.journal.owner == owner(1)).unwrap();
+                recover_record(&mut records, index, |o| Some(o == owner(2)),
+                    |_| panic!("a delayed guard must not re-add the new edition's window"), atomic_save).unwrap();
+                assert!(records[index].journal.windows.is_empty());
+                assert_eq!(load(&fixture.0.join(new).join(journal_name(owner(2))), owner(2)).unwrap().windows, vec![window(42)]);
+            }
+        }
+
+        #[test]
+        fn malformed_unknown_and_unreadable_roots_block_checked_recovery() {
+            let fixture = Fixture::new();
+            let path = fixture.0.join("Dev").join(journal_name(owner(1)));
+            for bytes in [b"{".as_slice(), br#"{"version":2,"owner":{"pid":1,"started":1001},"windows":[]}"#,
+                br#"{"version":1,"owner":{"pid":1,"started":1001},"windows":[],"unknown_claims":[]}"#,
+                br#"{"version":1,"owner":{"pid":2,"started":1002},"windows":[]}"#] {
+                fs::write(&path, bytes).unwrap();
+                assert!(scan_roots(&fixture.roots()).is_err());
+            }
+            fs::remove_file(&path).unwrap();
+            for name in ["dock-recovery-v2-1-1001.json", "dock-recovery-v1-x.json", "dock-recovery-v1-1-1001.99.tmp"] {
+                let unknown = fixture.0.join("Public").join(name);
+                fs::write(&unknown, b"{}").unwrap();
+                assert!(scan_roots(&fixture.roots()).is_err());
+                fs::remove_file(unknown).unwrap();
+            }
+            let file_root = fixture.0.join("not-a-directory");
+            fs::write(&file_root, b"{}").unwrap();
+            assert!(scan_roots(&[file_root]).is_err());
+            assert!(scan_roots(&[fixture.0.join("absent-edition")]).unwrap().is_empty());
+        }
+
+        #[test]
+        fn inaccessible_or_live_previous_owner_cannot_acknowledge_takeover() {
+            let fixture = Fixture::new();
+            fixture.write("Dev", &Journal { windows: vec![window(42)], ..Journal::new(owner(1)) });
+            for status in [None, Some(true)] {
+                let mut records = scan_roots(&fixture.roots()).unwrap();
+                assert!(recover_records(&mut records, |_| status,
+                    |_| panic!("unproven death must not restore"), |_, _| panic!("must preserve journal")).is_err());
+                assert_eq!(records[0].journal.windows, vec![window(42)]);
+            }
+        }
+
+        #[test]
+        fn cross_edition_unknown_claim_preserves_old_intent_and_window_identity() {
+            let mut previous = Journal { windows: vec![window(42)], ..Journal::new(owner(1)) };
+            let other = Journal { owner: owner(2), ..previous.clone() };
+            assert!(restore_unclaimed(&mut previous, &[other], |_| None,
+                |_| panic!("unknown claim cannot authorize AddTab"), |_| panic!("no change")).is_err());
+            let recycled = Window { process: owner(8), ..window(42) };
+            let other = Journal { windows: vec![recycled], ..Journal::new(owner(2)) };
+            let restored = Cell::new(false);
+            restore_unclaimed(&mut previous, &[other], |_| Some(true), |_| { restored.set(true); true }, |_| Ok(())).unwrap();
+            assert!(restored.get(), "a different PID/creation time is not a claim to this window");
+        }
         #[test]
         fn atomic_replace_produces_complete_versioned_document() {
             let owner = process_owner(std::process::id()).unwrap();
@@ -258,9 +446,9 @@ mod win {
         }
         #[test]
         fn generation_mutex_serializes_another_thread() {
-            let owner = process_owner(std::process::id()).unwrap();
-            let _lock = lock_generation(owner).unwrap();
-            assert!(std::thread::spawn(move || lock_generation(owner).is_none()).join().unwrap());
+            let name = format!("Local\\UltraSuite.DockJournal.Test.{}", std::process::id());
+            let _lock = lock_named(&name).unwrap();
+            assert!(std::thread::spawn(move || lock_named(&name).is_none()).join().unwrap());
         }
     }
 }
@@ -296,7 +484,18 @@ mod tests {
     #[test]
     fn failed_restores_stay_recorded() {
         let mut journal = Journal { version: 1, owner: owner(1), windows: vec![window(1), window(2)] };
-        journal.restore_with(|w| w.hwnd == 1, |_| Ok(())).unwrap();
+        assert!(journal.restore_with(|w| w.hwnd == 1, |_| Ok(())).is_err());
+        assert_eq!(journal.windows, vec![window(2)]);
+    }
+    #[test]
+    fn checked_restoration_cannot_acknowledge_a_failed_add_tab() {
+        let mut journal = Journal { version: 1, owner: owner(1), windows: vec![window(1)] };
+        assert!(journal.restore_with(|_| false, |_| Ok(())).is_err(), "a retained intent must block lease release");
+    }
+    #[test]
+    fn checked_restoration_cannot_acknowledge_partial_dead_owner_recovery() {
+        let mut journal = Journal { version: 1, owner: owner(1), windows: vec![window(1), window(2)] };
+        assert!(journal.restore_with(|w| w.hwnd == 1, |_| Ok(())).is_err(), "partial restoration must block takeover");
         assert_eq!(journal.windows, vec![window(2)]);
     }
     #[test]
@@ -325,7 +524,7 @@ mod tests {
     #[test]
     fn unchanged_restore_does_not_rewrite_the_journal() {
         let mut journal = Journal { version: 1, owner: owner(1), windows: vec![window(1)] };
-        journal.restore_with(|_| false, |_| panic!("no changed state to persist")).unwrap();
+        assert!(journal.restore_with(|_| false, |_| panic!("no changed state to persist")).is_err());
     }
     #[test]
     fn rejects_duplicate_handles_and_missing_identity() {

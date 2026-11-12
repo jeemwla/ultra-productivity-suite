@@ -411,19 +411,19 @@ fn organizer_loop() {
                 want, held: l.held(),
                 other_strip_visible: dock_lease::other_strip_visible(),
                 other_requested_later: l.held() && dock_lease::requested_by_other(dock_lease::read_request(), mine, l.acquired_ms()),
-                settle_left_ms: l.settle_left_ms(),
+                recovery_pending: l.gate.recovery_pending(), release_pending: l.gate.release_pending(),
             });
             match step {
                 dock_lease::Step::Acquire => { if l.try_take() { println!("[dock] this Dock now manages the taskbar"); } }
+                dock_lease::Step::Recover => l.gate.acknowledge(recovery::recover_previous(&tbl)),
                 dock_lease::Step::Organize => may_organize = true,
                 dock_lease::Step::Yield => {
                     // the user turned the other edition's Dock on: turn this one off (remembered), give every button back
                     println!("[dock] another Ultra Dock was turned on: handing the taskbar over");
                     set_dock_enabled_local(false);
-                    recovery::restore_all(&tbl);
-                    l.release();
+                    l.release_when_restored(|| recovery::restore_all(&tbl));
                 }
-                dock_lease::Step::Release => { recovery::restore_all(&tbl); l.release(); }
+                dock_lease::Step::Release => l.release_when_restored(|| recovery::restore_all(&tbl)),
                 dock_lease::Step::Wait => {}
             }
             dock_lease::publish(l.held(), ORGANIZE.load(Ordering::Relaxed));
@@ -483,7 +483,11 @@ fn organizer_loop() {
         }
         let pending: std::collections::HashSet<String> = pending.difference(&hidden_exes).cloned().collect();
         if let Ok(mut c) = CANDIDATES.lock() { *c = Some(Candidates { groups, pending, hidden_apps: hidden_exes.len() }); }
-        if !on { recovery::restore_all(&tbl); }
+        if !on {
+            if recovery::restore_all(&tbl).is_err() {
+                if let Some(l) = lease.as_mut().filter(|l| l.held()) { l.gate.require_recovery(); }
+            }
+        }
         if !guarded && last_guard_retry.elapsed() > Duration::from_secs(10) {
             spawn_guard();
             last_guard_retry = Instant::now();

@@ -4,15 +4,26 @@
 //! Windows lets only the owning thread release a mutex. The Dock the user turned on most recently wins: when the other
 //! edition asks for the taskbar, the holder turns itself off, puts every button back, and only then releases the lease.
 //! A Dock without the lease never hides a button and keeps its strip hidden.
-//! Older Docks (2.2.16 and earlier) do not know the lease; while one of them shows its strip, no new Dock takes over.
+//! Visible legacy strips block takeover, but this is not proof of safety against pre-lease Docks or their guards.
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const LEASE_NAME: &str = "Local\\UltraSuite.DockLease";
 /// Titles of the strip windows of both editions (older Docks used the first one).
 pub const STRIP_TITLES: [&str; 2] = ["Ultra Dock", "Ultra Dock (Dev)"];
-/// After taking over from a Dock that stopped without releasing, wait this long before hiding anything, so that
-/// Dock's guard process can put its buttons back first.
-pub const ABANDONED_SETTLE_MS: u64 = 3_000;
+
+/// Organizer-owned state. Neither elapsed time nor a new enable request acknowledges restoration.
+#[derive(Debug, Default)]
+pub struct RecoveryGate { recovery_pending: bool, release_pending: bool }
+impl RecoveryGate {
+    fn acquired(&mut self) { self.recovery_pending = true; self.release_pending = false; }
+    pub fn recovery_pending(&self) -> bool { self.recovery_pending }
+    pub fn release_pending(&self) -> bool { self.release_pending }
+    pub fn require_recovery(&mut self) { self.recovery_pending = true; }
+    pub fn acknowledge(&mut self, result: std::io::Result<()>) {
+        if result.is_ok() { self.recovery_pending = false; }
+    }
+    fn begin_release(&mut self) { self.release_pending = true; }
+}
 
 static HELD: AtomicBool = AtomicBool::new(false);
 static WAITING_FOR_OTHER: AtomicBool = AtomicBool::new(false);
@@ -23,10 +34,12 @@ pub fn waiting_for_other() -> bool { WAITING_FOR_OTHER.load(Ordering::Relaxed) }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
-    /// Do nothing this pass (lease elsewhere, or settling after an abandoned lease).
+    /// Do nothing this pass (lease elsewhere).
     Wait,
     /// Try to take the lease.
     Acquire,
+    /// Lease held, but checked recovery has not acknowledged durable completion.
+    Recover,
     /// Lease held: organize normally.
     Organize,
     /// Another Dock was turned on later (or an older Dock is showing its strip): turn this one off.
@@ -41,14 +54,15 @@ pub struct Inputs {
     pub held: bool,
     pub other_strip_visible: bool,
     pub other_requested_later: bool,
-    pub settle_left_ms: u64,
+    pub recovery_pending: bool,
+    pub release_pending: bool,
 }
 
 pub fn decide(i: Inputs) -> Step {
     if i.held {
-        if !i.want { return Step::Release; }
+        if !i.want || i.release_pending { return Step::Release; }
         if i.other_requested_later || i.other_strip_visible { return Step::Yield; }
-        if i.settle_left_ms > 0 { return Step::Wait; }
+        if i.recovery_pending { return Step::Recover; }
         return Step::Organize;
     }
     if i.want && !i.other_strip_visible { Step::Acquire } else { Step::Wait }
@@ -101,19 +115,20 @@ mod win {
     use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetWindowThreadProcessId, IsWindowVisible};
 
     /// Must stay on the thread that created it (the organizer thread).
-    pub struct Lease { handle: HANDLE, held: bool, acquired_ms: u128, settle_until: Option<std::time::Instant> }
+    pub struct Lease {
+        handle: HANDLE, held: bool, acquired_ms: u128, pub gate: RecoveryGate,
+        // Windows mutex ownership belongs to the acquiring thread.
+        _thread: std::marker::PhantomData<std::rc::Rc<()>>,
+    }
 
     impl Lease {
         pub fn open(name: &str) -> Option<Self> {
             let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
             let handle = unsafe { CreateMutexW(None, false, PCWSTR(wide.as_ptr())).ok()? };
-            Some(Self { handle, held: false, acquired_ms: 0, settle_until: None })
+            Some(Self { handle, held: false, acquired_ms: 0, gate: RecoveryGate::default(), _thread: std::marker::PhantomData })
         }
         pub fn held(&self) -> bool { self.held }
         pub fn acquired_ms(&self) -> u128 { self.acquired_ms }
-        pub fn settle_left_ms(&self) -> u64 {
-            self.settle_until.map(|t| t.saturating_duration_since(std::time::Instant::now()).as_millis() as u64).unwrap_or(0)
-        }
         /// Never blocks. True when this thread now holds the lease.
         pub fn try_take(&mut self) -> bool {
             if self.held { return true; }
@@ -121,24 +136,23 @@ mod win {
             if result == WAIT_OBJECT_0 || result == WAIT_ABANDONED {
                 self.held = true;
                 self.acquired_ms = now_ms();
-                self.settle_until = (result == WAIT_ABANDONED)
-                    .then(|| std::time::Instant::now() + std::time::Duration::from_millis(ABANDONED_SETTLE_MS));
-                if result == WAIT_ABANDONED { println!("[dock] took over the taskbar from a Dock that stopped; waiting for its buttons to come back"); }
+                // Also gate clean acquisitions: the old mutex may have disappeared after a crash.
+                self.gate.acquired();
             }
             self.held
         }
-        pub fn release(&mut self) {
-            if self.held {
-                unsafe { let _ = ReleaseMutex(self.handle); }
+        pub fn release_when_restored(&mut self, restore: impl FnOnce() -> std::io::Result<()>) {
+            self.gate.begin_release();
+            if self.held && restore().is_ok() && unsafe { ReleaseMutex(self.handle).is_ok() } {
                 self.held = false;
-                self.settle_until = None;
+                self.gate = RecoveryGate::default();
             }
         }
     }
 
     impl Drop for Lease {
         fn drop(&mut self) {
-            self.release();
+            // Do not advertise a clean handoff on an unchecked unwind. Every new holder must recover.
             unsafe { let _ = CloseHandle(self.handle); }
         }
     }
@@ -179,7 +193,7 @@ mod tests {
         assert_eq!(decide(Inputs { want: true, ..base }), Step::Acquire);
         assert_eq!(decide(Inputs { want: true, other_strip_visible: true, ..base }), Step::Wait, "an older Dock shows its strip");
         assert_eq!(decide(Inputs { want: true, held: true, ..base }), Step::Organize);
-        assert_eq!(decide(Inputs { want: true, held: true, settle_left_ms: 500, ..base }), Step::Wait);
+        assert_eq!(decide(Inputs { want: true, held: true, recovery_pending: true, ..base }), Step::Recover);
         assert_eq!(decide(Inputs { want: false, held: true, ..base }), Step::Release);
         assert_eq!(decide(Inputs { want: true, held: true, other_requested_later: true, ..base }), Step::Yield);
         assert_eq!(decide(Inputs { want: true, held: true, other_strip_visible: true, ..base }), Step::Yield);
@@ -196,6 +210,49 @@ mod tests {
         assert!(!requested_by_other(req("Dev", 5), "Public", 10), "older than our takeover");
         assert!(!requested_by_other(req("Public", 20), "Public", 10), "our own request");
         assert!(!requested_by_other(None, "Public", 10));
+    }
+
+    #[test]
+    fn recovery_acknowledgement_is_required_on_every_acquisition() {
+        let mut gate = RecoveryGate::default();
+        gate.acquired();
+        let input = |gate: &RecoveryGate| Inputs { want: true, held: true,
+            recovery_pending: gate.recovery_pending(), release_pending: gate.release_pending(), ..Inputs::default() };
+        for _ in 0..100 {
+            gate.acknowledge(Err(std::io::Error::other("restoration or state/transaction lock failed")));
+            assert_eq!(decide(input(&gate)), Step::Recover);
+        }
+        gate.acknowledge(Ok(()));
+        assert_eq!(decide(input(&gate)), Step::Organize);
+        gate.acquired();
+        assert_eq!(decide(input(&gate)), Step::Recover, "no timeout can acknowledge a new holder");
+    }
+
+    #[test]
+    fn pending_release_cannot_be_cancelled_by_enabling_again_or_recovery_ack() {
+        let mut gate = RecoveryGate::default();
+        gate.acquired();
+        gate.begin_release();
+        gate.acknowledge(Ok(()));
+        assert_eq!(decide(Inputs { want: true, held: true, release_pending: gate.release_pending(), ..Inputs::default() }), Step::Release);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn failed_restoration_keeps_mutex_until_a_successful_retry() {
+        let name = format!("Local\\UltraSuite.DockLease.RetryTest.{}", std::process::id());
+        let mut lease = Lease::open(&name).unwrap();
+        assert!(lease.try_take());
+        for failure in ["AddTab", "persistence", "state lock", "transaction lock"] {
+            lease.release_when_restored(|| Err(std::io::Error::other(failure)));
+            assert!(lease.held());
+            assert!(lease.gate.release_pending());
+            let other_name = name.clone();
+            assert!(!std::thread::spawn(move || Lease::open(&other_name).unwrap().try_take()).join().unwrap());
+        }
+        lease.release_when_restored(|| Ok(()));
+        assert!(!lease.held());
+        assert!(std::thread::spawn(move || Lease::open(&name).unwrap().try_take()).join().unwrap());
     }
 
     #[cfg(windows)]
@@ -215,12 +272,12 @@ mod tests {
             tx.send(second.try_take()).unwrap();
         });
         assert_eq!(rx.recv().unwrap(), false, "a second Dock must not organize while the first holds the lease");
-        first.release();
+        first.release_when_restored(|| Ok(()));
         go_tx.send(()).unwrap();
         assert_eq!(rx.recv().unwrap(), true, "after release the other Dock takes over");
         other.join().unwrap();
-        // the other Dock's cleanup (Drop) releases the lease, so taking it back is a clean handover with no wait
+        // Thread exit abandons an unchecked holder. Reacquisition always needs checked recovery.
         assert!(first.try_take());
-        assert_eq!(first.settle_left_ms(), 0);
+        assert!(first.gate.recovery_pending());
     }
 }
