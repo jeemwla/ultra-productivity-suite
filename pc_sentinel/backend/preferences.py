@@ -11,7 +11,11 @@ LOCK = threading.RLock()
 
 
 def defaults():
-    return {"pages": {p: None if p == "battery" else True for p in PAGES}, "router_vpn": False, "router_ping": False}
+    return {"pages": {p: None if p == "battery" else True for p in PAGES}, "router_vpn": False, "router_ping": False,
+            "hide_cooling_without_fans": False}
+
+
+BOOLEANS = ("router_vpn", "router_ping", "hide_cooling_without_fans")
 
 
 def path():
@@ -19,13 +23,13 @@ def path():
 
 
 def validate(changes, current=None):
-    if not isinstance(changes, dict) or set(changes) - {"pages", "router_vpn", "router_ping"}:
-        raise ValueError("Only pages, router_vpn and router_ping are supported.")
+    if not isinstance(changes, dict) or set(changes) - {"pages", *BOOLEANS}:
+        raise ValueError("Only pages, router_vpn, router_ping and hide_cooling_without_fans are supported.")
     value = defaults() if current is None else {**current, "pages": dict(current["pages"])}
-    for name in ("router_vpn", "router_ping"):
+    for name in BOOLEANS:
         if name in changes:
             if type(changes[name]) is not bool:
-                raise ValueError("Optional router settings must be true or false.")
+                raise ValueError("Optional settings must be true or false.")
             value[name] = changes[name]
     if "pages" in changes:
         if not isinstance(changes["pages"], dict) or set(changes["pages"]) - set(PAGES):

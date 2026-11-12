@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type='text/xsl' href='C:\battery-stylesheet.xsl'?>
+<BatteryReport xmlns="http://schemas.microsoft.com/battery/2012">
+  <ReportInformation>
+    <ReportVersion>1.1</ReportVersion>
+    <ScanTime>2026-11-12T10:05:59Z</ScanTime>
+    <ReportStartTime>2026-11-05T10:05:58Z</ReportStartTime>
+    <ReportDuration>7</ReportDuration>
+  </ReportInformation>
+  <SystemInformation>
+    <ComputerName>FIXTURE-DESKTOP</ComputerName>
+    <PlatformRole>Desktop</PlatformRole>
+    <ConnectedStandby>0</ConnectedStandby>
+  </SystemInformation>
+  <Batteries>
+  </Batteries>
+  <RuntimeEstimates>
+    <DesignCapacity><Capacity>0</Capacity><ActiveRuntime>PT0S</ActiveRuntime><ConnectedStandbyRuntime>PT0S</ConnectedStandbyRuntime></DesignCapacity>
+    <FullChargeCapacity><Capacity>0</Capacity><ActiveRuntime>PT0S</ActiveRuntime><ConnectedStandbyRuntime>PT0S</ConnectedStandbyRuntime></FullChargeCapacity>
+  </RuntimeEstimates>
+  <RecentUsage>
+    <UsageEntry Timestamp="2026-11-08T07:13:35Z" LocalTimestamp="2026-11-07T23:13:35" Duration="0" Ac="1" EntryType="Active" ChargeCapacity="0" Discharge="0" FullChargeCapacity="0" IsNextOnBattery="0" />
+    <UsageEntry Timestamp="2026-11-08T07:13:35Z" LocalTimestamp="2026-11-07T23:13:35" Duration="1577127739716" Ac="1" EntryType="Suspend" ChargeCapacity="0" Discharge="0" FullChargeCapacity="0" IsNextOnBattery="0" />
+  </RecentUsage>
+  <History>
+    <HistoryEntry StartDate="2026-04-27T00:21:00Z" EndDate="2026-05-04T00:56:00Z" DesignCapacity="0" FullChargeCapacity="0" CycleCount="0" ActiveAcTime="P1DT10H48M16S" ActiveDcTime="PT0S" CsAcTime="PT0S" CsDcTime="PT0S" ActiveDcEnergy="0" CsDcEnergy="0" BatteryChanged="0" />
+  </History>
+</BatteryReport>

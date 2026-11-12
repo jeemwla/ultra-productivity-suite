@@ -51,9 +51,12 @@ MIN_STATE, CORE_PARKING = "893dee8e-2bef-41e0-89c6-b55d0929964c", "0cc5b647-c1df
 
 def detect_device():
     """Facts from Windows APIs (language-independent). Unknown values are False/0/empty."""
-    info = {"battery": False, "modern_standby": False, "arm64": False, "hybrid": False, "cpu_name": "", "physical_cores": 0}
+    info = {"battery": False, "modern_standby": False, "arm64": False, "hybrid": False, "cpu_name": "", "physical_cores": 0,
+            "chassis_types": [], "platform_role": None}
     if os.name != "nt":
         return info
+    from .form_factor import firmware_facts
+    info.update(firmware_facts())
     import ctypes
     from ctypes import wintypes
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -122,7 +125,8 @@ def choose_profile(info):
     if "X3D" in name and info.get("physical_cores", 0) > 8:
         return mode("x3d_dual", "Ryzen X3D with two core complexes",
                     "AMD's game optimization parks the second core complex under the Balanced plan, so forcing all cores awake can lower game performance. Best performance on Balanced keeps that optimization working.")
-    if info.get("battery"):
+    from .form_factor import classify
+    if classify(info)["type"] == "laptop":
         return plan("laptop", "Laptop", "Plugged in: maximum boost and no device power saving. Minimum clock and core parking stay with Windows, because forcing them mostly adds heat and can reduce boost on laptops. Battery settings are not changed.",
                     skip=(MIN_STATE, CORE_PARKING))
     if info.get("hybrid"):

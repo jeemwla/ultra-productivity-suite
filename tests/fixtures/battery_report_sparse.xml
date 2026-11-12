@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<BatteryReport xmlns="http://schemas.microsoft.com/battery/2012">
+  <ReportInformation>
+    <ScanTime>2026-11-12T12:00:00Z</ScanTime>
+    <ReportStartTime>2026-11-12T06:00:00Z</ReportStartTime>
+  </ReportInformation>
+  <SystemInformation>
+    <PlatformRole>Mobile</PlatformRole>
+  </SystemInformation>
+  <Batteries>
+    <Battery>
+      <Id>NOCYCLE</Id>
+      <Manufacturer></Manufacturer>
+      <Chemistry></Chemistry>
+      <DesignCapacity>50000</DesignCapacity>
+      <FullChargeCapacity></FullChargeCapacity>
+    </Battery>
+  </Batteries>
+  <RecentUsage>
+    <UsageEntry Timestamp="2026-11-12T07:00:00Z" Ac="0" EntryType="Active" ChargeCapacity="0" FullChargeCapacity="0" />
+    <UsageEntry Timestamp="2026-11-12T08:00:00Z" Ac="0" EntryType="Active" ChargeCapacity="0" FullChargeCapacity="0" />
+  </RecentUsage>
+  <History>
+    <HistoryEntry StartDate="2026-11-01T00:00:00Z" EndDate="2026-11-08T00:00:00Z" DesignCapacity="50000" FullChargeCapacity="0" CycleCount="0" ActiveDcTime="PT0S" />
+  </History>
+</BatteryReport>

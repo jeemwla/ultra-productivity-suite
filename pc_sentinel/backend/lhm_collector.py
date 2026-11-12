@@ -256,7 +256,8 @@ def cooling_report(groups: List[dict]) -> dict:
                 "spinning": s["value"] > 50,
             })
     fans.sort(key=lambda f: (f["location"] != "Motherboard header", f["name"]))
-    return {"fans": fans, "fancontrol": bool(fc), "fancontrol_path": _FC_CACHE.get("path") if fc else None}
+    return {"fans": fans, "controls": len(controls), "has_fan_data": bool(fans or controls),
+            "fancontrol": bool(fc), "fancontrol_path": _FC_CACHE.get("path") if fc else None}
 
 
 def power_report(groups: List[dict], summary: dict) -> dict:

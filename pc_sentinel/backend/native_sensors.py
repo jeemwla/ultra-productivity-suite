@@ -133,9 +133,7 @@ def device_info() -> dict:
         d = json.loads(raw)
     except Exception:
         d = {}
-    chassis = d.get("chassis") or []
-    laptop_types = {8, 9, 10, 11, 12, 14, 18, 21, 30, 31, 32}
-    is_laptop = bool(d.get("battery")) and (bool(set(chassis) & laptop_types) or (d.get("system") or {}).get("PCSystemType") == 2)
+    form = device_form(d)
     gpus = [g.get("Name") for g in (d.get("gpus") or []) if g.get("Name") and "basic display" not in g.get("Name", "").lower()]
     _info = {
         **computer_identity(),
@@ -144,10 +142,30 @@ def device_info() -> dict:
         "base_mhz": (d.get("cpu") or {}).get("MaxClockSpeed"),
         "gpus": gpus, "board": " ".join(filter(None, [(d.get("board") or {}).get("Manufacturer"), (d.get("board") or {}).get("Product")])).strip(),
         "maker": (d.get("system") or {}).get("Manufacturer"), "model": (d.get("system") or {}).get("Model"),
-        "type": "laptop" if is_laptop else "desktop", "has_battery": bool(d.get("battery")),
+        "type": form["type"], "form_basis": form["basis"], "has_battery": form["has_battery"],
         "os": f"{(d.get('os') or {}).get('Caption', 'Windows')} (build {(d.get('os') or {}).get('BuildNumber', '?')})",
     }
     return _info
+
+
+def device_form(wmi: dict, facts: Optional[dict] = None) -> dict:
+    """The shared laptop/desktop decision (form_factor.classify) on Windows API facts, with WMI as a fallback."""
+    from .form_factor import classify
+    if facts is None:
+        try:
+            from .max_power import detect_device
+            facts = detect_device()
+        except Exception:
+            facts = {}
+    facts = dict(facts or {})
+    wmi_chassis = [c for c in (wmi.get("chassis") or []) if isinstance(c, int)]
+    if not facts.get("chassis_types") and wmi_chassis:
+        facts["chassis_types"] = wmi_chassis
+    if facts.get("platform_role") is None and (wmi.get("system") or {}).get("PCSystemType") in (1, 2, 3, 4, 5, 6, 7):
+        facts["platform_role"] = (wmi.get("system") or {}).get("PCSystemType")
+    has_battery = bool(facts.get("battery")) or bool(wmi.get("battery"))
+    facts["battery"] = has_battery
+    return {**classify(facts), "has_battery": has_battery}
 
 
 def _is_integrated(name: str) -> bool:

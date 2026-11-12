@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type='text/xsl' href='C:\battery-stylesheet.xsl'?>
+<BatteryReport xmlns="http://schemas.microsoft.com/battery/2012">
+  <ReportInformation>
+    <ReportGuid>00000000-0000-0000-0000-000000000001</ReportGuid>
+    <ReportVersion>1.1</ReportVersion>
+    <ScanTime>2026-11-12T12:00:00Z</ScanTime>
+    <LocalScanTime>2026-11-12T04:00:00</LocalScanTime>
+    <ReportStartTime>2026-11-09T12:00:00Z</ReportStartTime>
+    <LocalReportStartTime>2026-11-09T04:00:00</LocalReportStartTime>
+    <ReportDuration>3</ReportDuration>
+    <UtcOffset>-8:00</UtcOffset>
+  </ReportInformation>
+  <SystemInformation>
+    <ComputerName>FIXTURE-LAPTOP</ComputerName>
+    <SystemManufacturer>Fixture Maker</SystemManufacturer>
+    <SystemProductName>Fixture 14</SystemProductName>
+    <PlatformRole>Mobile</PlatformRole>
+    <ConnectedStandby>1</ConnectedStandby>
+  </SystemInformation>
+  <Batteries>
+    <Battery>
+      <Id>FX76</Id>
+      <Manufacturer>FixtureCell</Manufacturer>
+      <SerialNumber>123</SerialNumber>
+      <ManufactureDate />
+      <Chemistry>LIon</Chemistry>
+      <LongTerm>1</LongTerm>
+      <RelativeCapacity>0</RelativeCapacity>
+      <DesignCapacity>76000</DesignCapacity>
+      <FullChargeCapacity>68400</FullChargeCapacity>
+      <CycleCount>142</CycleCount>
+    </Battery>
+  </Batteries>
+  <RuntimeEstimates>
+    <DesignCapacity><Capacity>76000</Capacity><ActiveRuntime>PT7H</ActiveRuntime><ConnectedStandbyRuntime>P10D</ConnectedStandbyRuntime></DesignCapacity>
+    <FullChargeCapacity><Capacity>68400</Capacity><ActiveRuntime>PT6H18M</ActiveRuntime><ConnectedStandbyRuntime>P9D</ConnectedStandbyRuntime></FullChargeCapacity>
+  </RuntimeEstimates>
+  <RecentUsage>
+    <UsageEntry Timestamp="2026-11-09T13:00:00Z" LocalTimestamp="2026-11-09T05:00:00" Duration="0" Ac="1" EntryType="Active" ChargeCapacity="68400" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="1" />
+    <UsageEntry Timestamp="2026-11-09T14:00:00Z" LocalTimestamp="2026-11-09T06:00:00" Duration="0" Ac="0" EntryType="Active" ChargeCapacity="68400" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="0" />
+    <UsageEntry Timestamp="2026-11-09T16:00:00Z" LocalTimestamp="2026-11-09T08:00:00" Duration="0" Ac="0" EntryType="ConnectedStandby" ChargeCapacity="47880" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="0" />
+    <UsageEntry Timestamp="2026-11-10T00:00:00Z" LocalTimestamp="2026-11-09T16:00:00" Duration="0" Ac="1" EntryType="Active" ChargeCapacity="44460" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="0" />
+    <UsageEntry Timestamp="2026-11-11T10:00:00Z" LocalTimestamp="2026-11-11T02:00:00" Duration="0" Ac="0" EntryType="Active" ChargeCapacity="68400" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="0" />
+    <UsageEntry Timestamp="2026-11-11T13:00:00Z" LocalTimestamp="2026-11-11T05:00:00" Duration="0" Ac="1" EntryType="Active" ChargeCapacity="34200" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="0" />
+    <UsageEntry Timestamp="2026-11-12T12:00:00Z" LocalTimestamp="2026-11-12T04:00:00" Duration="0" Ac="1" EntryType="ReportGenerated" ChargeCapacity="68400" Discharge="0" FullChargeCapacity="68400" IsNextOnBattery="0" />
+  </RecentUsage>
+  <History>
+    <HistoryEntry StartDate="2026-10-01T00:00:00Z" LocalStartDate="2026-09-30T17:00:00" EndDate="2026-10-08T00:00:00Z" LocalEndDate="2026-10-07T17:00:00" DesignCapacity="76000" FullChargeCapacity="70300" CycleCount="120" ActiveAcTime="P1DT2H" ActiveDcTime="PT14H" CsAcTime="PT0S" CsDcTime="P1D" ActiveDcEnergy="0" CsDcEnergy="0" EstimatedDesignActiveTime="PT7H" EstimatedFullChargeActiveTime="PT6H30M" EstimatedDesignCsTime="P10D" EstimatedFullChargeCsTime="P9D" BatteryChanged="0" />
+    <HistoryEntry StartDate="2026-10-08T00:00:00Z" LocalStartDate="2026-10-07T17:00:00" EndDate="2026-11-05T00:00:00Z" LocalEndDate="2026-11-04T16:00:00" DesignCapacity="76000" FullChargeCapacity="68400" CycleCount="142" ActiveAcTime="P4D" ActiveDcTime="P2DT8H" CsAcTime="PT0S" CsDcTime="P3D" ActiveDcEnergy="0" CsDcEnergy="0" EstimatedDesignActiveTime="PT7H" EstimatedFullChargeActiveTime="PT6H18M" EstimatedDesignCsTime="P10D" EstimatedFullChargeCsTime="P9D" BatteryChanged="0" />
+  </History>
+</BatteryReport>

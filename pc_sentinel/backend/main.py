@@ -75,6 +75,17 @@ async def serve_dashboard():
     return FileResponse(os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html"), headers={"Cache-Control": "no-cache"})
 
 
+UI_SCRIPTS = {"battery_view.js", "edit_layout.js"}
+
+
+@app.get("/ui/{name}", include_in_schema=False)
+async def serve_ui_script(name: str):
+    if name not in UI_SCRIPTS:
+        raise HTTPException(404, "Not found")
+    return FileResponse(os.path.join(os.path.dirname(__file__), "..", "frontend", name), media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/snapshot")
 async def get_full_snapshot():
     return latest

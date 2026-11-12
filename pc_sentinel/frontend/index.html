@@ -294,6 +294,67 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 .modal textarea,.modal input[type=text]{width:100%;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);padding:10px}
 .modal textarea{min-height:110px;resize:vertical}
 
+/* ---------- Overview layout grid and edit mode ---------- */
+.ov-bar{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px;min-height:36px}
+.ov-bar .ov-hint{margin-right:auto}
+.ov-grid{--ov-row:64px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-auto-rows:minmax(var(--ov-row),auto);gap:16px;position:relative}
+.ov-item{position:relative;min-width:0;display:flex;flex-direction:column;border-radius:var(--r)}
+.ov-item>.card{flex:1;display:flex;flex-direction:column;min-height:0}
+.ov-item>.card>.cb{flex:1;min-height:0}
+.ov-item>a.card{color:inherit}
+.ov-grid.editing .ov-item{cursor:grab;touch-action:none;user-select:none}
+.ov-grid.editing .ov-item>*:not(.ov-resize){pointer-events:none}
+.ov-grid.editing .ov-item>.card{box-shadow:0 0 0 2px var(--accent-soft),0 6px 18px rgba(0,0,0,.08);border-color:var(--accent)}
+.ov-grid.editing .ov-item:not(.dragging):not(.resizing){animation:ov-jiggle .9s ease-in-out infinite}
+.ov-grid.editing .ov-item:nth-child(2n){animation-delay:-.45s}
+.ov-grid.editing .ov-item:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.ov-item.dragging{z-index:5;cursor:grabbing;transition:none}
+.ov-item.dragging>.card{box-shadow:0 18px 40px rgba(0,0,0,.22);border-color:var(--accent)}
+.ov-item.resizing{z-index:4}
+.ov-resize{position:absolute;right:4px;bottom:4px;width:22px;height:22px;border-radius:7px;cursor:nwse-resize;z-index:2;background:var(--accent);opacity:.9;
+  -webkit-mask:linear-gradient(135deg,transparent 52%,#000 52%,#000 60%,transparent 60%,transparent 70%,#000 70%,#000 78%,transparent 78%);
+  mask:linear-gradient(135deg,transparent 52%,#000 52%,#000 60%,transparent 60%,transparent 70%,#000 70%,#000 78%,transparent 78%)}
+@keyframes ov-jiggle{0%,100%{rotate:-.35deg}50%{rotate:.35deg}}
+@media (prefers-reduced-motion:reduce){.ov-grid.editing .ov-item{animation:none!important}}
+:root[data-motion=off] .ov-grid.editing .ov-item{animation:none!important}
+@media (max-width:1200px){.ov-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media (max-width:760px){.ov-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ---------- Battery page ---------- */
+.bt-hero{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.bt-ring{position:relative;width:140px;height:140px}
+.bt-ring-c{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.bt-pct{font:600 34px/1 var(--font-display)}.bt-pct small{font-size:14px}
+.bt-verdict{font:600 18px var(--font-display)}
+.bt-stat{background:var(--surface-2);border-radius:12px;padding:12px 14px;min-width:0}
+.bt-stat .big small{font-size:13px;color:var(--ink-3r);font-weight:600}
+.nr{font:500 14px var(--font);color:var(--ink-3r)}
+
+/* ---------- Settings gear and Settings page ---------- */
+.side .foot .nav.gear{width:34px;height:34px;min-width:34px;padding:0;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);display:inline-grid;place-items:center;transition:transform .15s,border-color .15s,color .15s,background .15s}
+.side .foot .nav.gear svg{width:18px;height:18px;opacity:1;transition:transform .45s var(--ease)}
+.side .foot .nav.gear:hover{color:var(--ink);border-color:var(--line-strong);transform:translateY(-1px)}
+.side .foot .nav.gear:hover svg{transform:rotate(60deg)}
+.side .foot .nav.gear[aria-current=page]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+@media (prefers-reduced-motion:reduce){.side .foot .nav.gear svg{transition:none}.side .foot .nav.gear:hover svg{transform:none}}
+#p-settings .card .ch h2{display:flex;align-items:center;gap:10px}
+#p-settings .card .ch h2 .sic{width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none}
+#p-settings .card .ch h2 .sic svg{width:17px;height:17px}
+#p-settings .settings-row{padding:12px 10px;margin:0 -10px;border-radius:10px;border-bottom:0;transition:background .15s}
+#p-settings .settings-row+.settings-row{box-shadow:0 -1px 0 var(--line)}
+#p-settings .settings-row:hover{background:var(--surface-2)}
+#p-settings .settings-row label{font-weight:600;font-size:14px}
+#p-settings .settings-row label .muted{font-weight:400}
+#p-settings .settings-row select{height:34px;border-radius:9px;background:var(--surface-2);border-color:var(--line-strong);font-weight:600;padding:0 10px}
+#p-settings .settings-row input[type=checkbox]{appearance:none;-webkit-appearance:none;width:42px;height:24px;border-radius:999px;background:var(--line-strong);position:relative;cursor:pointer;transition:background .2s;flex:none;margin:0}
+#p-settings .settings-row input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s var(--ease)}
+#p-settings .settings-row input[type=checkbox]:checked{background:var(--accent)}
+#p-settings .settings-row input[type=checkbox]:checked::after{transform:translateX(18px)}
+#p-settings .settings-row input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#p-settings fieldset:disabled .settings-row{opacity:.6}
+#p-settings .settings-actions .btn{min-width:150px}
+.cool-note .act{display:flex;gap:8px;flex-wrap:wrap}
 @media (max-width:1200px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g21,.g3{grid-template-columns:1fr}.st{grid-template-columns:1fr}}
 @media (max-width:760px){
   body{overflow:auto}
@@ -341,7 +402,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
       <div><b>PC Sentinel</b><small id="brand-sub">Your PC, at a glance</small></div></div>
     <nav id="navs" style="display:contents"></nav>
     <div class="spacer"></div>
-    <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span><button class="nav" id="nav-settings" data-p="settings" aria-label="Settings / Extras" title="Settings / Extras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+    <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span><button class="nav gear" id="nav-settings" data-p="settings" aria-label="Settings / Extras" title="Settings / Extras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
   </aside>
   <main class="main" id="main">
     <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
@@ -351,19 +412,20 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 
       <!-- OVERVIEW -->
       <section class="page" id="p-overview">
+        <div class="ov-bar"><span class="muted ov-hint" id="ov-hint" hidden>Drag a card to move it; drag its corner to resize. With the keyboard: Tab to a card, arrow keys move it, Shift with arrow keys resizes it, Escape finishes.</span><button class="btn" type="button" id="ov-reset" hidden>Reset layout</button><button class="btn" type="button" id="ov-edit" aria-pressed="false">Edit layout</button></div>
         <div class="banner good" id="health" hidden><div class="ic" id="health-ic">✓</div><div><div class="t" id="health-t">All good</div><div class="s" id="health-s"></div></div></div>
-        <div class="grid g4" id="tiles"></div>
-        <div class="grid g21 mt">
-          <section class="card"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><button class="btn" type="button" id="apps-more" aria-pressed="false">Show all apps</button><input id="apps-search" type="search" aria-label="Find an app or process" placeholder="Find app, filename or path" hidden></div><p class="muted" id="apps-note" style="margin-bottom:10px"></p><div class="rows process-list" id="apps"></div><button class="btn" type="button" id="apps-page-more" style="margin-top:12px" hidden>Show 40 more groups</button></div></section>
-          <section class="card"><div class="ch"><h2>Quick controls</h2><span class="sub">Changes apply instantly</span></div><div class="cb">
+        <div class="ov-grid" id="ov-grid">
+          <div class="ov-item" data-card="cpu" data-label="Processor" id="ovc-cpu"></div><div class="ov-item" data-card="gpu" data-label="Graphics" id="ovc-gpu"></div><div class="ov-item" data-card="ram" data-label="Memory" id="ovc-ram"></div><div class="ov-item" data-card="pw" data-label="System power" id="ovc-pw"></div>
+          <section class="card ov-item" data-card="apps" data-label="Top apps"><div class="ch"><h2>Top apps</h2><div class="seg" id="apps-seg"><button data-k="cpu" aria-pressed="true">CPU</button><button data-k="gpu" aria-pressed="false">GPU</button><button data-k="mem" aria-pressed="false">Memory</button></div></div><div class="cb"><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><button class="btn" type="button" id="apps-more" aria-pressed="false">Show all apps</button><input id="apps-search" type="search" aria-label="Find an app or process" placeholder="Find app, filename or path" hidden></div><p class="muted" id="apps-note" style="margin-bottom:10px"></p><div class="rows process-list" id="apps"></div><button class="btn" type="button" id="apps-page-more" style="margin-top:12px" hidden>Show 40 more groups</button></div></section>
+          <section class="card ov-item" data-card="quick" data-label="Quick controls"><div class="ch"><h2>Quick controls</h2><span class="sub">Changes apply instantly</span></div><div class="cb">
             <div class="muted" style="margin-bottom:6px">Power plan</div><div class="seg" id="qc-plan" style="margin-bottom:16px"></div>
             <div id="qc-disp"></div></div></section>
+          <section class="card ov-item" data-card="drives" data-label="Drives"><div class="ch"><h2>Drives</h2><a class="sub" href="#storage">Details</a></div><div class="cb" id="ov-drives"></div></section>
+          <section class="card ov-item" data-card="net" data-label="Network"><div class="ch"><h2>Network</h2><a class="sub" href="#network">Details</a></div><div class="cb" id="ov-net"></div></section>
+          <section class="card ov-item" data-card="cool" data-label="Cooling"><div class="ch"><h2>Cooling</h2><a class="sub" href="#cooling">Details</a></div><div class="cb" id="ov-cool"></div></section>
+          <section class="card ov-item" data-card="battery" data-label="Battery"><div class="ch"><h2>Battery</h2><a class="sub" href="#battery">Details</a></div><div class="cb" id="ov-bat"></div></section>
         </div>
-        <div class="grid g3 mt">
-          <section class="card"><div class="ch"><h2>Drives</h2><a class="sub" href="#storage">Details</a></div><div class="cb" id="ov-drives"></div></section>
-          <section class="card"><div class="ch"><h2>Network</h2><a class="sub" href="#network">Details</a></div><div class="cb" id="ov-net"></div></section>
-          <section class="card"><div class="ch"><h2>Cooling</h2><a class="sub" href="#cooling">Details</a></div><div class="cb" id="ov-cool"></div></section>
-        </div>
+        <div class="sr-only" aria-live="polite" id="ov-live"></div>
       </section>
 
       <!-- PERFORMANCE -->
@@ -461,15 +523,19 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 
       <section class="page" id="p-settings">
         <fieldset id="settings-fields" disabled style="border:0;min-width:0"><div class="grid g2">
-          <section class="card"><div class="ch"><h2>Your pages</h2><span class="sub">Choose what appears in navigation</span></div><div class="cb">
+          <section class="card"><div class="ch"><h2><span class="sic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg></span>Your pages</h2><span class="sub">Choose what appears in navigation</span></div><div class="cb">
             <p class="muted">Settings / Extras always stays available. Keep at least one page visible. Hiding a page does not disable hardware monitoring or stop an active speed test.</p>
             <div id="settings-pages"></div>
           </div></section>
-          <section class="card"><div class="ch"><h2>Optional router features</h2><span class="sub">Off by default</span></div><div class="cb">
+          <section class="card"><div class="ch"><h2><span class="sic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 16.5h.01M12 13V8M8.5 9.5a5 5 0 017 0"/></svg></span>Optional router features</h2><span class="sub">Off by default</span></div><div class="cb">
             <p class="muted">These controls are for a separately configured router. A normal Windows VPN does not need them. Enabling controls does not turn a VPN connection on or off.</p>
             <div class="settings-row"><label for="extra-vpn">Show router VPN controls<br><span class="muted">Enables status polling and the optional router controls.</span></label><input type="checkbox" id="extra-vpn"></div>
             <div class="settings-row"><label for="extra-router-ping">Monitor router latency<br><span class="muted">Includes the configured router among latency targets.</span></label><input type="checkbox" id="extra-router-ping"></div>
             <p class="muted mt">No router password or address is saved by this page. Configuration is managed separately.</p>
+          </div></section>
+          <section class="card"><div class="ch"><h2><span class="sic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="10" rx="2"/><path d="M2 19h20"/></svg></span>Laptop and desktop</h2><span class="sub" id="settings-form">Detecting this PC…</span></div><div class="cb">
+            <p class="muted">Pages adapt to this PC automatically: Battery appears when a battery is reported, and power supply sizing appears only on desktops.</p>
+            <div class="settings-row"><label for="extra-hide-cooling">Hide Cooling when no fans are reported<br><span class="muted">Many laptops control their fans in firmware and report no fan speeds to Windows. The page comes back on its own if fans appear.</span></label><input type="checkbox" id="extra-hide-cooling"></div>
           </div></section>
         </div></fieldset>
         <section class="card mt"><div class="cb"><div class="settings-actions"><button class="btn primary" type="button" id="settings-save" disabled>Save settings</button><button class="btn" type="button" id="settings-reset" disabled>Reset draft to defaults</button></div><p class="muted mt" role="status" id="settings-status">Loading settings from this PC…</p><p class="muted mt">Saved on this PC and shared by its Sentinel windows. Appearance and motion are available from the palette button next to Settings.</p></div></section>
@@ -547,29 +613,30 @@ const PAGES = [
 ];
 $("navs").innerHTML = PAGES.filter(p=>p[0]!=="settings").map(([id, t, , ic]) => `<button class="nav" data-p="${id}" id="nav-${id}" ${id === "battery" ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${t}</button>`).join("");
 /* ---------- per-PC preferences ---------- */
-function defaultPreferences(){return {pages:Object.fromEntries(PAGES.filter(p=>p[0]!=="settings").map(([id])=>[id,id==="battery"?null:true])),router_vpn:false,router_ping:false,revision:"0"};}
-function pageVisible(id,settings,hasBattery){return id==="settings"||settings.pages[id]===true||(id==="battery"&&settings.pages.battery===null&&hasBattery);}
+function defaultPreferences(){return {pages:Object.fromEntries(PAGES.filter(p=>p[0]!=="settings").map(([id])=>[id,id==="battery"?null:true])),router_vpn:false,router_ping:false,hide_cooling_without_fans:false,revision:"0"};}
+function pageVisible(id,settings,hasBattery,hasFans){if(id==="cooling"&&settings.hide_cooling_without_fans===true&&hasFans===false)return false;return id==="settings"||settings.pages[id]===true||(id==="battery"&&settings.pages.battery===null&&hasBattery);}
+function hasFanData(){const c=snap&&snap.hardware&&snap.hardware.cooling;if(!c||!snap.hardware.live)return undefined;return c.has_fan_data!==undefined?!!c.has_fan_data:!!(c.fans&&c.fans.length);}
 function freshPreferences(current,incoming){try{return BigInt(incoming.revision||"0")>=BigInt(current.revision||"0");}catch{return false;}}
 let prefs=defaultPreferences(),preferencesDirty=false,preferencesEditing=0,preferencesSaving=false,preferencesReady=false;
 $("settings-fields").disabled=true;$("settings-save").disabled=true;$("settings-reset").disabled=true;
 $("settings-pages").innerHTML=PAGES.filter(p=>p[0]!=="settings").map(([id,title])=>id==="battery"?`<div class="settings-row"><label for="setting-page-battery">Battery<br><span class="muted">Automatic follows battery detection; Show also works on desktops.</span></label><select id="setting-page-battery"><option value="auto">Automatic</option><option value="show">Show</option><option value="hide">Hide</option></select></div>`:`<div class="settings-row"><label for="setting-page-${id}">${title}</label><input type="checkbox" id="setting-page-${id}"></div>`).join("");
 function fillPreferences(value){
   for(const [id] of PAGES.filter(p=>p[0]!=="settings"))if(id==="battery")$("setting-page-battery").value=value.pages.battery===null?"auto":value.pages.battery?"show":"hide";else $("setting-page-"+id).checked=value.pages[id];
-  $("extra-vpn").checked=value.router_vpn;$("extra-router-ping").checked=value.router_ping;
+  $("extra-vpn").checked=value.router_vpn;$("extra-router-ping").checked=value.router_ping;$("extra-hide-cooling").checked=value.hide_cooling_without_fans===true;
 }
 function applyPreferences(){
   const hasBattery=!!(snap&&snap.hardware.device?.has_battery);
-  for(const [id] of PAGES)$("nav-"+id).hidden=!pageVisible(id,prefs,hasBattery);
+  const fans=hasFanData();for(const [id] of PAGES)$("nav-"+id).hidden=!pageVisible(id,prefs,hasBattery,fans);
   $("vpn-card").hidden=!prefs.router_vpn;
-  if(!pageVisible(page,prefs,hasBattery))go(PAGES.find(([id])=>id!=="settings"&&pageVisible(id,prefs,hasBattery))?.[0]||"settings");
+  if(!pageVisible(page,prefs,hasBattery,fans))go(PAGES.find(([id])=>id!=="settings"&&pageVisible(id,prefs,hasBattery))?.[0]||"settings");
 }
 function acceptPreferences(value){
   if(!value||!freshPreferences(prefs,value))return;
   prefs=value;preferencesReady=true;$("settings-fields").disabled=false;if(!preferencesSaving){$("settings-save").disabled=false;$("settings-reset").disabled=false;$("settings-save").textContent="Save settings";}if(!preferencesDirty)fillPreferences(prefs);applyPreferences();
 }
 async function loadPreferences(){try{acceptPreferences(await api("/api/preferences"));if(!preferencesDirty)$("settings-status").textContent=prefs.storage_status==="ok"?"Saved settings loaded from this PC.":prefs.storage_status==="invalid_or_unavailable"?"Saved settings could not be read. Safe defaults are active; Save will replace the invalid record.":"Default pages are shown. Router extras are off until you choose them.";}catch{if(!preferencesReady){$("settings-status").textContent="Settings could not be loaded. Retry loading before changing them.";$("settings-save").disabled=false;$("settings-save").textContent="Retry loading settings";}}}
-function preferenceDraft(){const value={pages:{},router_vpn:$("extra-vpn").checked,router_ping:$("extra-router-ping").checked};for(const [id] of PAGES.filter(p=>p[0]!=="settings"))value.pages[id]=id==="battery"?({auto:null,show:true,hide:false}[$("setting-page-battery").value]):$("setting-page-"+id).checked;return value;}
-for(const el of document.querySelectorAll('#settings-pages input,#settings-pages select,#extra-vpn,#extra-router-ping'))el.addEventListener('change',()=>{preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Unsaved changes. Choose Save settings to apply.";});
+function preferenceDraft(){const value={pages:{},router_vpn:$("extra-vpn").checked,router_ping:$("extra-router-ping").checked,hide_cooling_without_fans:$("extra-hide-cooling").checked};for(const [id] of PAGES.filter(p=>p[0]!=="settings"))value.pages[id]=id==="battery"?({auto:null,show:true,hide:false}[$("setting-page-battery").value]):$("setting-page-"+id).checked;return value;}
+for(const el of document.querySelectorAll('#settings-pages input,#settings-pages select,#extra-vpn,#extra-router-ping,#extra-hide-cooling'))el.addEventListener('change',()=>{preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Unsaved changes. Choose Save settings to apply.";});
 $("settings-save").onclick=async()=>{
   if(preferencesSaving)return;if(!preferencesReady){await loadPreferences();return;}const draft=preferenceDraft(),edit=preferencesEditing;
   if(!Object.values(draft.pages).some(v=>v===true)){$("settings-status").textContent="Keep at least one page visible before saving.";return;}
@@ -583,7 +650,8 @@ fillPreferences(prefs);
 /* ---------- navigation actions ---------- */
 let page = "overview";
 function go(p, push = true){
-  if (!PAGES.some(x => x[0] === p)||!pageVisible(p,prefs,!!(snap&&snap.hardware.device?.has_battery))) p = PAGES.find(([id])=>id!=="settings"&&pageVisible(id,prefs,!!(snap&&snap.hardware.device?.has_battery)))?.[0]||"settings"; page = p;
+  const hb=!!(snap&&snap.hardware.device?.has_battery),hf=hasFanData();
+  if (!PAGES.some(x => x[0] === p)||!pageVisible(p,prefs,hb,hf)) p = PAGES.find(([id])=>id!=="settings"&&pageVisible(id,prefs,hb,hf))?.[0]||"settings"; page = p;
   document.querySelectorAll(".page").forEach(s => s.classList.toggle("active", s.id === "p-" + p));
   document.querySelectorAll(".nav").forEach(b => b.setAttribute("aria-current", b.dataset.p === p ? "page" : "false"));
   const meta = PAGES.find(x => x[0] === p); $("pg-title").textContent = meta[1]; $("pg-sub").textContent = meta[2]; document.title = `${meta[1]} · PC Sentinel`;
@@ -648,10 +716,10 @@ function drawTrend(id, arr){ const a = arr.slice(-60).filter(v => v != null); if
   $("tl-" + id).setAttribute("d", d); $("ta-" + id).setAttribute("d", d + ` L${pts[pts.length - 1][0]},42 L${pts[0][0]},42 Z`); }
 function buildTiles(){ if ($("t-cpu")) return; const tile = (id, l, u, c, href) => `<a class="card tile" href="#${href}" style="color:inherit"><div class="l"><span>${l}</span><span id="t-${id}-sub"></span></div>
   <div class="v"><span class="num" id="t-${id}">–</span><small id="t-${id}-u">${u}</small></div><div class="m num" id="t-${id}-m"></div>${trend(id, c)}<div class="status good" id="t-${id}-st">Normal</div></a>`;
-  $("tiles").innerHTML = tile("cpu", "Processor", "°C", "var(--series)", "performance") + tile("gpu", "Graphics", "°C", "var(--series-2)", "performance") + tile("ram", "Memory", "%", "var(--good)", "performance") + tile("pw", "System power", "W", "var(--warning)", "power"); }
+  $("ovc-cpu").innerHTML = tile("cpu", "Processor", "°C", "var(--series)", "performance"); $("ovc-gpu").innerHTML = tile("gpu", "Graphics", "°C", "var(--series-2)", "performance"); $("ovc-ram").innerHTML = tile("ram", "Memory", "%", "var(--good)", "performance"); $("ovc-pw").innerHTML = tile("pw", "System power", "W", "var(--warning)", "power"); }
 function setSt(id, l, t){ const e = $(id); e.className = "status " + l; e.textContent = t; }
 function renderOverview(){
-  const hw = snap.hardware, s = hw.summary || {}; buildTiles();
+  const hw = snap.hardware, s = hw.summary || {}; buildTiles(); setupOverviewEditor();
   const h = s.health || { score: 100, label: "All good", notes: [] }, hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
   $("health").hidden = false; $("health").className = `banner ${hl}`; $("health-ic").textContent = hl === "good" ? "✓" : "!"; $("health-t").textContent = h.label; $("health-s").textContent = (h.notes || []).join(" · ");
   const cpuT = s.cpu_temp; $("t-cpu-sub").textContent = s.cpu_name || "";
@@ -668,7 +736,29 @@ function renderOverview(){
   ["cpu", "gpu", "ram", "pw"].forEach(k => drawTrend(k, k === "cpu" && cpuT != null ? H.cput : k === "gpu" && gT != null ? H.gput : H[k]));
   const dr = hw.drives || []; $("ov-drives").innerHTML = dr.length ? dr.map(d => `<div class="mini"><span>${esc(d.name)}</span><span class="pill ${d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical"}">${esc(d.health)}${d.life_left != null ? ` · ${d.life_left}% life` : ""}</span></div>`).join("") : `<div class="muted">No drives reported</div>`;
   const net = snap.network || {}; $("ov-net").innerHTML = `<div class="big num">${net.primary_ping_ms == null ? "–" : n0(net.primary_ping_ms)}<small>ms ping</small></div><div class="muted">${net.online ? "Online" : "Offline"} · jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}${snap.vpn && snap.vpn.vpn_enabled ? " · VPN on" : ""}</div>`;
-  const fans = (hw.cooling || {}).fans || []; $("ov-cool").innerHTML = fans.length ? `<div class="big num">${fans.filter(f => f.spinning).length}<small>of ${fans.length} fans spinning</small></div><div class="muted">fastest ${n0(Math.max(...fans.map(f => f.rpm)))} RPM${s.storage_max_temp != null ? ` · hottest drive ${n0(s.storage_max_temp)}°C` : ""}</div>` : `<div class="muted">Fan speeds need full sensors (LibreHardwareMonitor).</div>`;
+  const fans = (hw.cooling || {}).fans || []; $("ov-cool").innerHTML = fans.length ? `<div class="big num">${fans.filter(f => f.spinning).length}<small>of ${fans.length} fans spinning</small></div><div class="muted">fastest ${n0(Math.max(...fans.map(f => f.rpm)))} RPM${s.storage_max_temp != null ? ` · hottest drive ${n0(s.storage_max_temp)}°C` : ""}</div>` : hasFanData() === false && hw.device?.type === "laptop" ? `<div class="muted">This laptop reports no fan speeds to Windows. Its firmware or the maker's app controls the fans.</div>` : `<div class="muted">Fan speeds need full sensors (LibreHardwareMonitor).</div>`;
+  renderOverviewBattery(); if (ovEditor) ovEditor.apply(false);
+}
+let ovEditor = null, packAt = 0;
+function ovCardVisible(id){ const d = snap && snap.hardware.device || {};
+  if (id === "battery") return pageVisible("battery", prefs, !!d.has_battery);
+  if (id === "cool") return pageVisible("cooling", prefs, !!d.has_battery, hasFanData());
+  return true; }
+function renderOverviewBattery(){
+  const d = snap && snap.hardware.device || {}; if (!d.has_battery) return;
+  if (Date.now() - packAt > 30000 && page === "overview") { packAt = Date.now(); api("/api/laptop/battery").then(v => { pack = v; renderOverviewBattery(); }).catch(() => {}); }
+  const p = pack && pack.has_battery ? pack : null, BV = window.BatteryView;
+  if (!p) { $("ov-bat").innerHTML = `<div class="muted">Reading the battery…</div>`; return; }
+  const rate = typeof p.rate_w === "number" ? (p.charging ? `charging at ${n1(Math.abs(p.rate_w))} W` : p.rate_w < 0 ? `using ${n1(-p.rate_w)} W` : `${n1(p.rate_w)} W`) : "power not reported";
+  const time = p.charging && p.minutes_to_full != null ? `full in ${BV.hm(p.minutes_to_full)}` : !p.plugged_in && p.minutes_left != null ? `${BV.hm(p.minutes_left)} left` : "";
+  $("ov-bat").innerHTML = `<div class="big num">${p.charge_pct == null ? "–" : n0(p.charge_pct)}<small>% · ${esc(p.state || "state unavailable")}</small></div><div class="muted">${[rate, time, p.health_pct != null ? `health ${n1(p.health_pct)}%` : null].filter(Boolean).map(esc).join(" · ")}</div>`; }
+function setupOverviewEditor(){
+  if (ovEditor || !window.OverviewLayout) return;
+  ovEditor = OverviewLayout.createEditor({ grid: $("ov-grid"), live: $("ov-live"), motionOff, isVisible: ovCardVisible,
+    load: () => store.get("overviewLayout", null), save: v => store.set("overviewLayout", v),
+    onMode: on => { $("ov-edit").textContent = on ? "Done" : "Edit layout"; $("ov-edit").setAttribute("aria-pressed", String(on)); $("ov-reset").hidden = !on; $("ov-hint").hidden = !on; $("ov-edit").classList.toggle("primary", on); } });
+  $("ov-edit").onclick = () => { ovEditor.setEditing(!ovEditor.editing); if (ovEditor.editing) $("ov-grid").querySelector(".ov-item:not([hidden])")?.focus(); };
+  $("ov-reset").onclick = () => ovEditor.reset();
 }
 let appsKey="cpu",appsExpanded=false,appsLimit=40,appsGeneration=0,lastAppsRequest=0,appsError="",appsOrder=[];
 let apps=null;const processDetails=new Map();const COLORS=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#6250d6","#008300","#e34948"];
@@ -840,7 +930,11 @@ function renderCooling(){
   const c = snap.hardware.cooling || {}, fans = c.fans || [], names = store.get("fanNames", {});
   $("cool-sub").textContent = fans.length ? `${fans.filter(f => f.spinning).length} of ${fans.length} spinning${c.fancontrol ? " · curves from FanControl" : ""}` : "";
   const box = $("fans"), sig = fans.map(f => f.key).join("|");
-  if (!fans.length) { box.innerHTML = `<div class="empty">Windows itself doesn't report fan speeds. Set up full sensors (LibreHardwareMonitor) to see every fan.</div>`; box.dataset.sig = ""; return; }
+  if (!fans.length) { const laptop = snap.hardware.device?.type === "laptop", none = hasFanData() === false && snap.hardware.level !== "basic";
+    const key = `none:${none}:${laptop}:${!!prefs.hide_cooling_without_fans}:${preferencesReady}`; if (box.dataset.sig === key) return;
+    box.innerHTML = none ? `<div class="banner info cool-note"><div class="ic">i</div><div><div class="t">This PC reports no fans or fan controls</div><div class="s">${laptop ? "Many laptops control their fans in firmware or through the maker's app (for example Armoury Crate, Lenovo Vantage or G-Helper) and don't expose fan speeds to Windows." : "No fan speed sensors or fan controls were found. Some boards need a fan header setting in the BIOS, or the fans are run by an AIO or a fan hub that doesn't report to Windows."} Temperatures stay on the Performance page.</div><div class="act mt"><button class="btn" type="button" id="cool-hide">${prefs.hide_cooling_without_fans ? "Cooling is hidden while no fans are reported" : "Hide Cooling while no fans are reported"}</button></div></div></div>`
+      : `<div class="empty">Windows itself doesn't report fan speeds. Set up full sensors (LibreHardwareMonitor) to see every fan.</div>`;
+    box.dataset.sig = key; const hb = $("cool-hide"); if (hb) { hb.disabled = !!prefs.hide_cooling_without_fans || !preferencesReady; hb.onclick = async () => { hb.disabled = true; try { acceptPreferences(await api("/api/preferences", { method: "POST", body: JSON.stringify({ hide_cooling_without_fans: true }) })); fillPreferences(prefs); toast("Cooling is hidden while no fans are reported. Turn it back on in Settings / Extras."); } catch (e) { hb.disabled = false; toast("Not saved: " + e.message, true); } }; } return; }
   if (box.dataset.sig !== sig) { box.dataset.sig = sig; box.innerHTML = fans.map(f => `<div class="fan" data-key="${esc(f.key)}"><div class="blade">${FAN}</div>
     <div style="min-width:0"><div class="nm"><span class="fn"></span><button data-rename="${esc(f.key)}" type="button">Rename</button></div><div class="sb fs"></div></div>
     <div class="bars"><div class="bl"><span>Speed vs its max</span><span class="num fo"></span></div><div class="meter"><i class="fo-b" style="width:0"></i></div><div class="bl"><span>Control signal</span><span class="num fd"></span></div><div class="meter"><i class="fd-b" style="width:0;background:var(--ink-3)"></i></div></div>
@@ -939,7 +1033,7 @@ $("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.datase
 /* ---------- system ---------- */
 function renderSystem(){
   const hw = snap.hardware, d = hw.device || {}, m = hw.monitors || {};
-  $("sys-type").textContent = d.type === "laptop" ? "Laptop" : d.type ? "Desktop" : "";
+  $("sys-type").textContent = d.type === "laptop" ? "Laptop" : d.type ? "Desktop" : ""; $("sys-type").title = d.form_basis || "";
   const kv = [["Processor", d.cpu], ["Cores / threads", d.cores ? `${d.cores} / ${d.threads}` : null], ["Graphics", (d.gpus || []).join(", ")], ["Memory", hw.summary && hw.summary.ram_total_gb ? `${n0(hw.summary.ram_total_gb)} GB` : null], ["Motherboard", d.board], ["Windows", d.os]];
   $("sys-kv").innerHTML = kv.filter(x => x[1]).map(([k, v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("") || `<span class="muted">Reading…</span>`;
   $("src-sub").textContent = hw.level === "basic" ? "Basic" : hw.level ? "Full" : "";
@@ -962,26 +1056,8 @@ const hm = (m) => m == null ? "–" : `${Math.floor(m / 60)}h ${String(m % 60).p
 function renderBattery(){
   if (document.activeElement && document.activeElement.id === "bt-br") return;
   const bg = (snap && snap.hardware.groups || []).find(g => g.kind === "battery"), lv = bg && bg.sensors.find(s => /level|charge/i.test(s.name) && s.type !== "Voltage");
-  const has = pack && pack.has_battery; $("bt-sub").textContent = has ? "From Windows' battery sensors" : "";
-  const pct = has && pack.charge_pct != null ? pack.charge_pct : lv ? lv.value : null, R = 54, C = 2 * Math.PI * R;
-  const ring = `<svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true"><circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--series-track)" stroke-width="12"/>
-    <circle cx="70" cy="70" r="${R}" fill="none" stroke="${pct != null && pct < 20 ? "var(--critical)" : "var(--good)"}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - (pct || 0) / 100)}" transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .9s var(--ease)"/></svg>`;
-  const stat = (k, v, sub) => `<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px"><div class="muted">${k}</div><div class="big num">${v}</div>${sub ? `<div class="muted">${sub}</div>` : ""}</div>`;
-  const hero = `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap"><div style="position:relative;width:140px;height:140px">${ring}<div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div class="num" style="font:600 34px/1 var(--font-display)">${pct == null ? "–" : n0(pct)}<small style="font-size:14px">%</small></div><div class="muted">${has && pack.state ? esc(pack.state) : has ? "State unavailable" : "No battery reported"}</div></div></div></div>
-    <div><div style="font:600 18px var(--font-display)">${has ? esc(pack.verdict || "") : "Battery"}</div><div class="muted">${has ? [pack.maker, pack.model, pack.chemistry].filter(Boolean).map(esc).join(" · ") : ""}</div>
-    ${has && pack.minutes_to_full ? `<div class="muted mt">Full in about ${hm(pack.minutes_to_full)}</div>` : has && pack.minutes_left ? `<div class="muted mt">About ${hm(pack.minutes_left)} left at this pace</div>` : ""}</div></div>`;
-  if (!has) { $("bt-body").innerHTML = hero + `<div class="banner info mt"><div class="ic">+</div><div><div class="t">Battery details aren't available</div><div class="s">${pct == null ? "Windows is not reporting a battery. This is expected on desktops; on a laptop, check that Windows can detect its battery." : "A charge sensor is available, but Windows isn't reporting battery health, cycles or charge rate."}</div></div></div>`; return; }
-  const h = (bhist && bhist.history) || [];
-  const histSvg = h.length > 1 ? (() => { const W = 800, Hh = 140, mn = Math.min(...h.map(x => x.health_pct)) - 3, mx = Math.max(100, ...h.map(x => x.health_pct)), x = (i) => 6 + i / (h.length - 1) * (W - 12), y = (v) => Hh - 6 - (v - mn) / (mx - mn) * (Hh - 16);
-    const pts = h.map((r, i) => [x(i), y(r.health_pct)]), d = smooth(pts); return `<svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" style="width:100%;height:140px;display:block"><path d="${d} L${pts[pts.length - 1][0]},${Hh} L${pts[0][0]},${Hh} Z" fill="var(--good)" opacity=".1"/><path d="${d}" fill="none" stroke="var(--good)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
-      <div style="display:flex;justify-content:space-between" class="muted"><span>${esc((h[0].start || "").slice(0, 10))} · ${n1(h[0].health_pct)}%</span><span>${esc((h[h.length - 1].end || "").slice(0, 10))} · ${n1(h[h.length - 1].health_pct)}%</span></div>`; })() : `<div class="muted">Windows hasn't recorded enough history yet.</div>`;
-  $("bt-body").innerHTML = hero + `<div class="grid g4 mt">
-    ${stat("Health", pack.health_pct != null ? n1(pack.health_pct) + "%" : "–", pack.full_mwh && pack.design_mwh ? `${n1(pack.full_mwh / 1000)} of ${n1(pack.design_mwh / 1000)} Wh when new` : "")}
-    ${stat("Charge cycles", pack.cycles ?? "–", "full charges so far")}
-    ${stat(pack.rate_w > 0 ? "Charging at" : pack.rate_w < 0 ? "Using" : "Power", typeof pack.rate_w === "number" && Number.isFinite(pack.rate_w) ? n1(Math.abs(pack.rate_w)) + " W" : "–", pack.voltage_v ? `${n1(pack.voltage_v)} V` : "")}
-    ${stat("Wear", pack.wear_pct != null ? n1(pack.wear_pct) + "%" : "–", "capacity lost since new")}</div>
-    <div class="grid g2 mt"><div><div class="muted" style="margin-bottom:6px">Battery health over time</div>${histSvg}</div>
-    <div>${bright && bright.available ? `<div class="muted" style="margin-bottom:6px">Screen brightness</div><div style="display:flex;align-items:center;gap:12px"><input type="range" id="bt-br" min="0" max="100" value="${bright.percent}" style="flex:1;accent-color:var(--accent)" aria-label="Screen brightness"><b class="num" id="bt-brv">${bright.percent}%</b></div>` : ""}</div></div>`;
+  const has = pack && pack.has_battery; $("bt-sub").textContent = has ? "From Windows' battery sensors and battery report" : "";
+  $("bt-body").innerHTML = BatteryView.html(pack, bhist, bright, lv ? lv.value : null);
   const br = $("bt-br"); if (br) { br.oninput = () => { $("bt-brv").textContent = br.value + "%"; }; br.onchange = async () => { try { bright = await api("/api/laptop/brightness", { method: "POST", body: JSON.stringify({ percent: +br.value }) }); } catch (e) { toast(e.message, true); } }; }
 }
 
@@ -1083,6 +1159,7 @@ function render(){
   $("brand-sub").title = dev.hostname ? "Windows computer name" : "Windows computer name is unavailable";
   $("basic").hidden = hw.level !== "basic"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor.";
   $("lhm-go").hidden = hw.can_install_lhm === false; applyPreferences();
+  $("settings-form").textContent = dev.type ? `Detected: ${dev.type === "laptop" ? "Laptop" : "Desktop"}${dev.form_basis ? `. ${dev.form_basis}.` : ""}` : "Detecting this PC…";
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
   const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
   ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
@@ -1096,6 +1173,6 @@ setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && sn
 setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
 go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); connect();
 </script>
-<script src="/psu_picker.js"></script>
+<script src="/psu_picker.js"></script><script src="/ui/battery_view.js"></script><script src="/ui/edit_layout.js"></script><script>setupOverviewEditor();</script>
 </body>
 </html>

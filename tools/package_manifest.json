@@ -19,6 +19,7 @@
     "insights/insights.py",
     "pc_sentinel/backend/__init__.py",
     "pc_sentinel/backend/display_identity.py",
+    "pc_sentinel/backend/form_factor.py",
     "pc_sentinel/backend/glinet_api.py",
     "pc_sentinel/backend/glinet_vpn.py",
     "pc_sentinel/backend/laptop.py",
@@ -37,6 +38,8 @@
     "pc_sentinel/backend/speedtest.py",
     "pc_sentinel/backend/storage_health.py",
     "pc_sentinel/backend/system_tools.py",
+    "pc_sentinel/frontend/battery_view.js",
+    "pc_sentinel/frontend/edit_layout.js",
     "pc_sentinel/frontend/index.html",
     "pc_sentinel/frontend/psu_picker.js"
   ]
