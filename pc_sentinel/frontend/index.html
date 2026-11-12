@@ -321,6 +321,20 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 @media (max-width:760px){.ov-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
+/* ---------- Sensor guide, measurement and writers ---------- */
+.sg-links a{font-weight:600}
+#basic details summary{cursor:pointer;color:var(--accent);font-size:13.5px}
+table.bench,table.wr{width:100%;border-collapse:collapse;font-size:14px}
+table.bench th,table.bench td,table.wr th,table.wr td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.bench thead th,table.wr thead th{font-size:12.5px;color:var(--ink-3r);font-weight:600}
+table.wr td .btn{height:30px;padding:0 10px}
+.wr-detail{background:var(--surface-2);border-radius:12px;padding:14px 16px;margin-top:12px}
+.wr-detail h3{font:600 15px var(--font-display);margin-bottom:4px}
+.wr-detail pre{white-space:pre-wrap;word-break:break-all;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:12.5px/1.5 Consolas,ui-monospace,monospace;margin:4px 0 8px}
+.wr-detail ol{padding-left:20px}.wr-detail li{margin:8px 0}
+.linkbtn{border:0;background:none;color:var(--accent);padding:0;font-weight:600}
+.ov-pill{margin-top:8px}
+
 /* ---------- Battery page ---------- */
 .bt-hero{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 .bt-ring{position:relative;width:140px;height:140px}
@@ -408,7 +422,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
     <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
     <div class="content">
       <div class="banner info" id="upd" hidden><div class="ic">↑</div><div><div class="t" id="upd-t">Update available</div><div class="s" id="upd-s"></div></div><div class="act"><button class="btn" id="upd-later">Later</button><button class="btn primary" id="upd-go">Update now</button></div></div>
-      <div class="banner warning" id="basic" hidden><div class="ic">i</div><div><div class="t">Basic sensor mode</div><div class="s" id="basic-s"></div></div><div class="act"><button class="btn primary" id="lhm-go">Set up full sensors</button></div></div>
+      <div class="banner warning" id="basic" hidden><div class="ic">i</div><div><div class="t" id="basic-t">Basic sensor mode</div><div class="s" id="basic-s"></div></div><div class="act"><button class="btn primary" id="lhm-go">Set up full sensors</button></div></div>
 
       <!-- OVERVIEW -->
       <section class="page" id="p-overview">
@@ -476,13 +490,15 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <div class="meter" id="psu-meter" hidden><i style="width:0"></i></div><div style="margin-top:12px"><span class="status idle" id="psu-st">Whole-system power is not measured</span><p class="muted" id="psu-peak"></p></div></div></section>
           <section class="card"><div class="ch"><h2>Power plan</h2><span class="sub">How Windows balances speed and power</span></div><div class="cb">
             <div id="pmode-wrap" hidden><div class="muted" style="margin-bottom:6px">Power mode (the slider in Windows Settings)</div><div class="seg" id="pmode" style="margin-bottom:16px"><button data-pm="efficiency">Best efficiency</button><button data-pm="balanced">Balanced</button><button data-pm="performance">Best performance</button></div></div>
-            <div class="plans" id="plans"><div class="empty">Loading…</div></div><div class="maxp mt" id="maxp" hidden><h3>Max Performance (optional)</h3><p class="muted" id="maxp-desc"></p><ul class="muted maxp-list" id="maxp-list"></ul><p class="muted">Tuned for this PC: laptops, Windows on Arm, Modern Standby laptops, hybrid Intel CPUs and dual-CCD Ryzen X3D chips each get only the settings that help them. Battery settings and your other plans are never changed. Expect small gains in some games and tasks, and more heat and power use.</p><div class="mt form-actions"><button class="btn primary" type="button" id="maxp-use">Create and use Max Performance</button><button class="btn" type="button" id="maxp-back" hidden>Go back to my previous plan</button></div><p class="muted mt" id="maxp-status" role="status"></p></div></div></section>
+            <div class="plans" id="plans"><div class="empty">Loading…</div></div><div class="maxp mt" id="maxp" hidden><h3>Max Performance (optional)</h3><p class="muted" id="maxp-desc"></p><ul class="muted maxp-list" id="maxp-list"></ul><p class="muted">Tuned for this PC: laptops, Windows on Arm, Modern Standby laptops, hybrid Intel CPUs and dual-CCD Ryzen X3D chips each get only the settings that help them. Battery settings and your other plans are never changed. Expect small gains in some games and tasks, and more heat and power use.</p><div class="mt form-actions"><button class="btn primary" type="button" id="maxp-use">Create and use Max Performance</button><button class="btn" type="button" id="maxp-back" hidden>Go back to my previous plan</button></div><p class="muted mt" id="maxp-status" role="status"></p><h3 class="mt">Measured difference</h3><div class="mt form-actions"><button class="btn" type="button" id="bench-go">Measure this PC now</button></div><div class="mt" id="bench-body" aria-live="polite"></div></div></div></section>
         </div>
         <section class="card mt"><div class="ch"><h2>Displays</h2><span class="sub">Lower refresh rates save power; higher feel smoother</span></div><div class="cb"><div class="grid g2" id="disps"></div></div></section>
       </section>
 
       <!-- STORAGE -->
       <section class="page" id="p-storage"><div class="grid g2" id="drives"></div>
+        <section class="card mt" id="wr-card"><div class="ch"><h2>Background writers</h2><span class="sub">Programs that write to your drives all the time</span></div><div class="cb"><div id="wr-body"><div class="muted">Reading write activity…</div></div>
+          <div class="mt form-actions"><button class="btn" type="button" id="wr-measure">Measure for 2 minutes</button></div><div class="mt" id="wr-live"></div><div id="wr-detail"></div></div></section>
         <section class="card mt"><div class="ch"><h2>Space used</h2><span class="sub">Per drive</span></div><div class="cb"><div class="rows" id="vols"></div></div></section></section>
 
       <!-- NETWORK -->
@@ -535,6 +551,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
           </div></section>
           <section class="card"><div class="ch"><h2><span class="sic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="10" rx="2"/><path d="M2 19h20"/></svg></span>Laptop and desktop</h2><span class="sub" id="settings-form">Detecting this PC…</span></div><div class="cb">
             <p class="muted">Pages adapt to this PC automatically: Battery appears when a battery is reported, and power supply sizing appears only on desktops.</p>
+            <div class="settings-row"><label for="extra-psu-refresh">Refresh the PSU catalog every 2 weeks<br><span class="muted" id="psu-refresh-status">Downloads the public SPL's PSU Tier List sheet (factual fields only; ratings and notes are left out). Off: the catalog bundled with the app is used.</span></label><input type="checkbox" id="extra-psu-refresh"></div>
             <div class="settings-row"><label for="extra-hide-cooling">Hide Cooling when no fans are reported<br><span class="muted">Many laptops control their fans in firmware and report no fan speeds to Windows. The page comes back on its own if fans appear.</span></label><input type="checkbox" id="extra-hide-cooling"></div>
           </div></section>
         </div></fieldset>
@@ -613,7 +630,7 @@ const PAGES = [
 ];
 $("navs").innerHTML = PAGES.filter(p=>p[0]!=="settings").map(([id, t, , ic]) => `<button class="nav" data-p="${id}" id="nav-${id}" ${id === "battery" ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${t}</button>`).join("");
 /* ---------- per-PC preferences ---------- */
-function defaultPreferences(){return {pages:Object.fromEntries(PAGES.filter(p=>p[0]!=="settings").map(([id])=>[id,id==="battery"?null:true])),router_vpn:false,router_ping:false,hide_cooling_without_fans:false,revision:"0"};}
+function defaultPreferences(){return {pages:Object.fromEntries(PAGES.filter(p=>p[0]!=="settings").map(([id])=>[id,id==="battery"?null:true])),router_vpn:false,router_ping:false,hide_cooling_without_fans:false,psu_refresh:false,revision:"0"};}
 function pageVisible(id,settings,hasBattery,hasFans){if(id==="cooling"&&settings.hide_cooling_without_fans===true&&hasFans===false)return false;return id==="settings"||settings.pages[id]===true||(id==="battery"&&settings.pages.battery===null&&hasBattery);}
 function hasFanData(){const c=snap&&snap.hardware&&snap.hardware.cooling;if(!c||!snap.hardware.live)return undefined;return c.has_fan_data!==undefined?!!c.has_fan_data:!!(c.fans&&c.fans.length);}
 function freshPreferences(current,incoming){try{return BigInt(incoming.revision||"0")>=BigInt(current.revision||"0");}catch{return false;}}
@@ -622,7 +639,7 @@ $("settings-fields").disabled=true;$("settings-save").disabled=true;$("settings-
 $("settings-pages").innerHTML=PAGES.filter(p=>p[0]!=="settings").map(([id,title])=>id==="battery"?`<div class="settings-row"><label for="setting-page-battery">Battery<br><span class="muted">Automatic follows battery detection; Show also works on desktops.</span></label><select id="setting-page-battery"><option value="auto">Automatic</option><option value="show">Show</option><option value="hide">Hide</option></select></div>`:`<div class="settings-row"><label for="setting-page-${id}">${title}</label><input type="checkbox" id="setting-page-${id}"></div>`).join("");
 function fillPreferences(value){
   for(const [id] of PAGES.filter(p=>p[0]!=="settings"))if(id==="battery")$("setting-page-battery").value=value.pages.battery===null?"auto":value.pages.battery?"show":"hide";else $("setting-page-"+id).checked=value.pages[id];
-  $("extra-vpn").checked=value.router_vpn;$("extra-router-ping").checked=value.router_ping;$("extra-hide-cooling").checked=value.hide_cooling_without_fans===true;
+  $("extra-vpn").checked=value.router_vpn;$("extra-router-ping").checked=value.router_ping;$("extra-hide-cooling").checked=value.hide_cooling_without_fans===true;$("extra-psu-refresh").checked=value.psu_refresh===true;
 }
 function applyPreferences(){
   const hasBattery=!!(snap&&snap.hardware.device?.has_battery);
@@ -635,8 +652,8 @@ function acceptPreferences(value){
   prefs=value;preferencesReady=true;$("settings-fields").disabled=false;if(!preferencesSaving){$("settings-save").disabled=false;$("settings-reset").disabled=false;$("settings-save").textContent="Save settings";}if(!preferencesDirty)fillPreferences(prefs);applyPreferences();
 }
 async function loadPreferences(){try{acceptPreferences(await api("/api/preferences"));if(!preferencesDirty)$("settings-status").textContent=prefs.storage_status==="ok"?"Saved settings loaded from this PC.":prefs.storage_status==="invalid_or_unavailable"?"Saved settings could not be read. Safe defaults are active; Save will replace the invalid record.":"Default pages are shown. Router extras are off until you choose them.";}catch{if(!preferencesReady){$("settings-status").textContent="Settings could not be loaded. Retry loading before changing them.";$("settings-save").disabled=false;$("settings-save").textContent="Retry loading settings";}}}
-function preferenceDraft(){const value={pages:{},router_vpn:$("extra-vpn").checked,router_ping:$("extra-router-ping").checked,hide_cooling_without_fans:$("extra-hide-cooling").checked};for(const [id] of PAGES.filter(p=>p[0]!=="settings"))value.pages[id]=id==="battery"?({auto:null,show:true,hide:false}[$("setting-page-battery").value]):$("setting-page-"+id).checked;return value;}
-for(const el of document.querySelectorAll('#settings-pages input,#settings-pages select,#extra-vpn,#extra-router-ping,#extra-hide-cooling'))el.addEventListener('change',()=>{preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Unsaved changes. Choose Save settings to apply.";});
+function preferenceDraft(){const value={pages:{},router_vpn:$("extra-vpn").checked,router_ping:$("extra-router-ping").checked,hide_cooling_without_fans:$("extra-hide-cooling").checked,psu_refresh:$("extra-psu-refresh").checked};for(const [id] of PAGES.filter(p=>p[0]!=="settings"))value.pages[id]=id==="battery"?({auto:null,show:true,hide:false}[$("setting-page-battery").value]):$("setting-page-"+id).checked;return value;}
+for(const el of document.querySelectorAll('#settings-pages input,#settings-pages select,#extra-vpn,#extra-router-ping,#extra-hide-cooling,#extra-psu-refresh'))el.addEventListener('change',()=>{preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Unsaved changes. Choose Save settings to apply.";});
 $("settings-save").onclick=async()=>{
   if(preferencesSaving)return;if(!preferencesReady){await loadPreferences();return;}const draft=preferenceDraft(),edit=preferencesEditing;
   if(!Object.values(draft.pages).some(v=>v===true)){$("settings-status").textContent="Keep at least one page visible before saving.";return;}
@@ -658,7 +675,9 @@ function go(p, push = true){
   if (push && location.hash !== "#" + p) history.replaceState(null, "", "#" + p);
   $("main").scrollTo({ top: 0 });
   if (p === "performance") document.querySelectorAll(".chart svg").forEach(s => s._init = false);
-  if (p === "power") loadPower(); if (p === "speed") { drawGauge(); drawSpeedChart(); } if (p === "battery") loadBattery();
+  if (p === "power") { loadPower(); loadBench(); }
+  if (p === "settings") api("/api/power/catalog/refresh").then(r => { const el = $("psu-refresh-status"); if (!el) return; const when = r.last_success_ts ? new Date(r.last_success_ts * 1000).toLocaleDateString() : null;
+    el.textContent = `Source: ${r.source.name} (public sheet, credited in the PSU picker). ` + (when ? `Last refreshed ${when}: ${r.records} models.` : "Not refreshed yet; the bundled catalog is in use.") + (r.last_error ? ` Last attempt failed: ${r.last_error}` : ""); }).catch(() => {}); if (p === "speed") { drawGauge(); drawSpeedChart(); } if (p === "battery") loadBattery();
   render();
 }
 $("navs").addEventListener("click", (e) => { const b = e.target.closest(".nav"); if (b) go(b.dataset.p); });
@@ -724,17 +743,17 @@ function renderOverview(){
   $("health").hidden = false; $("health").className = `banner ${hl}`; $("health-ic").textContent = hl === "good" ? "✓" : "!"; $("health-t").textContent = h.label; $("health-s").textContent = (h.notes || []).join(" · ");
   const cpuT = s.cpu_temp; $("t-cpu-sub").textContent = s.cpu_name || "";
   if (cpuT != null) { $("t-cpu-u").textContent = "°C"; tween($("t-cpu"), cpuT, n0); $("t-cpu-m").textContent = [s.cpu_load != null && `${n0(s.cpu_load)}% load`, s.cpu_power != null && `${n0(s.cpu_power)} W`, s.cpu_clock != null && `${n0(s.cpu_clock)} MHz`].filter(Boolean).join(" · "); const l = lvl(cpuT, 80, 90); setSt("t-cpu-st", l, HOT[l]); }
-  else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "load · temperature needs full sensors"; const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
+  else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "load · temperature " + (typeof SentinelPanels !== "undefined" ? SentinelPanels.missingReading(hw.sensor_setup) : "needs full sensors"); const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
   const gT = s.gpu_hotspot ?? s.gpu_temp; $("t-gpu-sub").textContent = s.gpu_name || "";
   if (gT != null) { $("t-gpu-u").textContent = "°C"; tween($("t-gpu"), s.gpu_temp ?? gT, n0); $("t-gpu-m").textContent = [s.gpu_load != null && `${n0(s.gpu_load)}% load`, s.gpu_power != null && `${n0(s.gpu_power)} W`, s.gpu_clock != null && `${n0(s.gpu_clock)} MHz`].filter(Boolean).join(" · "); $("t-gpu-m").title = s.gpu_hotspot != null ? `Hot spot ${n0(s.gpu_hotspot)}°C` : ""; const l = lvl(gT, 85, 100); setSt("t-gpu-st", l, HOT[l]); }
-  else { $("t-gpu-u").textContent = "%"; tween($("t-gpu"), s.gpu_load, n0); $("t-gpu-m").textContent = s.gpu_name ? "load · temperature needs full sensors" : "No graphics card found"; setSt("t-gpu-st", "good", "Load normal"); }
+  else { $("t-gpu-u").textContent = "%"; tween($("t-gpu"), s.gpu_load, n0); $("t-gpu-m").textContent = s.gpu_name ? "load · temperature " + (typeof SentinelPanels !== "undefined" ? SentinelPanels.missingReading(hw.sensor_setup) : "needs full sensors") : "No graphics card found"; setSt("t-gpu-st", "good", "Load normal"); }
   tween($("t-ram"), s.ram_load, n0); $("t-ram-sub").textContent = s.ram_total_gb ? `${n0(s.ram_total_gb)} GB` : ""; $("t-ram-m").textContent = s.ram_used_gb != null ? `${n1(s.ram_used_gb)} of ${n1(s.ram_total_gb)} GB used` : "";
   const rl = lvl(s.ram_load, 80, 92); setSt("t-ram-st", rl, { good: "Plenty free", warning: "Getting full", critical: "Almost full" }[rl]);
   const pv = powerView(hw.power); $("t-pw-u").textContent = "W"; $("t-pw-sub").textContent = pv.label;
   tween($("t-pw"), pv.value, n0);
   $("t-pw-m").textContent = pv.wall; setSt("t-pw-st", "idle", pv.value == null ? "No power readings" : pv.kind === "modeled" ? "Estimate, not a PSU assessment" : "Component readings only");
   ["cpu", "gpu", "ram", "pw"].forEach(k => drawTrend(k, k === "cpu" && cpuT != null ? H.cput : k === "gpu" && gT != null ? H.gput : H[k]));
-  const dr = hw.drives || []; $("ov-drives").innerHTML = dr.length ? dr.map(d => `<div class="mini"><span>${esc(d.name)}</span><span class="pill ${d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical"}">${esc(d.health)}${d.life_left != null ? ` · ${d.life_left}% life` : ""}</span></div>`).join("") : `<div class="muted">No drives reported</div>`;
+  const dr = hw.drives || []; const wrPill = typeof loadWriters === "function" ? (loadWriters(), typeof SentinelPanels !== "undefined" ? SentinelPanels.overviewPill(writers, wrIgnored()) : "") : ""; $("ov-drives").innerHTML = (wrPill ? `<div class="ov-pill">${wrPill}</div>` : "") + (dr.length ? dr.map(d => `<div class="mini"><span>${esc(d.name)}</span><span class="pill ${d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical"}">${esc(d.health)}${d.life_left != null ? ` · ${d.life_left}% life` : ""}</span></div>`).join("") : `<div class="muted">No drives reported</div>`);
   const net = snap.network || {}; $("ov-net").innerHTML = `<div class="big num">${net.primary_ping_ms == null ? "–" : n0(net.primary_ping_ms)}<small>ms ping</small></div><div class="muted">${net.online ? "Online" : "Offline"} · jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}${snap.vpn && snap.vpn.vpn_enabled ? " · VPN on" : ""}</div>`;
   const fans = (hw.cooling || {}).fans || []; $("ov-cool").innerHTML = fans.length ? `<div class="big num">${fans.filter(f => f.spinning).length}<small>of ${fans.length} fans spinning</small></div><div class="muted">fastest ${n0(Math.max(...fans.map(f => f.rpm)))} RPM${s.storage_max_temp != null ? ` · hottest drive ${n0(s.storage_max_temp)}°C` : ""}</div>` : hasFanData() === false && hw.device?.type === "laptop" ? `<div class="muted">This laptop reports no fan speeds to Windows. Its firmware or the maker's app controls the fans.</div>` : `<div class="muted">Fan speeds need full sensors (LibreHardwareMonitor).</div>`;
   renderOverviewBattery(); if (ovEditor) ovEditor.apply(false);
@@ -818,6 +837,10 @@ let plans = null, disps = null;
 let pmode = null;
 let maxp = null;
 async function loadPower(){ try { [plans, disps, pmode, maxp] = await Promise.all([api("/api/power/plans"), api("/api/display"), api("/api/power/mode").catch(() => null), api("/api/power/max").catch(() => null)]); renderPowerCtl(); renderMaxp(); } catch {} }
+let bench = null, benchRunning = false;
+async function loadBench(){ try { bench = await api("/api/power/benchmark"); } catch { bench = null; } renderBench(); }
+function renderBench(){ const b = $("bench-body"); if (!b || !window.SentinelPanels) return; b.innerHTML = SentinelPanels.benchHtml(bench, benchRunning); $("bench-go").disabled = benchRunning; $("bench-go").textContent = benchRunning ? "Measuring… about 12 seconds" : "Measure this PC now"; }
+$("bench-go").onclick = async () => { if (benchRunning) return; benchRunning = true; renderBench(); try { bench = await api("/api/power/benchmark", { method: "POST" }); } catch (e) { toast("Measurement failed: " + e.message, true); } finally { benchRunning = false; renderBench(); } };
 function renderMaxp(){ const box = $("maxp"); if (!box) return; box.hidden = !(maxp && maxp.available);
   if (!maxp || !maxp.available) return;
   const pf = maxp.profile || {}, viaMode = pf.method === "power_mode";
@@ -933,7 +956,7 @@ function renderCooling(){
   if (!fans.length) { const laptop = snap.hardware.device?.type === "laptop", none = hasFanData() === false && snap.hardware.level !== "basic";
     const key = `none:${none}:${laptop}:${!!prefs.hide_cooling_without_fans}:${preferencesReady}`; if (box.dataset.sig === key) return;
     box.innerHTML = none ? `<div class="banner info cool-note"><div class="ic">i</div><div><div class="t">This PC reports no fans or fan controls</div><div class="s">${laptop ? "Many laptops control their fans in firmware or through the maker's app (for example Armoury Crate, Lenovo Vantage or G-Helper) and don't expose fan speeds to Windows." : "No fan speed sensors or fan controls were found. Some boards need a fan header setting in the BIOS, or the fans are run by an AIO or a fan hub that doesn't report to Windows."} Temperatures stay on the Performance page.</div><div class="act mt"><button class="btn" type="button" id="cool-hide">${prefs.hide_cooling_without_fans ? "Cooling is hidden while no fans are reported" : "Hide Cooling while no fans are reported"}</button></div></div></div>`
-      : `<div class="empty">Windows itself doesn't report fan speeds. Set up full sensors (LibreHardwareMonitor) to see every fan.</div>`;
+      : snap.hardware.sensor_setup?.state === "driver_missing" ? `<div class="empty">Sensor driver missing: fan speeds can't be read until PawnIO is installed. See the notice at the top of the page.</div>` : `<div class="empty">Windows itself doesn't report fan speeds. Set up full sensors (LibreHardwareMonitor) to see every fan.</div>`;
     box.dataset.sig = key; const hb = $("cool-hide"); if (hb) { hb.disabled = !!prefs.hide_cooling_without_fans || !preferencesReady; hb.onclick = async () => { hb.disabled = true; try { acceptPreferences(await api("/api/preferences", { method: "POST", body: JSON.stringify({ hide_cooling_without_fans: true }) })); fillPreferences(prefs); toast("Cooling is hidden while no fans are reported. Turn it back on in Settings / Extras."); } catch (e) { hb.disabled = false; toast("Not saved: " + e.message, true); } }; } return; }
   if (box.dataset.sig !== sig) { box.dataset.sig = sig; box.innerHTML = fans.map(f => `<div class="fan" data-key="${esc(f.key)}"><div class="blade">${FAN}</div>
     <div style="min-width:0"><div class="nm"><span class="fn"></span><button data-rename="${esc(f.key)}" type="button">Rename</button></div><div class="sb fs"></div></div>
@@ -954,7 +977,25 @@ $("rn-save").onclick = () => { const names = store.get("fanNames", {}), v = $("r
 $("rn-in").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rn-save").click(); });
 
 /* ---------- storage ---------- */
+let writers = null, writersAt = 0, writerOpen = null;
+const wrIgnored = () => store.get("ignoredWriters", []);
+async function loadWriters(force){ if (!force && Date.now() - writersAt < (writers && writers.measuring ? 4000 : 25000)) return; writersAt = Date.now();
+  try { writers = await api("/api/storage/writers"); } catch { return; } renderWriters(); notifyWriters(); }
+function notifyWriters(){ const day = new Date().toISOString().slice(0, 10), seen = store.get("writerAlerts", {});
+  for (const r of (writers && writers.flagged) || []) { if ((r.level === "warning" || r.level === "heavy") && !wrIgnored().includes(r.name) && seen[r.name] !== day) { seen[r.name] = day; store.set("writerAlerts", seen); toast(`Constant drive writes: ${r.known_issue ? r.known_issue.title : r.name}. See Storage.`, true); } } }
+function renderWriters(){ if (!window.SentinelPanels) return; const P = SentinelPanels, html = P.writersHtml(writers, wrIgnored());
+  if ($("wr-body").dataset.sig !== html) { $("wr-body").dataset.sig = html; $("wr-body").innerHTML = html; }
+  $("wr-live").innerHTML = P.liveHtml(writers); $("wr-measure").disabled = !!(writers && writers.measuring) || !(writers && writers.available);
+  const r = writerOpen && ((writers && writers.top) || []).find(x => x.name === writerOpen); const d = r ? P.writerDetail(r) : "";
+  if ($("wr-detail").dataset.sig !== d) { $("wr-detail").dataset.sig = d; $("wr-detail").innerHTML = d; } }
+$("wr-measure").onclick = async () => { try { writers = await api("/api/storage/writers/measure", { method: "POST" }); writersAt = Date.now(); renderWriters(); } catch (e) { toast(e.message, true); } };
+$("wr-card").addEventListener("click", (e) => { const t = e.target.closest("[data-wr-detail],[data-wr-ignore],[data-wr-unignore]"); if (!t) return;
+  if (t.dataset.wrDetail) writerOpen = writerOpen === t.dataset.wrDetail ? null : t.dataset.wrDetail;
+  if (t.dataset.wrIgnore) { store.set("ignoredWriters", [...new Set([...wrIgnored(), t.dataset.wrIgnore])]); writerOpen = null; }
+  if (t.dataset.wrUnignore) store.set("ignoredWriters", wrIgnored().filter(n => n !== t.dataset.wrUnignore));
+  renderWriters(); });
 function renderStorage(){
+  if (typeof loadWriters === "function") loadWriters();
   const dr = snap.hardware.drives || [], box = $("drives"), sig = JSON.stringify(dr);
   const gib = v => v == null ? "Unavailable" : n1(v / 2**30) + " GiB";
   if (box.dataset.sig !== sig) { const opened = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.drive)); box.dataset.sig = sig; box.innerHTML = dr.map((d, i) => { const hcls = d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : d.health === "Unhealthy" ? "critical" : "idle";
@@ -1157,8 +1198,11 @@ function render(){
   if (!snap) return; const hw = snap.hardware, s = hw.summary || {}, dev = hw.device || {};
   $("brand-sub").textContent = dev.hostname || "Your PC";
   $("brand-sub").title = dev.hostname ? "Windows computer name" : "Windows computer name is unavailable";
-  $("basic").hidden = hw.level !== "basic"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor.";
-  $("lhm-go").hidden = hw.can_install_lhm === false; applyPreferences();
+  const sg = window.SentinelPanels && hw.sensor_setup ? SentinelPanels.sensorBanner(hw.sensor_setup) : null;
+  if (sg) { $("basic").hidden = false; $("basic").className = "banner " + sg.kind; $("basic-t").textContent = sg.title; if ($("basic-s").dataset.sig !== sg.html) { $("basic-s").dataset.sig = sg.html; $("basic-s").innerHTML = sg.html; } $("lhm-go").hidden = !sg.setup || hw.can_install_lhm === false; }
+  else if (hw.sensor_setup) $("basic").hidden = true;
+  else { $("basic").hidden = hw.level !== "basic"; $("basic-t").textContent = "Basic sensor mode"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor."; $("lhm-go").hidden = hw.can_install_lhm === false; }
+  applyPreferences();
   $("settings-form").textContent = dev.type ? `Detected: ${dev.type === "laptop" ? "Laptop" : "Desktop"}${dev.form_basis ? `. ${dev.form_basis}.` : ""}` : "Detecting this PC…";
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
   const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
@@ -1173,6 +1217,6 @@ setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && sn
 setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
 go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); connect();
 </script>
-<script src="/psu_picker.js"></script><script src="/ui/battery_view.js"></script><script src="/ui/edit_layout.js"></script><script>setupOverviewEditor();</script>
+<script src="/psu_picker.js"></script><script src="/ui/battery_view.js"></script><script src="/ui/edit_layout.js"></script><script src="/ui/sentinel_panels.js"></script><script>setupOverviewEditor();</script>
 </body>
 </html>

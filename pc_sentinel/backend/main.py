@@ -42,8 +42,11 @@ async def poll_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(poll_loop())
+    from . import psu_refresh
+    refresher = asyncio.create_task(psu_refresh.loop())  # does nothing unless turned on in Settings / Extras
     yield
     task.cancel()
+    refresher.cancel()
 
 
 app = FastAPI(title="Hardware & Network Sentinel", lifespan=lifespan)
@@ -58,6 +61,12 @@ max_power.register(app)
 
 from . import system_tools  # noqa: E402  power plans, refresh rate, top apps, LibreHardwareMonitor setup
 system_tools.register(app)
+from . import benchmark  # noqa: E402  bounded before/after measurement for Max Performance
+benchmark.register(app)
+from . import psu_refresh  # noqa: E402  optional 14-day PSU catalog refresh (off by default)
+psu_refresh.register(app)
+from . import storage_writers  # noqa: E402  always-on heavy writer detection (read-only counters)
+storage_writers.register(app)
 
 
 from . import laptop  # noqa: E402  battery health, history and screen brightness (Battery page, laptops only)
@@ -75,7 +84,7 @@ async def serve_dashboard():
     return FileResponse(os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html"), headers={"Cache-Control": "no-cache"})
 
 
-UI_SCRIPTS = {"battery_view.js", "edit_layout.js"}
+UI_SCRIPTS = {"battery_view.js", "edit_layout.js", "sentinel_panels.js"}
 
 
 @app.get("/ui/{name}", include_in_schema=False)

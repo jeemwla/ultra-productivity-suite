@@ -12,10 +12,10 @@ LOCK = threading.RLock()
 
 def defaults():
     return {"pages": {p: None if p == "battery" else True for p in PAGES}, "router_vpn": False, "router_ping": False,
-            "hide_cooling_without_fans": False}
+            "hide_cooling_without_fans": False, "psu_refresh": False}
 
 
-BOOLEANS = ("router_vpn", "router_ping", "hide_cooling_without_fans")
+BOOLEANS = ("router_vpn", "router_ping", "hide_cooling_without_fans", "psu_refresh")
 
 
 def path():
@@ -25,7 +25,7 @@ def path():
 
 def validate(changes, current=None):
     if not isinstance(changes, dict) or set(changes) - {"pages", *BOOLEANS}:
-        raise ValueError("Only pages, router_vpn, router_ping and hide_cooling_without_fans are supported.")
+        raise ValueError("Only pages and the optional Settings / Extras switches are supported.")
     value = defaults() if current is None else {**current, "pages": dict(current["pages"])}
     for name in BOOLEANS:
         if name in changes:

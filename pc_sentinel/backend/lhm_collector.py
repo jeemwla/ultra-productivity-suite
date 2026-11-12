@@ -422,13 +422,17 @@ async def collect_hardware_telemetry() -> Dict:
         glist, source, level = nat["groups"], "Windows built-in sensors", "basic"
     info = await asyncio.to_thread(ns.device_info)
     if _mon_cache["data"] is None or time.time() - _mon_cache["at"] > 15:
-        _mon_cache.update(at=time.time(), data=await asyncio.to_thread(ns.detect_monitors))
+        from . import sensor_setup
+        _mon_cache.update(at=time.time(), data=await asyncio.to_thread(ns.detect_monitors),
+                          drivers=await asyncio.to_thread(sensor_setup.driver_facts))
     drives = sh.merge_lhm([dict(x) for x in await asyncio.to_thread(sh.drives)], glist)
     summary = summarize(glist)
     summary.setdefault("cpu_name", info.get("cpu"))
     out = {"live": True, "source": source, "level": level, "groups": glist, "summary": summary,
            "cooling": cooling_report(glist), "power": power_report(glist, summary), "drives": drives,
            "device": info, "monitors": _mon_cache["data"], "sensor_count": sum(len(g["sensors"]) for g in glist)}
+    from . import sensor_setup
+    out["sensor_setup"] = sensor_setup.guide(_mon_cache["data"], _mon_cache.get("drivers"), level, glist)
     if level == "basic":
         m = _mon_cache["data"] or {}
         out["help"] = ("LibreHardwareMonitor is installed but not running. Start it to add temperatures, fans and power."

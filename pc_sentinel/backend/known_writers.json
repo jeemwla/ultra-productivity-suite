@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "exe": "atieclxx",
+      "title": "AMD External Events Utility",
+      "publisher": "Advanced Micro Devices",
+      "explanation": "A known AMD Radeon driver bug makes this service copy its own file about once a second on some PCs, which can add hundreds of gigabytes of writes a day. AMD has confirmed it and plans a fix in Adrenalin 26.11.1.",
+      "fixed_in": {"component": "amd_adrenalin", "version": "26.11.1"},
+      "fixes": [
+        {"title": "Update the AMD driver (official fix)", "steps": "When Adrenalin 26.11.1 or later is out, check its Fixed Issues list for the External Events Utility, then update through AMD Software or amd.com. Keep the current installer to roll back if needed."},
+        {"title": "Disable the AMD External Events Utility service (until the fix)", "steps": "Win+R, services.msc, open AMD External Events Utility, Stop, set Startup type to Disabled, Apply. Reported side effects: Adrenalin hotkeys, monitor hot-plug detection and some FreeSync behavior can stop working. Undo: set Startup type back to Automatic and Start.", "command": "Set-Service -Name \"AMD External Events Utility\" -StartupType Disabled; Stop-Service -Name \"AMD External Events Utility\"", "undo": "Set-Service -Name \"AMD External Events Utility\" -StartupType Automatic; Start-Service -Name \"AMD External Events Utility\""}
+      ],
+      "check": "Get-CimInstance Win32_Process -Filter \"Name='atieclxx.exe'\" | Select-Object ProcessId, CreationDate, WriteTransferCount",
+      "sources": [
+        {"title": "VideoCardz: AMD confirms Radeon driver bug causing constant SSD writes", "url": "https://videocardz.com/newz/amd-confirms-radeon-driver-bug-causing-constant-ssd-writes-fix-planned-for-adrenalin-26-11-1"},
+        {"title": "Hardware Busters: AMD confirms Radeon driver bug that keeps SSDs writing at idle", "url": "https://hwbusters.com/news/amd-confirms-radeon-driver-bug-that-keeps-ssds-writing-at-idle-fix-due-in-adrenalin-26-11-1/"}
+      ],
+      "last_reviewed": "2026-11-12"
+    }
+  ]
+}
