@@ -24,6 +24,7 @@
     "pc_sentinel/backend/laptop.py",
     "pc_sentinel/backend/lhm_collector.py",
     "pc_sentinel/backend/main.py",
+    "pc_sentinel/backend/max_power.py",
     "pc_sentinel/backend/native_sensors.py",
     "pc_sentinel/backend/net_monitor.py",
     "pc_sentinel/backend/power_context.py",

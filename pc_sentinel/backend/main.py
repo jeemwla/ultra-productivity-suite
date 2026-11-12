@@ -53,6 +53,8 @@ from . import power_context  # noqa: E402  optional local desktop PSU context, n
 power_context.register(app)
 from . import psu_catalog  # noqa: E402  offline factual picker, no telemetry-loop downloads
 psu_catalog.register(app)
+from . import max_power  # noqa: E402  optional Max Performance plan, applied only on request
+max_power.register(app)
 
 from . import system_tools  # noqa: E402  power plans, refresh rate, top apps, LibreHardwareMonitor setup
 system_tools.register(app)
