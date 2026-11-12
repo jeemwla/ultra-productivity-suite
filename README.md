@@ -2,7 +2,7 @@
 
 Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
 
-[Download the Windows installer, v2.2.13 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.13/UltraSuite-Setup-2.2.13-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
+[Download the Windows installer, v2.2.14 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.14/UltraSuite-Setup-2.2.14-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
 This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
 
