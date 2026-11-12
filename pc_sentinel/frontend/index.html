@@ -572,7 +572,7 @@ $("navs").addEventListener("click", (e) => { const b = e.target.closest(".nav");
 $("nav-settings").addEventListener("click",()=>go("settings"));
 window.addEventListener("hashchange", () => go(location.hash.slice(1), false));
 // keyboard: 1-9 jump between sections (when not typing)
-document.addEventListener("keydown", (e) => { if (e.target.closest("input,textarea") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
+document.addEventListener("keydown", (e) => { if (e.target.closest("input,textarea,select,[contenteditable=true]") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
 // swipe between sections on touch screens
 let tx = null, ty = null; document.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
 document.addEventListener("touchend", (e) => { if (tx == null) return; const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null; if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx)) return;

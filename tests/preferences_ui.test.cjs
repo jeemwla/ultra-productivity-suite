@@ -24,3 +24,11 @@ test('public router defaults are off and default page objects do not share mutat
  const a=ctx.defaultPreferences(),b=ctx.defaultPreferences();a.pages.power=false;
  assert.equal(b.pages.power,true);assert.equal(b.router_vpn,false);assert.equal(b.router_ping,false);assert.equal(b.pages.battery,null);
 });
+test('section-number shortcuts never hijack selects or editable fields',()=>{
+ let handler,visits=[];
+ ctx.document={addEventListener(_type,fn){handler=fn;}};ctx.$=()=>({hidden:false});ctx.go=p=>visits.push(p);
+ vm.runInContext(html.slice(html.indexOf('// keyboard: 1-9'),html.indexOf('// swipe between')),ctx);
+ for(const tag of ['input','textarea','select','[contenteditable=true]'])handler({key:'1',target:{closest:selector=>selector.split(',').includes(tag)}});
+ assert.deepEqual(visits,[]);
+ handler({key:'1',target:{closest:()=>false}});assert.deepEqual(visits,['overview']);
+});
