@@ -45,7 +45,7 @@
     },
     "Dev": {
       "edition": "Dev",
-      "runtime_ready": false,
+      "runtime_ready": true,
       "product_name": "Ultra Suite (Dev)",
       "main_binary": "Ultra Suite Dev.exe",
       "core_binary": "ultrasuite-dev-core.exe",

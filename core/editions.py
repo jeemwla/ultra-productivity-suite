@@ -149,8 +149,8 @@ def validate_catalog(document):
         _keys(raw, _PROFILE_FIELDS, "profile")
         if raw["edition"] != name:
             raise ValueError("Edition key/identity mismatch")
-        if type(raw["runtime_ready"]) is not bool or raw["runtime_ready"] != (name == "Public"):
-            raise ValueError("Dev runtime integration is not ready in this contract phase")
+        if raw["runtime_ready"] is not True:  # false keeps an edition's builds from starting at all
+            raise ValueError("Edition runtime integration is not ready")
         for field in ("product_name", "main_binary", "core_binary", "install_dir_name", "roaming_dir_name", "local_dir_name"):
             if not _component(raw[field]):
                 raise ValueError("Invalid edition name or path component")

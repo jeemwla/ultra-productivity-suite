@@ -351,9 +351,11 @@ async function poll(){
 }
 /* ---------------- Update dot ----------------
    The core checks GitHub (cached for 6 hours); a dot on the menu chevron says a new version is out. */
-const CORE = "http://127.0.0.1:8081";
+let CORE = "http://127.0.0.1:8081", SELF_UPDATE = true;
+if (invoke) invoke("edition_info").then((e) => { CORE = `http://127.0.0.1:${e.ports.alarm}`; SELF_UPDATE = e.self_update !== false; }).catch(() => {});
 let update = null;
 async function checkUpdate(){
+  if (!SELF_UPDATE) { if (update) { update = null; render(); } return; }  // Dev: local builds only
   try {
     const u = await (await fetch(`${CORE}/api/update`, { cache: "no-store" })).json();
     const next = u && u.available && u.asset ? { latest: u.latest, current: u.current, label: update && update.latest === u.latest ? update.label : null } : null;

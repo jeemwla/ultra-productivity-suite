@@ -321,7 +321,7 @@ mod tests {
         let dev = edition::profile("Dev").unwrap();
         assert_eq!(BackgroundWorkers::for_profile(public), BackgroundWorkers { alarm_watch: true, wake_timer: true, update_notifier: true });
         assert_eq!(BackgroundWorkers::for_profile(dev), BackgroundWorkers { alarm_watch: false, wake_timer: false, update_notifier: false });
-        assert!(!dev.runtime_ready());
+        assert!(dev.runtime_ready(), "Dev starts, but its background workers stay off");
         // Even incorrectly enabled future capability inputs must not activate
         // Dev workers. This fixture does not modify either immutable contract.
         let mut caps = edition::Capabilities {

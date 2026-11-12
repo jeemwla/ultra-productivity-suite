@@ -37,7 +37,7 @@ class EditionContractTests(unittest.TestCase):
                          "alarm": "Code Red Alarm (Dev)", "dock": "Ultra Dock (Dev)", "insights": "Insights (Dev)"})
         self.assertEqual(d.aumid("sentinel"), "UltraSuite.Dev.sentinel")
         self.assertEqual(d.shortcut("alarm"), "Code Red Alarm (Dev).lnk")
-        self.assertFalse(d.runtime_ready)
+        self.assertTrue(d.runtime_ready)
         self.assertTrue(p.runtime_ready)
 
     def test_owned_port_table_and_external_sensor_separation(self):
@@ -115,7 +115,7 @@ class EditionContractTests(unittest.TestCase):
 
     def test_schema_types_unknown_fields_and_unsafe_components(self):
         changes = [(("schema",), True), (("schema",), 2), (("external_lhm_default_port",), 0),
-                   (("profiles", "Dev", "runtime_ready"), True), (("profiles", "Dev", "edition"), "Public"),
+                   (("profiles", "Dev", "runtime_ready"), False), (("profiles", "Public", "runtime_ready"), False), (("profiles", "Dev", "edition"), "Public"),
                    (("profiles", "Dev", "ports", "alarm"), True), (("profiles", "Dev", "ports", "alarm"), 65536),
                    (("profiles", "Dev", "ports", "alarm"), 8085), (("profiles", "Dev", "ports", "alarm"), 8081),
                    (("profiles", "Dev", "ports", "alarm"), 18091), (("profiles", "Dev", "run_key"), "UltraSuite"),

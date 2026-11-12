@@ -19,6 +19,7 @@ node_modules/
 # Build output
 build/
 ultra_dock/src-tauri/appicons/
+ultra_dock/src-tauri/appicons-dev/
 
 # Private reports for the owner (never published)
 private/

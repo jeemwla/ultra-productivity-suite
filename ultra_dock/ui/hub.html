@@ -77,6 +77,10 @@ th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);font
 th{color:var(--ink-3);font-weight:600;font-size:12.5px}
 tr:last-child td{border-bottom:0}
 td.muted{color:var(--ink-3)}
+td .edc{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)}
+td .edc img{width:22px;height:22px}
+td .small{display:block;margin:4px 0 8px;color:var(--ink-3)}
+td .btn{padding:5px 12px;font-size:12.5px}
 @media (max-width:760px){body{grid-template-columns:1fr} nav{flex-direction:row;flex-wrap:wrap;padding:12px} nav .foot,.brand{display:none} main{padding:18px 16px}}
 </style>
 </head>
@@ -122,7 +126,7 @@ td.muted{color:var(--ink-3)}
 
   <h3>Editions</h3>
   <table aria-label="Public and Dev editions">
-    <thead><tr><th>App</th><th>Public edition (GitHub release)</th><th>Dev edition (built from source)</th></tr></thead>
+    <thead><tr><th>Public edition (GitHub release)</th><th>Dev edition (built from source)</th></tr></thead>
     <tbody id="eds"></tbody>
   </table>
   <p class="sub" style="margin-top:10px" id="ed-note"></p>
@@ -130,8 +134,28 @@ td.muted{color:var(--ink-3)}
 <script>
 const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
 const $ = (id) => document.getElementById(id);
-const ALARM = "http://127.0.0.1:8081", SENTINEL = "http://127.0.0.1:8084";
-const DEV = { alarm: 18081, sentinel: 18084, insights: 18301 };
+/* This window's edition (Public or Dev) decides which ports, names and icons it uses. */
+let ALARM = "http://127.0.0.1:8081", SENTINEL = "http://127.0.0.1:8084", INSIGHTS_PORT = 8301;
+let ED = { edition: "Public", product: "Ultra Suite", self_update: true, alarm_delivery: true, names: {} };
+const APP_ICON = { sentinel: "sentinel", alarm: "alarm", dock: "dock", insights: "insights", hub: "dock" };
+async function loadEdition() {
+  if (!invoke) return;
+  try {
+    ED = await invoke("edition_info");
+    ALARM = `http://127.0.0.1:${ED.ports.alarm}`; SENTINEL = `http://127.0.0.1:${ED.ports.sentinel}`;
+    INSIGHTS_PORT = ED.ports.insights_dashboard;
+  } catch { return; }
+  if (ED.edition !== "Dev") return;
+  // Dev: monochrome icons and "(Dev)" names everywhere in this window
+  document.querySelectorAll('img[src^="hubicons/"]').forEach((i) => { i.src = i.getAttribute("src").replace("hubicons/", "hubicons/dev/"); });
+  const rename = { "PC Sentinel": ED.names.sentinel, "Code Red Alarm": ED.names.alarm, "Ultra Dock": ED.names.dock,
+                   "Ultra Suite Insights": ED.names.insights, "Insights": ED.names.insights, "Ultra Suite": ED.product };
+  document.querySelectorAll(".card h2, .navitem, .brand").forEach((el) => {
+    for (const node of el.childNodes) if (node.nodeType === 3 && rename[node.textContent.trim()]) node.textContent = rename[node.textContent.trim()];
+  });
+  document.title = ED.product;
+  document.querySelector(".sub").textContent = "The Dev edition of every app: its own data and ports, alarms never ring, no GitHub updates.";
+}
 let info = { version: "", insights_installed: false, dev_installed: false, dock_on: null };
 
 async function getJson(url, ms = 2500) {
@@ -169,6 +193,11 @@ async function alarmCard() {
     const alarms = (list && list.alarms) || [], on = alarms.filter((a) => a.enabled);
     if (ring && ring.is_ringing) { pill("p-alarm", "Ringing", "warn"); $("s-alarm").textContent = "An alarm is ringing now"; $("s-alarm-2").textContent = (ring.alarm && ring.alarm.label) || ""; return; }
     pill("p-alarm", "Running", "on");
+    if (ED.alarm_delivery === false) {
+      $("s-alarm").textContent = "Alarms here never ring";
+      $("s-alarm-2").textContent = `${alarms.length} saved Dev schedule${alarms.length === 1 ? "" : "s"} · the consumer edition rings your alarms`;
+      return;
+    }
     if (next && next.in_sec != null && next.at) {
       $("s-alarm").textContent = `You have an alarm ${whenText(next.at)}`;
       $("s-alarm-2").textContent = `${inText(next.in_sec)} · ${on.length} of ${alarms.length} alarm${alarms.length === 1 ? "" : "s"} on`;
@@ -215,11 +244,12 @@ async function insightsCard() {
   const show = !!info.insights_installed;
   $("c-insights").hidden = !show; $("n-insights").hidden = !show;
   if (!show) return;
-  if (await reachable(8301)) { pill("p-insights", "Running", "on"); $("s-insights").textContent = "The dashboard is ready"; }
+  if (await reachable(INSIGHTS_PORT)) { pill("p-insights", "Running", "on"); $("s-insights").textContent = "The dashboard is ready"; }
   else { pill("p-insights", "Not running", "off"); $("s-insights").textContent = "Launch starts the dashboard"; }
 }
 
 async function updateBanner() {
+  if (ED.self_update === false) { $("upd").classList.remove("show"); return; }  // Dev: local builds only
   try {
     const u = await getJson(`${ALARM}/api/update`);
     if (u && u.available && u.asset) { $("upd-text").textContent = `Ultra Suite ${u.latest} is available (you have ${u.current}).`; $("upd").classList.add("show"); }
@@ -233,22 +263,31 @@ $("upd-btn").onclick = async () => {
 };
 
 async function editions() {
-  const rows = [["PC Sentinel", 8084, DEV.sentinel], ["Code Red Alarm", 8081, DEV.alarm], ["Ultra Dock", null, null]];
-  if (info.insights_installed) rows.push(["Insights", 8301, DEV.insights]);
-  const out = [];
-  for (const [name, pub, dev] of rows) {
-    const p = pub ? ((await reachable(pub)) ? `Running · port ${pub}` : `Installed · not running`) : (info.dock_on ? "On" : "Off");
-    let d;
-    if (!info.dev_installed) d = "Not installed yet";
-    else if (dev) d = (await reachable(dev)) ? `Running · port ${dev}` : `Installed · not running (port ${dev})`;
-    else d = "Off by default (only one Dock manages the taskbar)";
-    out.push(`<tr><td>${name}</td><td>${p}</td><td class="${info.dev_installed ? "" : "muted"}">${d}</td></tr>`);
+  const eds = (info.editions && info.editions.length) ? info.editions : [];
+  const pub = eds.find((e) => e.edition === "Public"), dev = eds.find((e) => e.edition === "Dev");
+  const apps = [["sentinel", "sentinel"], ["alarm", "alarm"], ["insights", "insights_dashboard"]];
+  async function cell(ed, app, portKey) {
+    if (!ed) return `<td class="muted">--</td>`;
+    const here = ed.current, installed = here || ed.installed;
+    const icon = `hubicons/${ed.edition === "Dev" ? "dev/" : ""}${APP_ICON[app]}.png`;
+    const label = (ed.names && ed.names[app]) || app;
+    if (!installed) return `<td class="muted"><span class="edc"><img src="${icon}" alt="" />${label}</span><span class="small">Not installed</span></td>`;
+    const port = ed.ports[portKey];
+    const status = (await reachable(port)) ? `Running · port ${port}` : `Not running (port ${port})`;
+    return `<td><span class="edc"><img src="${icon}" alt="" />${label}</span><span class="small">${status}</span>` +
+      `<button class="btn" data-ed-launch="${ed.edition}:${app}">Launch</button></td>`;
   }
-  out.push(`<tr><td>Version</td><td>${info.version || "--"}</td><td class="muted">${info.dev_installed ? "Local build" : "--"}</td></tr>`);
-  out.push(`<tr><td>Rings alarms</td><td>Yes</td><td class="muted">No (Dev starts with no alarms)</td></tr>`);
-  out.push(`<tr><td>Updates</td><td>From GitHub releases</td><td class="muted">Local builds only</td></tr>`);
+  const out = [];
+  for (const [app, portKey] of apps) {
+    if (app === "insights" && !info.insights_installed && !(dev && dev.installed)) continue;
+    out.push(`<tr>${await cell(pub, app, portKey)}${await cell(dev, app, portKey)}</tr>`);
+  }
+  const dockCell = (ed) => !ed ? `<td class="muted">--</td>` : `<td>${(ed.names && ed.names.dock) || "Ultra Dock"}<span class="small">${
+    ed.current ? (info.dock_on ? (info.dock_grouping ? "On, managing the taskbar" : "On, standing by") : "Off") : (ed.installed ? "Only one Dock manages the taskbar at a time" : "Not installed")}</span></td>`;
+  out.push(`<tr>${dockCell(pub)}${dockCell(dev)}</tr>`);
+  out.push(`<tr><td><span class="small">Rings your alarms, updates from GitHub</span></td><td class="muted"><span class="small">Alarms never ring, updates from local builds</span></td></tr>`);
   $("eds").innerHTML = out.join("");
-  $("ed-note").textContent = info.dev_installed ? "" : "The Dev edition installs side by side with its own folders, ports 18081 to 18301 and black icons once its runtime wiring is finished.";
+  $("ed-note").textContent = (dev && (dev.installed || dev.current)) ? "" : "The Dev edition is an owner-only local build (build_release.ps1 -Edition Dev). It installs next to this one with its own folders, ports 18081 to 18301 and black and white icons.";
 }
 
 function greet() {
@@ -257,6 +296,12 @@ function greet() {
 }
 
 document.addEventListener("click", async (e) => {
+  const ed = e.target.closest("[data-ed-launch]");
+  if (ed) {
+    const [edition, name] = ed.dataset.edLaunch.split(":");
+    if (invoke) { ed.disabled = true; await invoke("launch_edition", { edition, name }).catch(() => {}); setTimeout(() => { ed.disabled = false; }, 1500); }
+    return;
+  }
   const l = e.target.closest("[data-launch]"), g = e.target.closest("[data-go]");
   const name = l ? l.dataset.launch : g ? g.dataset.go : null;
   if (!name) return;
@@ -290,12 +335,11 @@ async function tick() {
   await dockCard();
   if (invoke) { try { const r = await invoke("dock_cap_info"); info.dock_cap = r ? r.cap : null; } catch {} }
   showCap();
-  $("ver").textContent = info.version ? `Ultra Suite ${info.version}` : "Ultra Suite";
+  $("ver").textContent = info.version ? `${ED.product} ${info.version}` : ED.product;
   await Promise.all([alarmCard(), sentinelCard(), insightsCard()]);
   editions();
 }
-tick(); setInterval(tick, 5000);
-updateBanner(); setInterval(updateBanner, 30 * 60 * 1000);
+loadEdition().then(() => { tick(); setInterval(tick, 5000); updateBanner(); setInterval(updateBanner, 30 * 60 * 1000); });
 </script>
 </body>
 </html>

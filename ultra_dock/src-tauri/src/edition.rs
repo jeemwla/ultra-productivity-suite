@@ -226,7 +226,7 @@ impl EditionCatalog {
             ("Public", &self.profiles.public),
             ("Dev", &self.profiles.dev),
         ] {
-            if p.edition != name || p.runtime_ready != (name == "Public") {
+            if p.edition != name || !p.runtime_ready {
                 return Err("edition identity or unready Dev runtime mismatch");
             }
             for value in [
@@ -536,8 +536,8 @@ mod tests {
         assert!(profile(" Public ").is_err());
     }
     #[test]
-    fn native_feature_cannot_activate_the_unintegrated_dev_runtime() {
-        assert!(!profile("Dev").unwrap().runtime_ready());
+    fn native_feature_selects_its_integrated_edition() {
+        assert!(profile("Dev").unwrap().runtime_ready());
         assert_eq!(
             current().unwrap().edition(),
             if cfg!(feature = "dev-edition") {
@@ -546,13 +546,13 @@ mod tests {
                 "Public"
             }
         );
-        assert_eq!(runtime_ready(), !cfg!(feature = "dev-edition"));
+        assert!(runtime_ready());
     }
     #[test]
     fn malformed_schema_ports_and_dev_delivery_fail_closed() {
         let changes = [
             ("/schema", json!(true)),
-            ("/profiles/Dev/runtime_ready", json!(true)),
+            ("/profiles/Dev/runtime_ready", json!(false)),
             ("/profiles/Dev/ports/alarm", json!(8081)),
             ("/profiles/Dev/ports/audio", json!(18081)),
             ("/profiles/Dev/ports/alarm", json!(8085)),

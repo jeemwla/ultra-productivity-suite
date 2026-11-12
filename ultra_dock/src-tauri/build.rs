@@ -7,6 +7,8 @@ fn main() {
             .and_then(|v| v["collector_url"].as_str().map(String::from))
             .unwrap_or_default()
     });
+    // The Dev edition never sends production telemetry, so its build has no collector at all.
+    let url = if std::env::var_os("CARGO_FEATURE_DEV_EDITION").is_some() { String::new() } else { url };
     println!("cargo:rustc-env=ULTRASUITE_COLLECTOR_URL={}", url);
     println!("cargo:rerun-if-changed=../config/telemetry.json");
     println!("cargo:rerun-if-env-changed=ULTRASUITE_COLLECTOR_URL");

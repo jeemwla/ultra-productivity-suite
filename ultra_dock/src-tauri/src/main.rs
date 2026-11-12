@@ -16,6 +16,7 @@ mod dock_safety;
 mod dock_layout;
 mod launch;
 mod edition;
+mod dock_lease;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -95,6 +96,34 @@ fn appdata(sub: &str) -> PathBuf {
 
 fn profile_appdata(profile: &edition::EditionProfile, root: &std::path::Path, sub: &str) -> PathBuf {
     profile.paths(root, root).roaming.join(sub)
+}
+
+/// This build's edition (Public, or Dev with the dev-edition feature). The contract is validated at compile time
+/// by the edition tests and again at startup in main().
+fn profile() -> &'static edition::EditionProfile { edition::current().expect("validated edition") }
+/// "PC Sentinel" or "PC Sentinel (Dev)" and so on.
+fn app_label(app: &str) -> &'static str { profile().app_name(app).unwrap_or("Ultra Suite") }
+/// The taskbar identity of one app window: UltraSuite.sentinel, or UltraSuite.Dev.sentinel in the Dev edition, so the
+/// two editions show as separate taskbar buttons and pin separately.
+fn aumid_for(name: &str) -> String { format!("{}.{}", profile().aumid_prefix(), name) }
+
+/// Window and tray artwork. The Dev edition uses the monochrome set from make_icons.py --edition Dev; the tray uses
+/// its dedicated small frame so the light rim stays visible at 16 to 32 pixels.
+#[cfg(not(feature = "dev-edition"))]
+mod art {
+    pub const ALARM: &[u8] = include_bytes!("../icons/apps/alarm.png");
+    pub const SENTINEL: &[u8] = include_bytes!("../icons/apps/sentinel.png");
+    pub const INSIGHTS: &[u8] = include_bytes!("../icons/apps/insights.png");
+    pub const DOCK: &[u8] = include_bytes!("../icons/apps/dock.png");
+    pub const TRAY: &[u8] = include_bytes!("../icons/apps/dock.png");
+}
+#[cfg(feature = "dev-edition")]
+mod art {
+    pub const ALARM: &[u8] = include_bytes!("../icons/dev/apps/alarm.png");
+    pub const SENTINEL: &[u8] = include_bytes!("../icons/dev/apps/sentinel.png");
+    pub const INSIGHTS: &[u8] = include_bytes!("../icons/dev/apps/insights.png");
+    pub const DOCK: &[u8] = include_bytes!("../icons/dev/apps/dock.png");
+    pub const TRAY: &[u8] = include_bytes!("../icons/dev/apps/dock/32.png");
 }
 
 // ----------------------------------------------------------------------------- organizer config
@@ -371,12 +400,39 @@ fn organizer_loop() {
     let mut listing = dock_safety::StripListing::default();
     let mut burst = dock_layout::RehideBurst::default();
     let mut hidden_now: std::collections::HashSet<isize> = Default::default();
+    // Only one Dock (Public or Dev) may manage the taskbar: see dock_lease.rs. Without the lease nothing is hidden.
+    let mut lease = dock_lease::Lease::open(dock_lease::LEASE_NAME);
+    let mine = profile().edition();
     loop {
+        let want = ORGANIZE.load(Ordering::Relaxed);
+        let mut may_organize = false;
+        if let Some(l) = lease.as_mut() {
+            let step = dock_lease::decide(dock_lease::Inputs {
+                want, held: l.held(),
+                other_strip_visible: dock_lease::other_strip_visible(),
+                other_requested_later: l.held() && dock_lease::requested_by_other(dock_lease::read_request(), mine, l.acquired_ms()),
+                settle_left_ms: l.settle_left_ms(),
+            });
+            match step {
+                dock_lease::Step::Acquire => { if l.try_take() { println!("[dock] this Dock now manages the taskbar"); } }
+                dock_lease::Step::Organize => may_organize = true,
+                dock_lease::Step::Yield => {
+                    // the user turned the other edition's Dock on: turn this one off (remembered), give every button back
+                    println!("[dock] another Ultra Dock was turned on: handing the taskbar over");
+                    set_dock_enabled_local(false);
+                    recovery::restore_all(&tbl);
+                    l.release();
+                }
+                dock_lease::Step::Release => { recovery::restore_all(&tbl); l.release(); }
+                dock_lease::Step::Wait => {}
+            }
+            dock_lease::publish(l.held(), ORGANIZE.load(Ordering::Relaxed));
+        }
         // Between full passes, watch the foreground window: activating a window makes Windows put its hidden
         // taskbar button back, so hide it again right away (and for a short burst after) instead of 4 s later.
         for _ in 0..5 {
             std::thread::sleep(Duration::from_millis(140));
-            if !(ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed)) { continue; }
+            if !(may_organize && ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed)) { continue; }
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 recovery::hide_window(h, true, &tbl);
@@ -388,7 +444,7 @@ fn organizer_loop() {
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
         let guarded = guard_running();
-        let on = guarded && ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed);
+        let on = may_organize && guarded && ORGANIZE.load(Ordering::Relaxed) && HEALTHY.load(Ordering::Relaxed);
         let rendered = RENDERED_WINDOWS.lock().map(|r| r.clone()).unwrap_or_default();
         let mut snap = vec![];
         let reapply = last_reapply.elapsed() > Duration::from_secs(4);
@@ -874,7 +930,7 @@ async fn send_event(kind: String, reason: Option<String>, message: Option<String
 }
 
 fn post_event(kind: &str, reason: Option<String>, message: Option<String>) -> bool {
-    if COLLECTOR.is_empty() { return false; }
+    if COLLECTOR.is_empty() || !profile().capabilities().production_telemetry_allowed { return false; }
     let consented = std::fs::read_to_string(appdata("consent.txt")).unwrap_or_default().trim() == "yes";
     // Typed feedback and an answered uninstall survey are sent because the person chose to send them.
     // Everything else (install, heartbeat, a skipped survey) needs the "yes" from setup.
@@ -938,14 +994,17 @@ fn fix_shortcut_ids() {
     let dir = PathBuf::from(appdata).join(r"Microsoft\Windows\Start Menu\Programs");
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        for (file, name) in [("Ultra Suite.lnk", "hub"), ("PC Sentinel.lnk", "sentinel"), ("Code Red Alarm.lnk", "alarm"), ("Ultra Suite Insights.lnk", "insights")] {
+        let p = profile();
+        let links = [(format!("{}.lnk", p.product_name()), "hub"), (format!("{}.lnk", app_label("sentinel")), "sentinel"),
+                     (format!("{}.lnk", app_label("alarm")), "alarm"), (format!("{}.lnk", app_label("insights")), "insights")];
+        for (file, name) in links {
             let path = dir.join(file);
             if !path.exists() { continue; }
             let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER) else { continue };
             let Ok(pf) = link.cast::<IPersistFile>() else { continue };
             if pf.Load(&HSTRING::from(path.as_os_str()), STGM_READWRITE).is_err() { continue; }
             let Ok(store) = link.cast::<IPropertyStore>() else { continue };
-            write_aumid_props(&store, &[(5, format!("UltraSuite.{name}"))]);
+            write_aumid_props(&store, &[(5, aumid_for(name))]);
             let _ = pf.Save(PCWSTR::null(), true);
         }
     }
@@ -963,7 +1022,7 @@ fn set_app_identity(app: &AppHandle, win: &WebviewWindow, name: &str, title: &st
                 Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("appicons"))]
         .into_iter().flatten().map(|d| d.join(format!("{name}.ico"))).find(|p| p.exists())
         .map(|p| format!("{},0", p.display())).unwrap_or_else(|| format!("{exe},0"));
-    let aumid = format!("UltraSuite.{}", name);
+    let aumid = aumid_for(name);
     let cmd = format!("\"{exe}\" --open {name}");
     let vals: Vec<(u32, String)> = vec![(5, aumid), (2, cmd), (3, icon), (4, title.to_string())];
     unsafe {
@@ -1000,13 +1059,13 @@ fn open_hub(app: &AppHandle) {
         #[cfg(windows)]
         let com = unsafe { windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED) }.is_ok();
         let built = WebviewWindowBuilder::new(&app, "hub", WebviewUrl::App("hub.html".into()))
-            .title("Ultra Suite").inner_size(1180.0, 780.0).min_inner_size(380.0, 480.0).center().visible(false).build();
+            .title(profile().product_name()).inner_size(1180.0, 780.0).min_inner_size(380.0, 480.0).center().visible(false).build();
         match built {
             Ok(win) => {
                 let w2 = win.clone();
                 win.on_window_event(move |e| { if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w2.hide(); } });
-                if let Ok(img) = tauri::image::Image::from_bytes(include_bytes!("../icons/apps/dock.png")) { let _ = win.set_icon(img); }
-                set_app_identity(&app, &win, "hub", "Ultra Suite");
+                if let Ok(img) = tauri::image::Image::from_bytes(art::DOCK) { let _ = win.set_icon(img); }
+                set_app_identity(&app, &win, "hub", profile().product_name());
                 show_view_window(&win);
             }
             Err(error) => eprintln!("[launch] hub window creation failed: {error}"),
@@ -1019,24 +1078,60 @@ fn open_hub(app: &AppHandle) {
     if let Err(error) = spawned { eprintln!("[launch] hub worker could not start: {error}"); HUB_OPENING.store(false, Ordering::Release); }
 }
 
-/// What the hub needs that a web page cannot see: version, Dock state and which optional editions are installed.
+/// One edition's identity for the pages: names, ports and what it may do.
+fn edition_json(p: &edition::EditionProfile) -> Value {
+    let local = std::env::var("LOCALAPPDATA").map(PathBuf::from).ok();
+    let exe = local.map(|d| p.paths(&d, &d).install.join(p.main_binary()));
+    let installed = exe.as_ref().map(|e| e.exists()).unwrap_or(false);
+    let caps = p.capabilities();
+    json!({"edition": p.edition(), "product": p.product_name(), "names": p.app_names(), "ports": p.ports(),
+           "installed": installed, "current": p.edition() == profile().edition(),
+           "alarm_delivery": caps.alarm_delivery_enabled, "self_update": caps.github_self_update_enabled})
+}
+
+/// This edition's identity, for the strip and hub pages (which ports to call, whether updates apply).
+#[tauri::command]
+fn edition_info() -> Value { edition_json(profile()) }
+
+/// What the hub needs that a web page cannot see: version, Dock state and which editions are installed.
 #[tauri::command]
 fn hub_info() -> Value {
-    let local = std::env::var("LOCALAPPDATA").map(PathBuf::from).ok();
     let start = std::env::var("APPDATA").map(|a| PathBuf::from(a).join(r"Microsoft\Windows\Start Menu\Programs")).ok();
-    let insights = start.map(|d| d.join("Ultra Suite Insights.lnk").exists()).unwrap_or(false) || port_open(8301);
-    let dev = local.map(|d| d.join("Ultra Suite (Dev)").join("Ultra Suite Dev.exe").exists()).unwrap_or(false);
+    let insights_link = format!("{}.lnk", app_label("insights"));
+    let insights = start.map(|d| d.join(&insights_link).exists()).unwrap_or(false)
+        || profile().port("insights_dashboard").map(port_open).unwrap_or(false) || profile().is_dev();
     #[cfg(windows)]
     let covered = all_taskbars_covered();
     #[cfg(not(windows))]
     let covered = false;
+    let on = !STRIP_HIDDEN.load(Ordering::Relaxed);
     // Why the Dock is on but leaving the taskbar as it is (the same reasons the strip's menu shows)
-    let dock_note = if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible.") }
+    let dock_note = if on && dock_lease::waiting_for_other() { Some("The other edition's Ultra Dock manages the taskbar. Turning this one on again takes it over.") }
+        else if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible.") }
         else if !HEALTHY.load(Ordering::Relaxed) { Some("Not enough room on the taskbar right now, so every button stays visible.") }
         else { None };
-    json!({"version": env!("CARGO_PKG_VERSION"), "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed),
-           "dock_grouping": covered && HEALTHY.load(Ordering::Relaxed), "dock_note": dock_note,
-           "insights_installed": insights, "dev_installed": dev})
+    let editions: Vec<Value> = ["Public", "Dev"].iter().filter_map(|e| edition::profile(e).ok()).map(edition_json).collect();
+    let dev_installed = editions.iter().any(|e| e["edition"] == "Dev" && (e["installed"] == true || e["current"] == true));
+    json!({"version": env!("CARGO_PKG_VERSION"), "edition": profile().edition(), "product": profile().product_name(),
+           "dock_on": on, "dock_grouping": on && dock_lease::held() && covered && HEALTHY.load(Ordering::Relaxed),
+           "dock_note": dock_note, "dock_cap": dock_cap(), "insights_installed": insights, "dev_installed": dev_installed,
+           "editions": editions})
+}
+
+/// Open an app of either edition from the hub. The same edition opens its own window; the other edition is started
+/// from its installed copy with --open, and its own single-instance check forwards that to a running copy.
+#[tauri::command]
+fn launch_edition(app: AppHandle, edition: String, name: String) -> Result<(), String> {
+    if !matches!(name.as_str(), "hub" | "sentinel" | "alarm" | "insights") { return Err("unknown app".into()); }
+    let target = edition::profile(&edition).map_err(|e| e.to_string())?;
+    if target.edition() == profile().edition() { open_view(&app, &name); return Ok(()); }
+    let local = std::env::var("LOCALAPPDATA").map(PathBuf::from).map_err(|_| "no local app data folder".to_string())?;
+    let exe = target.paths(&local, &local).install.join(target.main_binary());
+    if !exe.exists() { return Err(format!("{} is not installed", target.product_name())); }
+    let mut cmd = Command::new(&exe);
+    cmd.args(["--open", &name]);
+    if let Some(d) = exe.parent() { cmd.current_dir(d); }
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1097,9 +1192,9 @@ fn open_view_worker(app: &AppHandle, view: launch::View) {
     let (w, h) = if name == "alarm" { (1360.0, 920.0) } else { (1440.0, 960.0) };
     // every app window gets its own icon (title bar, taskbar, Alt+Tab)
     let icon_bytes: &[u8] = match name {
-        "alarm" => include_bytes!("../icons/apps/alarm.png"),
-        "sentinel" => include_bytes!("../icons/apps/sentinel.png"),
-        _ => include_bytes!("../icons/apps/insights.png"),
+        "alarm" => art::ALARM,
+        "sentinel" => art::SENTINEL,
+        _ => art::INSIGHTS,
     };
     let builder = WebviewWindowBuilder::new(app, name, WebviewUrl::App(startup.into()))
         .title(view.title).inner_size(w, h).min_inner_size(360.0, 400.0).center().visible(false)
@@ -1495,7 +1590,7 @@ fn taskbar_tracker(_app: AppHandle) {
             let w = requested.min(room).max(0) as u32;
             // A strip that cannot show even its menu is hidden rather than drawn as a sliver beside the tray,
             // unless room is on its way (the fit check's short grace while buttons are being hidden).
-            let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && w > 8 && (w as i32 >= requested || fits);
+            let show = tb_visible && !fullscreen && !STRIP_HIDDEN.load(Ordering::Relaxed) && dock_lease::held() && w > 8 && (w as i32 >= requested || fits);
             STRIP_FITS.store(show && fits, Ordering::Relaxed);
             STRIP_SHOWN.store(show, Ordering::Relaxed);
             let state = (x, r.top, w, h, show);
@@ -1550,7 +1645,7 @@ fn set_autostart() {
     if let Ok(exe) = std::env::current_exe() {
         let val = format!("\"{}\" --background", exe.display());
         let mut cmd = Command::new("reg.exe");
-        cmd.args(["add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", "UltraSuite", "/t", "REG_SZ", "/d", &val, "/f"]);
+        cmd.args(["add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", profile().run_key(), "/t", "REG_SZ", "/d", &val, "/f"]);
         #[cfg(windows)]
         no_window(&mut cmd);
         let _ = cmd.status();
@@ -1598,10 +1693,19 @@ mod cap_tests {
 }
 
 fn dock_saved_on() -> bool {
-    std::fs::read_to_string(appdata("dock.txt")).map(|s| s.trim() != "off").unwrap_or(true)
+    // Public starts with the Dock on, Dev with it off (only one Dock should manage the taskbar)
+    std::fs::read_to_string(appdata("dock.txt")).map(|s| s.trim() != "off")
+        .unwrap_or(profile().capabilities().dock_enabled_by_default)
 }
 
+/// The user turned the Dock on or off (tray, hub, strip menu, shortcut). Turning it on also asks the other edition's
+/// Dock to turn itself off and hand the taskbar over.
 fn set_dock_enabled(on: bool) {
+    if on { dock_lease::request_taskbar(profile().edition()); }
+    set_dock_enabled_local(on);
+}
+
+fn set_dock_enabled_local(on: bool) {
     ORGANIZE.store(on, Ordering::Relaxed);    // off: the organizer gives every button back
     STRIP_HIDDEN.store(!on, Ordering::Relaxed);
     let _ = std::fs::write(appdata("dock.txt"), if on { "on" } else { "off" });
@@ -1612,16 +1716,17 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
     let dock = CheckMenuItem::with_id(app, "dock", "Dock", true, dock_saved_on(), None::<&str>)?;
-    let hub = MenuItem::with_id(app, "hub", "Open Ultra Suite", true, None::<&str>)?;
-    let sentinel = MenuItem::with_id(app, "sentinel", "Open PC Sentinel", true, None::<&str>)?;
-    let alarm = MenuItem::with_id(app, "alarm", "Open Code Red Alarm", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit Ultra Suite", true, None::<&str>)?;
+    let product = profile().product_name();
+    let hub = MenuItem::with_id(app, "hub", format!("Open {product}"), true, None::<&str>)?;
+    let sentinel = MenuItem::with_id(app, "sentinel", format!("Open {}", app_label("sentinel")), true, None::<&str>)?;
+    let alarm = MenuItem::with_id(app, "alarm", format!("Open {}", app_label("alarm")), true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", format!("Quit {product}"), true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&dock, &PredefinedMenuItem::separator(app)?, &hub, &sentinel, &alarm,
                                        &PredefinedMenuItem::separator(app)?, &quit_item])?;
     if let Ok(mut g) = DOCK_ITEM.lock() { *g = Some(dock); }
     TrayIconBuilder::with_id("ultra-suite")
-        .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/apps/dock.png"))?)
-        .tooltip("Ultra Suite")
+        .icon(tauri::image::Image::from_bytes(art::TRAY)?)
+        .tooltip(profile().product_name())
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -1667,7 +1772,7 @@ fn run_survey() {
     tauri::Builder::default()
         .setup(|app| {
             WebviewWindowBuilder::new(app, "survey", WebviewUrl::App("index.html?view=survey".into()))
-                .title("Uninstall Ultra Suite").inner_size(520.0, 640.0).resizable(false).center().always_on_top(true).build()?;
+                .title(format!("Uninstall {}", profile().product_name())).inner_size(520.0, 640.0).resizable(false).center().always_on_top(true).build()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![send_event, quit])
@@ -1701,7 +1806,7 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let strip = WebviewWindowBuilder::new(app, "taskbar", WebviewUrl::App("index.html?view=strip".into()))
-                .title("Ultra Dock").decorations(false).transparent(true).always_on_top(true).skip_taskbar(true)
+                .title(app_label("dock")).decorations(false).transparent(true).always_on_top(true).skip_taskbar(true)
                 .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0)
                 .on_page_load(|_, payload| {
                     let mut url = payload.url().clone();
@@ -1754,7 +1859,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {
