@@ -61,10 +61,12 @@ pub fn identity_matches(profile: &EditionProfile, body: Option<&str>) -> bool {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CoreReadiness { Absent, Starting, Ready, Conflict }
+pub enum CoreReadiness { Absent, Unidentified, Starting, Ready, Conflict }
 
 /// An occupied owned port is never permission to start another core. Inspect
 /// both primary services before attaching, and all owned ports before spawning.
+/// A missing response is Unidentified, so callers can keep a bounded loading
+/// window without attaching or spawning. Only observed invalid metadata conflicts.
 /// Closures allow tests to model startup without sockets or child processes.
 pub fn core_readiness(
     profile: &'static EditionProfile,
@@ -75,17 +77,20 @@ pub fn core_readiness(
     if ports.is_empty() { return CoreReadiness::Absent; }
     let mut identified = 0;
     let mut ready = 0;
+    let mut unidentified = false;
     for name in ["alarm", "sentinel"] {
         let view = view_for(profile, name).expect("validated owned service");
         if !ports.contains(&view.port) { continue; }
         let about = get(view.port, "/api/about");
+        if about.is_none() { unidentified = true; continue; }
         if !identity_matches(profile, about.as_deref()) { return CoreReadiness::Conflict; }
         identified += 1;
         if view.response_ready(get(view.port, view.probe).as_deref()) { ready += 1; }
     }
     if ready == 2 { CoreReadiness::Ready }
+    else if unidentified { CoreReadiness::Unidentified }
     else if identified > 0 { CoreReadiness::Starting }
-    else { CoreReadiness::Conflict }
+    else { CoreReadiness::Unidentified }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -225,13 +230,14 @@ mod tests {
             assert_eq!(core_readiness(profile, |p| p == sentinel, get), Starting);
             assert_eq!(core_readiness(profile, |p| p == alarm || p == sentinel,
                 |_, path| Some(if path == "/api/about" { about(Some(edition)) } else { "{}".into() })), Starting);
-            for body in [None, Some(String::new()), Some("{}".into()), Some("not JSON".into()), Some(about(Some("Other"))),
+            assert_eq!(core_readiness(profile, |p| p == alarm || p == sentinel, |_, _| None), Unidentified);
+            for body in [Some(String::new()), Some("{}".into()), Some("not JSON".into()), Some(about(Some("Other"))),
                 Some(about(Some(if edition == "Public" { "Dev" } else { "Public" })))] {
                 assert_eq!(core_readiness(profile, |p| p == alarm || p == sentinel, |_, _| body.clone()), Conflict);
             }
             for service in profile.ports().keys() {
                 let port = profile.port(service).unwrap();
-                assert_eq!(core_readiness(profile, |p| p == port, |_, _| None), Conflict, "{edition} {service}");
+                assert_eq!(core_readiness(profile, |p| p == port, |_, _| None), Unidentified, "{edition} {service}");
             }
             // One correct service cannot hide a foreign sibling.
             assert_eq!(core_readiness(profile, |_| true, |port, path| {
@@ -240,6 +246,72 @@ mod tests {
             assert_eq!(core_readiness(profile, |p| p == alarm || p == sentinel, |port, path| {
                 if path == "/api/about" { Some(about(None)) } else { get(port, path) }
             }), if edition == "Public" { Ready } else { Conflict });
+        }
+    }
+
+    #[test]
+    fn unidentified_startup_retries_until_metadata_and_service_probes_are_ready() {
+        use CoreReadiness::*;
+        for edition in ["Public", "Dev"] {
+            let profile = edition::profile(edition).unwrap();
+            let alarm = profile.port("alarm").unwrap();
+            let mut fake_spawns = 0;
+            let mut fake_navigations = 0;
+            // A single child binds before serving metadata, then metadata and
+            // normal service responses become available on separate ticks.
+            for (tick, expected) in [Absent, Unidentified, Unidentified, Starting, Ready].into_iter().enumerate() {
+                let get = |port, path: &str| {
+                    if path == "/api/about" {
+                        if tick < 2 || (tick == 2 && port != alarm) { None } else { Some(about(Some(edition))) }
+                    } else if tick < 4 { Some("{}".into()) }
+                    else if port == alarm { Some(r#"{"is_ringing":false}"#.into()) }
+                    else { Some(r#"{"ok":true}"#.into()) }
+                };
+                let state = core_readiness(profile, |_| tick > 0, get);
+                assert_eq!(state, expected, "{edition} startup tick {tick}");
+                if state == Absent { fake_spawns += 1; }
+                assert_ne!(state, Conflict, "missing transport responses must retain the loading window");
+                let view = view_for(profile, "alarm").unwrap();
+                if state != Conflict && view.ready(get(alarm, view.probe).as_deref(), get(alarm, "/api/about").as_deref()) {
+                    fake_navigations += 1;
+                }
+                assert_eq!(fake_spawns, 1, "never spawn another child into occupied ports");
+                assert_eq!(fake_navigations, usize::from(tick == 4), "never navigate before identity and probe validation");
+            }
+        }
+    }
+
+    #[test]
+    fn unidentified_ports_cannot_attach_and_do_not_hide_observed_foreign_metadata() {
+        use CoreReadiness::*;
+        for edition in ["Public", "Dev"] {
+            let profile = edition::profile(edition).unwrap();
+            let alarm = profile.port("alarm").unwrap();
+            let sentinel = profile.port("sentinel").unwrap();
+            let view = view_for(profile, "alarm").unwrap();
+            let probe = Some(r#"{"is_ringing":false}"#);
+            // Persistent unidentified occupancy never becomes permission to
+            // spawn or attach, including after a previously valid response.
+            for available in [false, false, true, false, false] {
+                let metadata = available.then(|| about(Some(edition)));
+                let state = core_readiness(profile, |p| p == alarm || p == sentinel, |port, path| {
+                    if path == "/api/about" { metadata.clone() }
+                    else if port == alarm { probe.map(str::to_string) }
+                    else { Some(r#"{"ok":true}"#.into()) }
+                });
+                assert_eq!(state, if available { Ready } else { Unidentified });
+                assert_ne!(state, Absent, "an occupied port must never allow a second spawn");
+                assert_eq!(view.ready(probe, metadata.as_deref()), available);
+            }
+            // Check both primary ports even when the first is unidentified.
+            // Explicitly malformed/foreign metadata remains a prompt conflict.
+            for bad in ["{}".to_string(), "not JSON".to_string(), about(Some("Other")),
+                about(Some(if edition == "Public" { "Dev" } else { "Public" }))] {
+                assert_eq!(core_readiness(profile, |p| p == alarm || p == sentinel, |port, path| {
+                    assert_eq!(path, "/api/about", "unidentified/foreign services must not be probed as ready");
+                    if port == alarm { None } else { Some(bad.clone()) }
+                }), Conflict);
+            }
         }
     }
 

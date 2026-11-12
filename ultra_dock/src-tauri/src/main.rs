@@ -1123,6 +1123,8 @@ fn open_view_worker(app: &AppHandle, view: launch::View) {
 
 fn wait_for_view(app: &AppHandle, win: &WebviewWindow, view: launch::View, url: &str) {
     let deadline = Instant::now() + Duration::from_secs(30);
+    // Unidentified occupancy cannot attach or spawn, but a temporarily missing
+    // metadata response must retain this bounded loading window.
     let mut conflict = ensure_core(app) == launch::CoreReadiness::Conflict;
     while Instant::now() < deadline {
         if conflict { break; }
@@ -1181,7 +1183,7 @@ mod native_routing_tests {
 fn core_readiness() -> launch::CoreReadiness {
     let observed = launch::core_readiness(edition::current().expect("validated edition"), port_open, http_get);
     if observed == launch::CoreReadiness::Conflict {
-        eprintln!("[core] occupied edition ports have an unknown or foreign service identity; refusing to attach or spawn");
+        eprintln!("[core] occupied edition ports have invalid or foreign service metadata; refusing to attach or spawn");
     }
     observed
 }
