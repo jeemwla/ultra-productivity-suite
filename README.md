@@ -2,7 +2,7 @@
 
 Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
 
-[Download the Windows installer, v2.2.10 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.10/UltraSuite-Setup-2.2.10-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
+[Download the Windows installer, v2.2.11 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.11/UltraSuite-Setup-2.2.11-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
 This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
 
@@ -33,6 +33,8 @@ PC Sentinel includes CPU, GPU and memory readings; grouped process usage; coolin
 
 Sensor availability depends on the hardware, Windows permissions and the data source. Missing readings must remain unavailable. Component power estimates are not a wall-power measurement. A PSU rating describes capacity, not current consumption.
 
+Code Red Alarm starts with no sample alarms. New drafts have no repeat days, Code Red and Wake-up math off, forced full volume off, and browser ringing off. The default output follows Windows; users can choose a specific speaker. Existing saved alarms and explicit preferences are retained.
+
 Code Red Alarm runs on the local PC. It needs the PC and alarm service available. Speaker delivery, wake-from-sleep support and foreground behavior need validation on the intended machine. Do not rely on an untested installation for a critical reminder.
 
 Ultra Dock keeps pinned/selected apps on the native taskbar and groups other open apps. Recovery and visibility work is active. A folder should never be the only route to an app unless its replacement is actually available.
@@ -41,7 +43,7 @@ Ultra Dock keeps pinned/selected apps on the native taskbar and groups other ope
 
 Main now includes tested source changes for WebSocket origin checks, conservative drive matching, write-ahead Dock recovery, far-future alarm occurrences, absolute UTC wake deadlines, clearer storage capacity, and stricter Dock visibility gating.
 
-The v2.2.10 installer includes launch recovery, keyboard-accessible Appearance dismissal the optional offline PSU picker, and persistent [Settings / Extras](docs/SETTINGS.md). It is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
+The v2.2.11 installer includes launch recovery, keyboard-accessible Appearance dismissal the optional offline PSU picker, and persistent [Settings / Extras](docs/SETTINGS.md). It is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
 
 The [roadmap](ROADMAP.md) contains 24 public phases and 288 detailed engineering and acceptance tasks. Candidate features remain proposals. Stress-test parity, universal hardware support and best-in-category claims have not been established.
 

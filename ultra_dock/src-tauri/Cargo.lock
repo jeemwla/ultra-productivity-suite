@@ -4093,7 +4093,7 @@ dependencies = [
 
 [[package]]
 name = "ultra-suite"
-version = "2.2.10"
+version = "2.2.11"
 dependencies = [
  "base64 0.22.1",
  "png 0.17.16",
