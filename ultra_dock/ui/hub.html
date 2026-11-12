@@ -32,13 +32,23 @@ nav{background:var(--panel);border-right:1px solid var(--line);padding:22px 14px
 .dot.on{background:var(--ok)} .dot.warn{background:var(--warn)}
 nav .foot{margin-top:auto;color:var(--ink-3);font-size:12.5px;padding:8px}
 main{padding:26px 30px 40px;overflow:auto}
-h1{font-size:24px;font-weight:650;margin-bottom:4px}
+h1{font-size:26px;font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
 .sub{color:var(--ink-2);margin-bottom:20px}
+/* Launcher-style header: a soft accent glow behind the greeting */
+.hero{position:relative;overflow:hidden;border-radius:16px;padding:24px 26px 6px;margin-bottom:20px;border:1px solid var(--line);
+  background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 22%,transparent) 0%,transparent 55%),
+             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,var(--ok) 14%,transparent) 0%,transparent 60%),var(--panel)}
+.hero .sub{margin-bottom:18px}
 .banner{display:none;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--radius);padding:12px 16px;margin-bottom:18px}
 .banner.show{display:flex}
 .banner p{flex:1}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:12px;min-height:200px}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:12px;min-height:200px;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.card::before{content:"";position:absolute;left:18px;right:18px;top:0;height:2px;border-radius:0 0 2px 2px;background:var(--app,var(--accent));opacity:.85}
+.card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--app,var(--accent)) 40%,var(--line));box-shadow:0 10px 28px rgba(0,0,0,.22)}
+#c-sentinel{--app:#4cc38a} #c-alarm{--app:#ff6b6b} #c-dock{--app:#60cdff} #c-insights{--app:#b48cff}
+@media (prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
 .head{display:flex;align-items:center;gap:12px}
 .head img{width:44px;height:44px;border-radius:10px}
 .head h2{font-size:16.5px;font-weight:650}
@@ -54,7 +64,8 @@ h1{font-size:24px;font-weight:650;margin-bottom:4px}
 .actions{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
 .btn{padding:8px 18px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);font-weight:600}
 .btn:hover{border-color:var(--ink-3)}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;min-width:112px}
+.btn.primary:hover{filter:brightness(1.08)}
 .btn:disabled{opacity:.5;cursor:default}
 h3{font-size:14px;font-weight:650;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin:28px 0 12px}
 table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
@@ -75,8 +86,8 @@ td.muted{color:var(--ink-3)}
   <div class="foot" id="ver">Ultra Suite</div>
 </nav>
 <main>
-  <h1 id="greet">Ultra Suite</h1>
-  <p class="sub">Every app in the suite, with what each one is doing right now.</p>
+  <div class="hero"><h1 id="greet">Ultra Suite</h1>
+  <p class="sub">Every app in the suite, with what each one is doing right now.</p></div>
   <div class="banner" id="upd"><p id="upd-text"></p><button class="btn primary" id="upd-btn">Update now</button></div>
   <div class="grid" id="cards">
     <section class="card" id="c-sentinel">
