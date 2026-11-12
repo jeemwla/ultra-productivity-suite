@@ -268,6 +268,13 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 #psu-catalog .field :is(select,input){width:100%;min-width:0;max-width:100%}
 #psu-catalog select{appearance:auto;height:38px}
 #psu-catalog summary{cursor:pointer;color:var(--accent);font-weight:600}
+.psu-search{position:relative}
+#psu-suggest{position:absolute;left:0;right:0;top:100%;z-index:20;margin:4px 0 0;padding:4px;list-style:none;max-height:340px;overflow:auto;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+#psu-suggest li{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;cursor:pointer}
+#psu-suggest li[aria-selected=true],#psu-suggest li:hover{background:var(--accent-soft,rgba(80,140,255,.16))}
+.psu-opt-name{font-weight:600;color:var(--ink)}.psu-opt-meta{font-size:12.5px;color:var(--ink-2)}
+#psu-suggest mark{background:none;color:var(--accent);font-weight:700}
+.psu-or{margin:12px 0 0}
 .form-actions{display:flex;flex-wrap:wrap;gap:8px}
 .toggle{position:relative;width:40px;height:22px;flex:none}.toggle input{position:absolute;inset:0;opacity:0;z-index:1;cursor:pointer}
 .toggle span{position:absolute;inset:0;border-radius:99px;background:var(--line-strong);transition:background .2s}
@@ -308,6 +315,22 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 
 .process-list.expanded{max-height:540px;overflow:auto;overscroll-behavior:contain;padding:2px}.process-group{margin:0;border-bottom:1px solid var(--line)}.process-summary{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(40px,80px) 75px;gap:12px;align-items:center;list-style:none;cursor:pointer;padding:9px 0}.process-summary::-webkit-details-marker{display:none}.process-summary .nm{min-width:0;overflow-wrap:anywhere}.process-summary small{display:block;color:var(--ink-3);font-size:11px;line-height:1.4;margin-top:3px}.process-summary .vv{text-align:right;font-variant-numeric:tabular-nums}.process-details{padding:4px 8px 14px 40px;font-size:12px}.process-details p{margin:8px 0;overflow-wrap:anywhere}.process-details code{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.process-detail-table{max-height:250px;overflow:auto}.process-detail-table table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}.process-detail-table th,.process-detail-table td{padding:5px 8px;border-bottom:1px solid var(--line)}.process-detail-table th{position:sticky;top:0;background:var(--surface)}@media(max-width:650px){.process-summary{grid-template-columns:28px minmax(0,1fr) 72px}.process-summary .bar{display:none}.process-details{padding-left:6px}#apps-search{width:100%}}*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line);border:2px solid transparent;background-clip:padding-box;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
 
+/* Readability (owner, 2026-11-11): secondary text one step larger and brighter in every theme */
+:root{--ink-3r:color-mix(in srgb,var(--ink-3) 62%,var(--ink-2))}
+.muted{font-size:13.5px;color:var(--ink-3r)}
+.ch .sub{font-size:13.5px;color:var(--ink-3r)}
+.top p{font-size:14px;color:var(--ink-3r)}
+.tile .l{font-size:14px}
+.tile .m{font-size:15px}
+.g-unit,.fan .rpm small{font-size:13px;color:var(--ink-3r)}
+.steps{font-size:12.5px;color:var(--ink-3r)}
+.process-summary small{font-size:12px;color:var(--ink-3r)}
+.chart .tip{font-size:12.5px}
+/* Live values printed on every graph, no hover needed */
+.chart .cv{position:absolute;right:8px;top:0;display:flex;flex-direction:column;align-items:flex-end;gap:1px;pointer-events:none;transition:top .35s ease}
+.chart .cv b{font:700 16px/1.2 var(--font-display);color:var(--ink);background:color-mix(in srgb,var(--surface) 82%,transparent);padding:1px 7px;border-radius:7px}
+.chart .cv span{font-size:12px;font-weight:600;color:var(--ink-2);background:color-mix(in srgb,var(--surface) 70%,transparent);padding:0 6px;border-radius:6px}
+@media (prefers-reduced-motion:reduce){.chart .cv{transition:none}}
 </style>
 </head>
 <body>
@@ -372,9 +395,9 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
             <p class="muted mt" id="pw-coverage"></p>
             <details class="mt"><summary>How the estimate is calculated</summary><div class="muted mt" id="pw-assumptions"></div></details>
             <div class="mt" id="desktop-psu"><h3>Desktop power supply (optional)</h3><p class="muted">Enter the rated output and size from the PSU label or receipt. These details stay on this PC.</p>
-            <details class="mt" id="psu-catalog"><summary>Find a PSU in the catalog</summary>
+            <details class="mt" id="psu-catalog" open><summary>Find your PSU in the catalog</summary>
               <p class="muted mt" id="psu-catalog-status" role="status">The catalog works offline. Open to choose a brand, wattage, size and model.</p>
-              <div class="field mt"><label for="psu-brand-search">Search brands</label><input id="psu-brand-search" type="search" placeholder="Type a brand, for example Corsair" autocomplete="off"></div>
+              <div class="field mt psu-search"><label for="psu-brand-search">Search all power supplies</label><input id="psu-brand-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="psu-suggest" placeholder="Try: corsair 1000 sfx" autocomplete="off" spellcheck="false"><ul id="psu-suggest" role="listbox" aria-label="Matching power supplies" hidden></ul></div><p class="muted psu-or">Or choose step by step:</p>
               <div class="field mt"><label for="psu-brand">Brand</label><select id="psu-brand" disabled><option value="">Choose brand</option></select></div>
               <div class="field mt"><label for="psu-watts-choice">Wattage</label><select id="psu-watts-choice" disabled><option value="">Choose wattage</option></select></div>
               <div class="field mt"><label for="psu-form-choice">Form factor</label><select id="psu-form-choice" disabled><option value="">Choose form factor</option></select></div>
@@ -593,6 +616,15 @@ function lineChart(key, arr, color, fixedMax, unit){
   const d = smooth(pts); svg.querySelector(".ln").setAttribute("d", d);
   svg.querySelector(".ar").setAttribute("d", pts.length > 1 ? d + ` L${pts[pts.length - 1][0]},${Hh - 6} L${pts[0][0]},${Hh - 6} Z` : "");
   svg.parentElement._data = { arr, unit: unit || "%" };
+  const box = svg.parentElement, u = unit || "%", last = vals.length ? vals[vals.length - 1] : null;
+  let lab = box.querySelector(".cv");
+  if (!lab) { lab = document.createElement("div"); lab.className = "cv"; lab.setAttribute("aria-hidden", "true"); lab.innerHTML = "<b></b><span></span>"; box.appendChild(lab); }
+  lab.hidden = last == null;
+  if (last != null) {
+    lab.querySelector("b").textContent = auto(last) + u;
+    lab.querySelector("span").textContent = `min ${auto(Math.min(...vals))}${u} · max ${auto(Math.max(...vals))}${u}`;
+    const lp = pts[pts.length - 1]; lab.style.top = `${Math.max(0, Math.min(62, (lp[1] / Hh) * 100 - 16))}%`;
+  }
 }
 document.addEventListener("mousemove", (e) => {
   const c = e.target.closest(".chart"); document.querySelectorAll(".chart .tip,.chart .cursor").forEach(t => { if (!c || t.parentElement !== c) t.remove(); });
