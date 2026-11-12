@@ -273,36 +273,54 @@ def add_shared_routes(app, frontend_dir: str):
             raise HTTPException(409, "You're already on the newest version.")
         if not info.get("asset_sha256"):
             raise HTTPException(409, "This release has no published checksum, so it can't be verified. Download it from GitHub instead.")
-        try:
-            async with httpx.AsyncClient(timeout=5) as c:
-                nxt = (await c.get(f"http://127.0.0.1:{ALARM_PORT}/api/next")).json()
-                ring = (await c.get(f"http://127.0.0.1:{ALARM_PORT}/api/ring")).json()
-        except Exception:
-            nxt, ring = None, None
-        blocked = alarm_blocks_update(nxt, ring)
+        async def check_alarm_state():
+            try:
+                async with httpx.AsyncClient(timeout=5) as c:
+                    nxt = await c.get(f"http://127.0.0.1:{ALARM_PORT}/api/next")
+                    nxt.raise_for_status()
+                    nxt = nxt.json()
+                    ring = await c.get(f"http://127.0.0.1:{ALARM_PORT}/api/ring")
+                    ring.raise_for_status()
+                    ring = ring.json()
+            except Exception:
+                nxt, ring = None, None
+            return alarm_blocks_update(nxt, ring)
+
+        blocked = await check_alarm_state()
         if blocked:
             raise HTTPException(409, blocked)
-        dest = os.path.join(tempfile.gettempdir(), f"UltraSuite-Setup-{info['latest']}.exe")
+        dest = None
+        started = False
         h = hashlib.sha256()
         try:
-            async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
-                async with c.stream("GET", info["asset"]) as r:
-                    r.raise_for_status()
-                    with open(dest, "wb") as f:
-                        async for chunk in r.aiter_bytes():
-                            h.update(chunk)
-                            f.write(chunk)
-        except Exception:
-            raise HTTPException(502, "Couldn't download the update. Check your connection and try again.")
-        if h.hexdigest() != info["asset_sha256"]:
             try:
-                os.remove(dest)
-            except OSError:
-                pass
-            raise HTTPException(502, "The download did not match GitHub's published checksum, so nothing was installed.")
-        # The installer closes the running app itself, then reinstalls in place and restarts it.
-        subprocess.Popen([dest], close_fds=True, creationflags=0x00000008 if os.name == "nt" else 0)  # DETACHED_PROCESS
-        return {"ok": True, "started": dest}
+                async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
+                    async with c.stream("GET", info["asset"]) as r:
+                        r.raise_for_status()
+                        # A unique candidate cannot overwrite an older download or unrelated file.
+                        with tempfile.NamedTemporaryFile(prefix="UltraSuite-Setup-", suffix=".exe", delete=False) as f:
+                            dest = f.name
+                            async for chunk in r.aiter_bytes():
+                                h.update(chunk)
+                                f.write(chunk)
+            except Exception:
+                raise HTTPException(502, "Couldn't download the update. Check your connection and try again.")
+            if h.hexdigest() != info["asset_sha256"]:
+                raise HTTPException(502, "The download did not match GitHub's published checksum, so nothing was installed.")
+            # Downloading can outlast the safe window. Fetch both states again before launch.
+            blocked = await check_alarm_state()
+            if blocked:
+                raise HTTPException(409, blocked)
+            # The installer closes the running app itself, then reinstalls in place and restarts it.
+            subprocess.Popen([dest], close_fds=True, creationflags=0x00000008 if os.name == "nt" else 0)  # DETACHED_PROCESS
+            started = True
+            return {"ok": True, "started": dest}
+        finally:
+            if dest is not None and not started:
+                try:
+                    os.remove(dest)
+                except OSError:
+                    pass
 
     return app
 
