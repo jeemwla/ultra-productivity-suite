@@ -99,6 +99,7 @@ def alarm_delivery_enabled():
 def _timer_payload(row, now):
     result = dict(row)
     result["sampled_at"] = now
+    result["edition"] = os.getenv("ULTRASUITE_EDITION", "Public")
     result["delivery_enabled"] = alarm_delivery_enabled()
     result["remaining_sec"] = max(0.0, row["deadline"] - now) if row["state"] == "running" else row["remaining_sec"]
     return result

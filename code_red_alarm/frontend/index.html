@@ -469,6 +469,12 @@ $("time-picker-apply").onclick = () => {
 
 /* ---------- Countdown timer ---------- */
 let timerData = null, timerReceivedAt = 0, timerBusy = false, deliveryEnabled = false;
+let deliveryEdition = null, deliveryUnavailable = false;
+function deliveryNotice(){
+  if (deliveryEdition === "Dev") return "Dev: alarm delivery is off";
+  if (deliveryEdition) return "Alarm delivery is off";
+  return deliveryUnavailable ? "Alarm delivery status unavailable" : "Checking alarm delivery…";
+}
 const timerFields = ["timer-hours","timer-minutes","timer-seconds"];
 function durationFromParts(parts){
   if (!parts.every(v => /^\d+$/.test(String(v)))) throw new Error("Enter whole hours, minutes and seconds.");
@@ -504,15 +510,23 @@ function renderTimer(){
 }
 function applyTimerSnapshot(data){
   if (timerData && (data.revision < timerData.revision || (data.revision === timerData.revision && data.sampled_at < timerData.sampled_at))) return;
-  deliveryEnabled = data.delivery_enabled === true;
+  // A page bound to Dev cannot be re-enabled by an old Public/legacy response.
+  if (deliveryEdition === "Dev" && data.edition !== "Dev") return;
+  const wasEnabled = deliveryEnabled, wasEdition = deliveryEdition, wasUnavailable = deliveryUnavailable;
+  if (["Public","Dev"].includes(data.edition) && typeof data.delivery_enabled === "boolean") {
+    deliveryEdition = data.edition; deliveryUnavailable = false;
+    deliveryEnabled = data.edition === "Public" && data.delivery_enabled;
+  } else if (!deliveryEdition) deliveryUnavailable = true;
   $("browser-ring").disabled = !deliveryEnabled; $("unlock").disabled = !deliveryEnabled;
+  $("test-sound").disabled = !deliveryEnabled;
   if (!deliveryEnabled) stopBrowserSiren();
   if (!timerData || timerData.run_id !== data.run_id || (data.state === "idle" && timerData.state !== "idle")) setTimerDuration(data.duration_sec);
   timerData = data; timerReceivedAt = performance.now(); renderTimer();
+  if (wasEnabled !== deliveryEnabled || wasEdition !== deliveryEdition || wasUnavailable !== deliveryUnavailable) render();
 }
 async function loadTimer(){
   try { applyTimerSnapshot(await api("/api/timer")); }
-  catch { $("timer-status").textContent = "Timer unavailable"; }
+  catch { if (!deliveryEdition && !deliveryUnavailable) { deliveryUnavailable = true; render(); } $("timer-status").textContent = "Timer unavailable"; }
 }
 async function timerCommand(action){
   if (timerBusy) return;
@@ -599,6 +613,7 @@ const inText = (d, now = engineNow()) => {
   return h >= 24 ? `in ${Math.floor(h/24)}d ${h%24}h` : `in ${h ? h+"h " : ""}${m}m`;
 };
 function nextAlarmText(){
+  if (!deliveryEnabled) return deliveryNotice();
   const next = alarms.map(a => nextRing(a)).filter(Boolean).sort((x,y) => x - y)[0];
   return next ? `Next alarm ${inText(next)}` : "";
 }
@@ -612,16 +627,17 @@ function sorted(){
   });
 }
 function statusTag(a){
+  if (!deliveryEnabled) return `<span class="tag">${deliveryEdition === "Dev" ? "Saved Dev schedule" : "Saved schedule"}</span><span class="tag">${deliveryNotice()}</span>`;
   if (missed(a)) return `<span class="tag miss" title="The alarm engine wasn't running on the right clock at that time">Missed</span>`;
   if (a.target_date && !a.enabled && a.last_triggered_date) return `<span class="tag ok">Rang</span>`;
   const n = nextRing(a);
   return n ? `<span class="tag">Rings ${inText(n)}</span>` : "";
 }
 function render(){
-  $("count").textContent = alarms.length ? `${alarms.filter(a=>a.enabled).length} of ${alarms.length} on` : "";
+  $("count").textContent = alarms.length ? (deliveryEnabled ? `${alarms.filter(a=>a.enabled).length} of ${alarms.length} on` : `${alarms.length} saved`) : "";
   const n = nextAlarmText(); $("next").hidden = !n; $("next").textContent = n;
   if (!alarms.length) {
-    $("list").innerHTML = `<div class="empty"><b>No alarms yet</b>Create one on the left. It will ring on this PC and any device you open this page on.</div>`;
+    $("list").innerHTML = `<div class="empty"><b>No alarms yet</b>${deliveryEnabled ? "Create one on the left. It will ring on this PC and any device you open this page on." : "Create a saved schedule on the left. " + deliveryNotice()}</div>`;
     return;
   }
   $("list").innerHTML = sorted().map(a => {
@@ -641,7 +657,7 @@ function render(){
         ${a.math_mission_difficulty ? `<span class="tag">Math ${a.math_mission_difficulty === 2 ? "hard" : "easy"}</span>` : ""}
       </div>
       <div class="alarm-actions">
-        <button class="btn sm" data-test="${esc(a.id)}">Preview</button>
+        <button class="btn sm" data-test="${esc(a.id)}" ${deliveryEnabled ? "" : "disabled"}>Preview</button>
         <button class="btn sm" data-edit="${esc(a.id)}" aria-label="Edit ${esc(a.label)}">Edit</button>
         <button class="btn sm ghost" data-del="${esc(a.id)}" aria-label="Delete ${esc(a.label)}">Delete</button>
       </div>
@@ -712,9 +728,9 @@ $("form").addEventListener("submit", async (e) => {
       weekdays: days, recurring: days.length > 0, enabled: true, code_red: codeRed, custom_phrase: codeRed ? phrase : "",
       volume_percent: 100, ring_duration_sec: +$("f-duration").value, math_mission_difficulty: +$("f-math").value })});
     alarms = data.alarms;
-    const saved = alarms.find(a => a.id === data.id), n = saved && nextRing(saved);
+    const saved = alarms.find(a => a.id === data.id), n = deliveryEnabled && saved && nextRing(saved);
     const t = fmt12($("f-time").value);
-    toast(`${editing ? "Updated" : "Saved"}: ${label} at ${t.t} ${t.ap}${n ? ", rings " + inText(n) : ""}`);
+    toast(`${deliveryEdition === "Dev" ? "Saved Dev schedule" : (editing ? "Updated" : "Saved")}: ${label} at ${t.t} ${t.ap}${n ? ", rings " + inText(n) : ""}`);
     if (editing) endEdit(); else render();
   } catch (err) { toast(err.message, true); }
   finally { btn.disabled = false; btn.textContent = editingId ? "Save changes" : "Save alarm"; }

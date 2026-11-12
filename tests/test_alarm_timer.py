@@ -65,6 +65,13 @@ class AlarmTimer(unittest.TestCase):
         self.assertIsNone(self.m.claim_due_timer())
         self.assertEqual(self.client.get("/api/alarms").json()["alarms"], [])
 
+    def test_timer_metadata_explicitly_names_edition_and_delivery_capability(self):
+        for edition, enabled in (("Public", "1"), ("Dev", "0")):
+            with self.subTest(edition=edition), patch.dict(os.environ, {"ULTRASUITE_EDITION": edition, "ULTRASUITE_ALARM_DELIVERY": enabled}):
+                timer = self.client.get("/api/timer").json()
+                self.assertEqual(timer["edition"], edition)
+                self.assertEqual(timer["delivery_enabled"], enabled == "1")
+
     def test_running_timer_survives_initialization_and_elapsed_time(self):
         started = self.start()
         self.now += 17.25
