@@ -89,7 +89,12 @@ fn expand_env(input: &str) -> String {
 }
 
 fn appdata(sub: &str) -> PathBuf {
-    std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir()).join("UltraSuite").join(sub)
+    let root = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    profile_appdata(edition::current().expect("validated edition"), &root, sub)
+}
+
+fn profile_appdata(profile: &edition::EditionProfile, root: &std::path::Path, sub: &str) -> PathBuf {
+    profile.paths(root, root).roaming.join(sub)
 }
 
 // ----------------------------------------------------------------------------- organizer config
@@ -1076,7 +1081,11 @@ fn open_view_worker(app: &AppHandle, view: launch::View) {
     let url = format!("http://127.0.0.1:{}/", view.port);
     let startup = format!("starting.html?app={name}");
     if let Some(win) = app.get_webview_window(name) {
-        if LAUNCHES.loaded(view) { ensure_core(app); return; }
+        if LAUNCHES.loaded(view) && ensure_core(app) != launch::CoreReadiness::Conflict
+            && view.ready(http_get(view.port, view.probe).as_deref(), http_get(view.port, "/api/about").as_deref()) {
+            return;
+        }
+        LAUNCHES.set_loaded(view, false);
         if let Some(base) = STARTUP_URL.get() {
             let mut loading = base.clone();
             loading.set_query(Some(&format!("app={name}")));
@@ -1114,13 +1123,24 @@ fn open_view_worker(app: &AppHandle, view: launch::View) {
 
 fn wait_for_view(app: &AppHandle, win: &WebviewWindow, view: launch::View, url: &str) {
     let deadline = Instant::now() + Duration::from_secs(30);
-    ensure_core(app);
+    let mut conflict = ensure_core(app) == launch::CoreReadiness::Conflict;
     while Instant::now() < deadline {
-        if view.ready(http_get(view.port, view.probe).as_deref()) {
+        if conflict { break; }
+        let about = http_get(view.port, "/api/about");
+        if about.is_some() && !launch::identity_matches(edition::current().expect("validated edition"), about.as_deref()) {
+            eprintln!("[launch] {} service identity conflict on port {}", view.name, view.port);
+            conflict = true;
+            break;
+        }
+        if view.ready(http_get(view.port, view.probe).as_deref(), about.as_deref()) {
             if let Err(error) = win.navigate(url.parse().unwrap()) { eprintln!("[launch] {} navigation failed: {error}", view.name); }
             return;
         }
         std::thread::sleep(Duration::from_millis(200));
+    }
+    if conflict {
+        let _ = win.eval("document.getElementById('status').textContent='A local service conflicts with this edition. Close the conflicting service, then try again.';document.getElementById('retry').disabled=false;document.getElementById('retry').textContent='Try again';");
+        return;
     }
     let _ = win.eval("document.getElementById('status').textContent='The local service is not ready yet. Try again, or check that the app service is running.';document.getElementById('retry').disabled=false;document.getElementById('retry').textContent='Try again';");
 }
@@ -1130,16 +1150,52 @@ fn port_open(port: u16) -> bool {
 }
 
 fn core_exe(app: &AppHandle) -> Option<PathBuf> {
-    let mut c = vec![];
-    if let Ok(r) = app.path().resource_dir() { c.push(r.join("core").join("ultrasuite-core.exe")); }
-    if let Ok(exe) = std::env::current_exe() { if let Some(d) = exe.parent() { c.push(d.join("core").join("ultrasuite-core.exe")); } }
-    c.into_iter().find(|p| p.exists())
+    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(std::path::Path::to_path_buf));
+    core_candidates(edition::current().expect("validated edition"), app.path().resource_dir().ok(), exe_dir)
+        .into_iter().find(|p| p.exists())
 }
 
-fn ensure_core(app: &AppHandle) {
-    if port_open(8081) && port_open(8084) { return; }
+fn core_candidates(profile: &edition::EditionProfile, resources: Option<PathBuf>, exe_dir: Option<PathBuf>) -> Vec<PathBuf> {
+    resources.into_iter().chain(exe_dir).map(|dir| dir.join("core").join(profile.core_binary())).collect()
+}
+
+#[cfg(test)]
+mod native_routing_tests {
+    use super::*;
+    #[test]
+    fn profile_paths_and_core_candidates_are_pure_and_separate() {
+        let root = PathBuf::from("fixture-roaming");
+        let resources = PathBuf::from("fixture-resources");
+        let exe_dir = PathBuf::from("fixture-bin");
+        for (edition, folder, binary) in [("Public", "UltraSuite", "ultrasuite-core.exe"), ("Dev", "UltraSuite-Dev", "ultrasuite-dev-core.exe")] {
+            let profile = edition::profile(edition).unwrap();
+            assert_eq!(profile_appdata(profile, &root, "dock.txt"), root.join(folder).join("dock.txt"));
+            assert_eq!(core_candidates(profile, Some(resources.clone()), Some(exe_dir.clone())),
+                vec![resources.join("core").join(binary), exe_dir.join("core").join(binary)]);
+            assert_eq!(core_candidates(profile, None, Some(exe_dir.clone())), vec![exe_dir.join("core").join(binary)]);
+            assert!(core_candidates(profile, None, None).is_empty());
+        }
+    }
+}
+
+fn core_readiness() -> launch::CoreReadiness {
+    let observed = launch::core_readiness(edition::current().expect("validated edition"), port_open, http_get);
+    if observed == launch::CoreReadiness::Conflict {
+        eprintln!("[core] occupied edition ports have an unknown or foreign service identity; refusing to attach or spawn");
+    }
+    observed
+}
+
+fn ensure_core(app: &AppHandle) -> launch::CoreReadiness {
+    use launch::CoreReadiness;
+    let initial = core_readiness();
+    if initial != CoreReadiness::Absent { return initial; }
     if let Ok(mut g) = CORE.lock() {
-        if let Some(ch) = g.as_mut() { if ch.try_wait().ok().flatten().is_none() { return; } }
+        if let Some(ch) = g.as_mut() { if ch.try_wait().ok().flatten().is_none() { return CoreReadiness::Starting; } }
+        // Recheck under the launch lock: another worker or process may have
+        // claimed a port since the initial observation.
+        let observed = core_readiness();
+        if observed != CoreReadiness::Absent { return observed; }
         if let Some(exe) = core_exe(app) {
             let mut cmd = Command::new(&exe);
             if let Some(d) = exe.parent() { cmd.current_dir(d); }
@@ -1151,7 +1207,12 @@ fn ensure_core(app: &AppHandle) {
             if let Ok(ch) = cmd.spawn() { *g = Some(ch); }
         }
     }
-    for _ in 0..60 { if port_open(8081) && port_open(8084) { break; } std::thread::sleep(Duration::from_millis(200)); }
+    for _ in 0..60 {
+        let observed = core_readiness();
+        if matches!(observed, CoreReadiness::Ready | CoreReadiness::Conflict) { return observed; }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    core_readiness()
 }
 
 fn stop_core() { if let Ok(mut g) = CORE.lock() { if let Some(mut ch) = g.take() { let _ = ch.kill(); } } }
@@ -1162,7 +1223,7 @@ fn http_get(port: u16, path: &str) -> Option<String> {
     write!(s, "GET {} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n", path).ok()?;
     let mut buf = String::new();
     s.read_to_string(&mut buf).ok()?;
-    buf.split("\r\n\r\n").nth(1).map(|b| b.to_string())
+    launch::http_body(&buf).map(str::to_string)
 }
 
 fn http_get_slow(port: u16, path: &str, secs: u64) -> Option<String> {
@@ -1189,18 +1250,23 @@ fn update_to_announce(info: &Value, already_announced: &str) -> Option<String> {
 /// Tell the user about a new release once per version, even when no app window is open. The check goes through the
 /// local core (which caches GitHub for 6 hours), so this adds no extra GitHub requests.
 fn update_notifier(app: AppHandle) {
+    let profile = edition::current().expect("validated edition");
+    if !launch::BackgroundWorkers::for_profile(profile).update_notifier { return; }
+    let port = profile.port("sentinel").expect("owned service");
     use tauri_plugin_notification::NotificationExt;
     std::thread::sleep(Duration::from_secs(90));
     loop {
-        if let Some(info) = http_get_slow(8084, "/api/update", 20).and_then(|b| serde_json::from_str::<Value>(&b).ok()) {
-            let seen = std::fs::read_to_string(appdata("update_announced.txt")).unwrap_or_default();
-            if let Some(latest) = update_to_announce(&info, &seen) {
-                let current = info["current"].as_str().unwrap_or("");
-                let shown = app.notification().builder()
-                    .title(format!("Ultra Suite {latest} is available"))
-                    .body(format!("You have {current}. Choose Update in the Dock menu or in PC Sentinel. Updating takes about a minute."))
-                    .show();
-                if shown.is_ok() { let _ = std::fs::write(appdata("update_announced.txt"), &latest); }
+        if launch::identity_matches(profile, http_get(port, "/api/about").as_deref()) {
+            if let Some(info) = http_get_slow(port, "/api/update", 20).and_then(|b| serde_json::from_str::<Value>(&b).ok()) {
+                let seen = std::fs::read_to_string(appdata("update_announced.txt")).unwrap_or_default();
+                if let Some(latest) = update_to_announce(&info, &seen) {
+                    let current = info["current"].as_str().unwrap_or("");
+                    let shown = app.notification().builder()
+                        .title(format!("Ultra Suite {latest} is available"))
+                        .body(format!("You have {current}. Choose Update in the Dock menu or in PC Sentinel. Updating takes about a minute."))
+                        .show();
+                    if shown.is_ok() { let _ = std::fs::write(appdata("update_announced.txt"), &latest); }
+                }
             }
         }
         std::thread::sleep(Duration::from_secs(6 * 3600));
@@ -1233,10 +1299,7 @@ mod update_notice_tests {
 fn core_supervisor(app: AppHandle) {
     std::thread::sleep(Duration::from_secs(20));
     loop {
-        if !(port_open(8081) && port_open(8084)) {
-            println!("[supervisor] background services not answering: restarting them");
-            ensure_core(&app);
-        }
+        ensure_core(&app);
         std::thread::sleep(Duration::from_secs(15));
     }
 }
@@ -1245,11 +1308,16 @@ fn core_supervisor(app: AppHandle) {
 /// hardware and the user's power policy; a successful API call is not proof of wake.
 #[cfg(windows)]
 fn alarm_wake_timer() {
+    let profile = edition::current().expect("validated edition");
+    if !launch::BackgroundWorkers::for_profile(profile).wake_timer { return; }
+    let port = profile.port("alarm").expect("owned service");
     use windows::Win32::System::Threading::{CancelWaitableTimer, CreateWaitableTimerW, SetWaitableTimer};
     let Ok(timer) = (unsafe { CreateWaitableTimerW(None, true, None) }) else { return };
     let mut armed: Option<i64> = None;
     loop {
-        let body = http_get(8081, "/api/next");
+        let body = if launch::identity_matches(profile, http_get(port, "/api/about").as_deref()) {
+            http_get(port, "/api/next")
+        } else { None };
         match wake::decide(wake::observe(body.as_deref()), wake::now_filetime(), armed) {
             wake::Action::Arm(due) => {
                 // Positive FILETIME is an absolute UTC deadline, including time
@@ -1278,10 +1346,15 @@ fn keep_awake(on: bool) {
 
 /// When an alarm rings, bring the alarm window in front of everything.
 fn alarm_watch(app: AppHandle) {
+    let profile = edition::current().expect("validated edition");
+    if !launch::BackgroundWorkers::for_profile(profile).alarm_watch { return; }
+    let port = profile.port("alarm").expect("owned service");
     let mut ringing = false;
     loop {
         std::thread::sleep(Duration::from_millis(1000));
-        let now = http_get(8081, "/api/ring").map(|b| b.replace(' ', "").contains("\"is_ringing\":true")).unwrap_or(false);
+        let now = launch::identity_matches(profile, http_get(port, "/api/about").as_deref())
+            && http_get(port, "/api/ring").and_then(|b| serde_json::from_str::<Value>(&b).ok())
+                .and_then(|v| v["is_ringing"].as_bool()).unwrap_or(false);
         #[cfg(windows)]
         if now != ringing { keep_awake(now); }
         // Window changes always run on the main thread (see taskbar_tracker for why).
@@ -1617,14 +1690,19 @@ fn main() {
                 std::thread::spawn(organizer_loop);
                 std::thread::spawn(watchdog);
             }
-            let h3 = handle.clone();
-            std::thread::spawn(move || alarm_watch(h3));
+            let workers = launch::BackgroundWorkers::for_profile(edition::current().expect("validated edition"));
+            if workers.alarm_watch {
+                let h3 = handle.clone();
+                std::thread::spawn(move || alarm_watch(h3));
+            }
             let h4 = handle.clone();
             std::thread::spawn(move || core_supervisor(h4));
-            let h5 = handle.clone();
-            std::thread::spawn(move || update_notifier(h5));
+            if workers.update_notifier {
+                let h5 = handle.clone();
+                std::thread::spawn(move || update_notifier(h5));
+            }
             #[cfg(windows)]
-            std::thread::spawn(alarm_wake_timer);
+            if workers.wake_timer { std::thread::spawn(alarm_wake_timer); }
             std::thread::spawn(|| loop {
                 let stamp = appdata("last_heartbeat.txt");
                 let now = SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
