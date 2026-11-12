@@ -1021,7 +1021,16 @@ fn hub_info() -> Value {
     let start = std::env::var("APPDATA").map(|a| PathBuf::from(a).join(r"Microsoft\Windows\Start Menu\Programs")).ok();
     let insights = start.map(|d| d.join("Ultra Suite Insights.lnk").exists()).unwrap_or(false) || port_open(8301);
     let dev = local.map(|d| d.join("Ultra Suite (Dev)").join("Ultra Suite Dev.exe").exists()).unwrap_or(false);
+    #[cfg(windows)]
+    let covered = all_taskbars_covered();
+    #[cfg(not(windows))]
+    let covered = false;
+    // Why the Dock is on but leaving the taskbar as it is (the same reasons the strip's menu shows)
+    let dock_note = if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible.") }
+        else if !HEALTHY.load(Ordering::Relaxed) { Some("Not enough room on the taskbar right now, so every button stays visible.") }
+        else { None };
     json!({"version": env!("CARGO_PKG_VERSION"), "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed),
+           "dock_grouping": covered && HEALTHY.load(Ordering::Relaxed), "dock_note": dock_note,
            "insights_installed": insights, "dev_installed": dev})
 }
 

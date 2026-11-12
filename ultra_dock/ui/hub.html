@@ -198,7 +198,8 @@ async function sentinelCard() {
 async function dockCard() {
   let on = info.dock_on;
   if (invoke) { try { const d = await invoke("hub_info"); info = d; on = d.dock_on; } catch {} }
-  if (on === true) { pill("p-dock", "On", "on"); $("s-dock").textContent = "The Dock is organizing your taskbar"; $("s-dock-2").textContent = "Apps are grouped into folders next to Start."; $("dock-btn").textContent = "Turn off"; }
+  if (on === true && info.dock_grouping === false) { pill("p-dock", "Standing by", "warn"); $("s-dock").textContent = "The Dock is on, your taskbar looks as usual"; $("s-dock-2").textContent = info.dock_note || "Every taskbar button stays visible for now."; $("dock-btn").textContent = "Turn off"; }
+  else if (on === true) { pill("p-dock", "On", "on"); $("s-dock").textContent = "The Dock is organizing your taskbar"; $("s-dock-2").textContent = "Apps are grouped into folders next to Start."; $("dock-btn").textContent = "Turn off"; }
   else if (on === false) { pill("p-dock", "Off", "off"); $("s-dock").textContent = "The Dock is off"; $("s-dock-2").textContent = "Your taskbar shows every button as usual."; $("dock-btn").textContent = "Turn on"; }
   else { pill("p-dock", "Unknown", "off"); $("s-dock").textContent = "Open this window from the Ultra Suite app to control the Dock"; $("dock-btn").disabled = true; }
 }
