@@ -326,11 +326,11 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 .steps{font-size:12.5px;color:var(--ink-3r)}
 .process-summary small{font-size:12px;color:var(--ink-3r)}
 .chart .tip{font-size:12.5px}
-/* Live values printed on every graph, no hover needed */
-.chart .cv{position:absolute;right:8px;top:0;display:flex;flex-direction:column;align-items:flex-end;gap:1px;pointer-events:none;transition:top .35s ease}
-.chart .cv b{font:700 16px/1.2 var(--font-display);color:var(--ink);background:color-mix(in srgb,var(--surface) 82%,transparent);padding:1px 7px;border-radius:7px}
-.chart .cv span{font-size:12px;font-weight:600;color:var(--ink-2);background:color-mix(in srgb,var(--surface) 70%,transparent);padding:0 6px;border-radius:6px}
-@media (prefers-reduced-motion:reduce){.chart .cv{transition:none}}
+/* Live values for every graph, shown in the graph's label row (never over the plot), no hover needed */
+.legend.has-cv{align-items:baseline}
+.legend .cv{margin-left:auto;display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.legend .cv b{font:700 15px/1.2 var(--font-display);color:var(--ink)}
+.legend .cv span{font-size:12.5px;font-weight:600;color:var(--ink-2)}
 </style>
 </head>
 <body>
@@ -368,7 +368,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
       <!-- PERFORMANCE -->
       <section class="page" id="p-performance">
         <section class="card"><div class="ch"><h2 id="pf-cpu-name">Processor</h2><span class="sub" id="pf-cpu-sub"></span></div><div class="cb">
-          <div class="legend"><span><i style="background:var(--series)"></i>CPU load %</span><span class="muted">last 2 minutes · hover for values</span></div>
+          <div class="legend"><span><i style="background:var(--series)"></i>CPU load %</span><span class="muted">last 2 minutes · hover the graph for any moment</span></div>
           <div class="chart" data-chart="cpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div>
           <div class="muted" style="margin:14px 0 8px">Every thread, right now</div><div class="threads" id="threads"></div></div></section>
         <div class="grid g2 mt">
@@ -617,13 +617,15 @@ function lineChart(key, arr, color, fixedMax, unit){
   svg.querySelector(".ar").setAttribute("d", pts.length > 1 ? d + ` L${pts[pts.length - 1][0]},${Hh - 6} L${pts[0][0]},${Hh - 6} Z` : "");
   svg.parentElement._data = { arr, unit: unit || "%" };
   const box = svg.parentElement, u = unit || "%", last = vals.length ? vals[vals.length - 1] : null;
-  let lab = box.querySelector(".cv");
-  if (!lab) { lab = document.createElement("div"); lab.className = "cv"; lab.setAttribute("aria-hidden", "true"); lab.innerHTML = "<b></b><span></span>"; box.appendChild(lab); }
+  let row = box.previousElementSibling;
+  if (!row || !row.classList.contains("legend")) { row = document.createElement("div"); row.className = "legend"; box.before(row); }
+  row.classList.add("has-cv");
+  let lab = row.querySelector(".cv");
+  if (!lab) { lab = document.createElement("span"); lab.className = "cv"; lab.innerHTML = "<b></b><span></span>"; row.appendChild(lab); }
   lab.hidden = last == null;
   if (last != null) {
     lab.querySelector("b").textContent = auto(last) + u;
     lab.querySelector("span").textContent = `min ${auto(Math.min(...vals))}${u} · max ${auto(Math.max(...vals))}${u}`;
-    const lp = pts[pts.length - 1]; lab.style.top = `${Math.max(0, Math.min(62, (lp[1] / Hh) * 100 - 16))}%`;
   }
 }
 document.addEventListener("mousemove", (e) => {
