@@ -195,12 +195,14 @@ async def trigger_alarm_now(alarm_dict: dict):
 
 async def scheduler_loop():
     prev = local_now()
+    startup_catch_up = True
     print(f"[SchedulerLoop] started, local time {prev:%Y-%m-%d %H:%M:%S}")
     while True:
         try:
             now = local_now()
             if now < prev:  # clock moved back (DST, manual change): start over from here
                 prev = now
+                startup_catch_up = False
             if not ring_state.is_ringing:
                 with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
                     conn.row_factory = sqlite3.Row
@@ -208,7 +210,7 @@ async def scheduler_loop():
                     for row in rows:
                         alm = dict(row)
                         alm["weekdays"] = json.loads(alm["weekdays"])
-                        day_iso = due_day(alm, prev, now)
+                        day_iso = due_day(alm, None if startup_catch_up else prev, now)
                         if not day_iso:
                             continue
                         conn.execute("UPDATE alarms SET last_triggered_date = ? WHERE id = ?", (day_iso, alm["id"]))
@@ -221,6 +223,7 @@ async def scheduler_loop():
                         break
                 if not ring_state.is_ringing:
                     prev = now  # only advance while idle, so an alarm due mid-ring still rings afterwards
+                    startup_catch_up = False
             await broadcast_state()
         except Exception as exc:
             print(f"[SchedulerLoop] Error: {exc}")

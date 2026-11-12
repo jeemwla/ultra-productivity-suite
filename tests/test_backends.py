@@ -102,7 +102,7 @@ class AlarmSchedule(unittest.TestCase):
         self.assertEqual(self.due(self.one_time, "2026-11-11 01:00:00", "2026-11-11 02:45:00"), "2026-11-11")
         self.assertIsNone(self.due(self.one_time, "2026-11-11 01:00:00", "2026-11-11 03:46:00"))
 
-    def test_does_not_ring_for_a_time_already_past_at_startup(self):
+    def test_normal_ticks_do_not_revisit_an_already_past_time(self):
         self.assertIsNone(self.due(self.one_time, "2026-11-11 02:25:00", "2026-11-11 02:25:01"))
 
     def test_date_weekday_and_repeat_rules(self):

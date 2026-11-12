@@ -68,12 +68,13 @@ def next_ring(alarm: dict, now: datetime.datetime):
     return None
 
 
-def due_day(alarm: dict, prev: datetime.datetime, now: datetime.datetime):
+def due_day(alarm: dict, prev: datetime.datetime | None, now: datetime.datetime):
     """Return the ISO date the alarm is ringing for, or None.
 
     prev is the previous scheduler tick. An alarm is due when its time falls in (prev, now], or when
     now is inside its minute (so an alarm set for the current minute still rings), and it is at most
-    CATCH_UP late. Yesterday is checked too, so 23:55 still rings after waking at 00:10.
+    CATCH_UP late. None means startup: recover any unhandled occurrence within CATCH_UP,
+    including its exact boundary. Yesterday is checked too, so 23:55 still rings after waking at 00:10.
     """
     try:
         hh, mm = (int(x) for x in str(alarm["time_hhmm"]).split(":"))
@@ -83,7 +84,7 @@ def due_day(alarm: dict, prev: datetime.datetime, now: datetime.datetime):
     for day in (now.date(), now.date() - datetime.timedelta(days=1)):
         at = datetime.datetime.combine(day, datetime.time(hh, mm))
         in_minute = at <= now < at + datetime.timedelta(minutes=1)
-        passed = prev < at <= now
+        passed = at <= now and (prev is None or prev < at)
         if not (in_minute or passed) or now - at > CATCH_UP:
             continue
         iso = day.isoformat()
