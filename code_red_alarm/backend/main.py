@@ -28,7 +28,7 @@ BRIDGE_HEADERS = {"X-Bridge-Token": os.getenv("BRIDGE_TOKEN", "")}
 
 
 def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
         conn.execute('''
             CREATE TABLE IF NOT EXISTS alarms (
                 id TEXT PRIMARY KEY,
@@ -36,7 +36,7 @@ def init_db():
                 time_hhmm TEXT NOT NULL,
                 target_date TEXT,
                 weekdays TEXT NOT NULL,
-                recurring INTEGER NOT NULL DEFAULT 1,
+                recurring INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 code_red INTEGER NOT NULL DEFAULT 0,
                 custom_phrase TEXT,
@@ -50,66 +50,22 @@ def init_db():
             )
         ''')
         conn.execute("CREATE TABLE IF NOT EXISTS alarm_events (id INTEGER PRIMARY KEY, ts TEXT, alarm_id TEXT, label TEXT, kind TEXT, detail TEXT)")
-        # Seed a default Code Red alarm and a recurring weekday alarm if table is empty
-        cur = conn.execute("SELECT COUNT(*) FROM alarms")
-        if cur.fetchone()[0] == 0:
-            seed_alarms = [
-                (
-                    "alm-codered-01",
-                    "Morning Deep Work Launch (Code Red)",
-                    "06:30",
-                    None,
-                    json.dumps(["Mon", "Tue", "Wed", "Thu", "Fri"]),
-                    1,
-                    0,  # seeded DISABLED: enable it yourself in the UI
-                    1,
-                    "I AM OUT OF BED AND READY TO BUILD",
-                    100,
-                    600,
-                    5,
-                    2,
-                    0,
-                    0,
-                    None
-                ),
-                (
-                    "alm-weekend-02",
-                    "Weekend Gym & Hydration",
-                    "08:15",
-                    None,
-                    json.dumps(["Sat", "Sun"]),
-                    1,
-                    0,  # seeded DISABLED
-                    0,
-                    "",
-                    100,
-                    600,
-                    10,
-                    1,
-                    2,
-                    0,
-                    None
-                ),
-            ]
-            conn.executemany('''
-                INSERT INTO alarms VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', seed_alarms)
-            conn.commit()
+        conn.commit()
 
 
 class AlarmCreate(BaseModel):
     label: str = Field(..., examples=["6:30 AM Standup & Cold Plunge"])
     time_hhmm: str = Field(..., pattern=r"^\d{2}:\d{2}$", examples=["06:30"])
     target_date: Optional[str] = Field(None, examples=["2026-11-11"])
-    weekdays: List[str] = Field(default_factory=lambda: ["Mon", "Tue", "Wed", "Thu", "Fri"])
-    recurring: bool = True
+    weekdays: List[str] = Field(default_factory=list)
+    recurring: bool = False
     enabled: bool = True
-    code_red: bool = True
-    custom_phrase: str = "I AM OUT OF BED AND READY TO BUILD"
+    code_red: bool = False
+    custom_phrase: str = ""
     volume_percent: int = 100
     ring_duration_sec: int = 600
     wake_up_check_min: int = 5
-    math_mission_difficulty: int = 1
+    math_mission_difficulty: int = 0
     snooze_limit: int = 0
 
 
@@ -246,7 +202,7 @@ async def scheduler_loop():
             if now < prev:  # clock moved back (DST, manual change): start over from here
                 prev = now
             if not ring_state.is_ringing:
-                with sqlite3.connect(DB_PATH) as conn:
+                with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
                     conn.row_factory = sqlite3.Row
                     rows = conn.execute("SELECT * FROM alarms WHERE enabled = 1").fetchall()
                     for row in rows:
@@ -285,7 +241,7 @@ app = FastAPI(title="Code Red Alarm API", lifespan=lifespan)
 
 def fetch_all_alarms() -> List[dict]:
     now = local_now()
-    with sqlite3.connect(DB_PATH) as conn:
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT * FROM alarms ORDER BY time_hhmm ASC").fetchall()
         result = []
@@ -356,7 +312,7 @@ def _validate(payload: AlarmCreate):
 async def update_alarm(alarm_id: str, payload: AlarmCreate):
     """Edit an alarm in place. It counts as new, so it can ring again today."""
     _validate(payload)
-    with sqlite3.connect(DB_PATH) as conn:
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
         cur = conn.execute('''
             UPDATE alarms SET label = ?, time_hhmm = ?, target_date = ?, weekdays = ?, recurring = ?, enabled = ?,
                 code_red = ?, custom_phrase = ?, volume_percent = ?, ring_duration_sec = ?, wake_up_check_min = ?,
@@ -376,7 +332,7 @@ async def update_alarm(alarm_id: str, payload: AlarmCreate):
 async def create_alarm(payload: AlarmCreate):
     alarm_id = f"alm-{uuid.uuid4().hex[:8]}"
     _validate(payload)
-    with sqlite3.connect(DB_PATH) as conn:
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
         conn.execute('''
             INSERT INTO alarms VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
@@ -403,7 +359,7 @@ async def create_alarm(payload: AlarmCreate):
 
 @app.patch("/api/alarms/{alarm_id}/toggle")
 async def toggle_alarm(alarm_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
         cur = conn.execute("SELECT enabled FROM alarms WHERE id = ?", (alarm_id,))
         row = cur.fetchone()
         if not row:
@@ -416,7 +372,7 @@ async def toggle_alarm(alarm_id: str):
 
 @app.delete("/api/alarms/{alarm_id}")
 async def delete_alarm(alarm_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
         conn.execute("DELETE FROM alarms WHERE id = ?", (alarm_id,))
         conn.commit()
     return {"ok": True, "alarms": fetch_all_alarms()}
@@ -454,7 +410,7 @@ async def audio_info():
     code, devices = await _bridge("GET", "/devices")
     if code != 200:
         return {"bridge_online": False, "devices": [{"name": "default", "label": "System default output"}],
-                "selected": "default", "lock_volume": True, "error": devices.get("error")}
+                "selected": "default", "lock_volume": False, "error": devices.get("error")}
     return {"bridge_online": True, **devices}
 
 

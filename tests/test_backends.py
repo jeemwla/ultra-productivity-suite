@@ -183,6 +183,41 @@ class AlarmApi(unittest.TestCase):
         b.update(kw)
         return b
 
+    def test_fresh_database_and_new_alarm_are_opt_in(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as td, patch.object(self.m, "DB_PATH", os.path.join(td, "fresh.db")):
+            self.m.init_db()
+            self.assertEqual(self.c.get("/api/alarms").json()["alarms"], [])
+            response = self.c.post("/api/alarms", json={"label": "One-time reminder", "time_hhmm": "09:00", "target_date": "2099-01-01"})
+            self.assertEqual(response.status_code, 200)
+            alarm = response.json()["alarms"][0]
+            self.assertEqual(alarm["weekdays"], [])
+            self.assertFalse(alarm["recurring"])
+            self.assertFalse(alarm["code_red"])
+            self.assertEqual(alarm["math_mission_difficulty"], 0)
+            self.assertTrue(alarm["enabled"], "Save is the explicit request to arm an alarm")
+
+    def test_database_initialization_does_not_change_saved_alarms(self):
+        import tempfile, sqlite3, contextlib
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as td, patch.object(self.m, "DB_PATH", os.path.join(td, "existing.db")):
+            self.m.init_db()
+            self.c.post("/api/alarms", json=self.body(code_red=True, custom_phrase="My chosen phrase", math_mission_difficulty=2))
+            with contextlib.closing(sqlite3.connect(self.m.DB_PATH)) as conn:
+                before = conn.execute("SELECT * FROM alarms").fetchall()
+            self.m.init_db()
+            with contextlib.closing(sqlite3.connect(self.m.DB_PATH)) as conn:
+                self.assertEqual(conn.execute("SELECT * FROM alarms").fetchall(), before)
+
+    def test_missing_speaker_helper_does_not_offer_volume_lock_as_on(self):
+        from unittest.mock import AsyncMock, patch
+        with patch.object(self.m, "_bridge", new=AsyncMock(return_value=(503, {"error": "fixture offline"}))):
+            response = self.c.get("/api/audio").json()
+        self.assertFalse(response["bridge_online"])
+        self.assertFalse(response["lock_volume"])
+        self.assertEqual(response["selected"], "default")
+
     def test_edit_in_place(self):
         r = self.c.post("/api/alarms", json=self.body())
         self.assertEqual(r.status_code, 200)

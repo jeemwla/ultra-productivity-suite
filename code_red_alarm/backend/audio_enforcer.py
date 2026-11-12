@@ -108,7 +108,7 @@ def list_outputs() -> list:
 
 # ----------------------------------------------------------------------------- config
 def load_config() -> dict:
-    cfg = {"output": "default", "lock_volume": True}
+    cfg = {"output": "default", "lock_volume": False}
     if os.path.exists(CONFIG_PATH):
         try:
             cfg.update(json.load(open(CONFIG_PATH, encoding="utf-8")))
@@ -241,7 +241,7 @@ class Siren:
         if PYCAW_OK:
             CoInitialize()
         try:
-            if PYCAW_OK and cfg.get("lock_volume", True):
+            if PYCAW_OK and cfg.get("lock_volume") is True:
                 for v in _endpoint_volumes(name):
                     try:
                         saved.append((v, v.GetMasterVolumeLevelScalar(), v.GetMute()))
@@ -310,7 +310,7 @@ class Siren:
             "elapsed_sec": elapsed,
             "target_duration_sec": self.duration,
             "output": cfg.get("output", "default"),
-            "lock_volume": cfg.get("lock_volume", True),
+            "lock_volume": cfg.get("lock_volume") is True,
             "device_used": self.device_used,
             "last_error": self.last_error,
             "capabilities": {"choose_output": SD_OK, "volume_lock": PYCAW_OK, "platform": _sys.platform},
@@ -368,7 +368,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/devices":
             cfg = load_config()
             self._send({"devices": list_outputs(), "selected": cfg.get("output", "default"),
-                        "lock_volume": cfg.get("lock_volume", True),
+                        "lock_volume": cfg.get("lock_volume") is True,
                         "capabilities": siren.status()["capabilities"]})
         elif self.path == "/status":
             self._send(siren.status())

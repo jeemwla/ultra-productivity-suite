@@ -248,13 +248,13 @@ input[type=time].in{font-variant-numeric:tabular-nums}
           <div class="field">
             <label class="f" for="f-math">Wake-up math</label>
             <select class="in" id="f-math">
-              <option value="0">Off</option><option value="1" selected>Easy: one sum to solve</option><option value="2">Hard: bigger numbers</option>
+              <option value="0" selected>Off</option><option value="1">Easy: one sum to solve</option><option value="2">Hard: bigger numbers</option>
             </select>
           </div>
-          <div class="cr on" id="cr">
+          <div class="cr" id="cr">
             <div class="switch-row">
               <div><div class="t">Code Red</div><div class="s">To stop it, type a phrase exactly. Paste is blocked, so you have to get up.</div></div>
-              <label class="switch red"><input type="checkbox" id="f-codered" checked aria-label="Code Red phrase lock" /><span></span></label>
+              <label class="switch red"><input type="checkbox" id="f-codered" aria-label="Code Red phrase lock" /><span></span></label>
             </div>
             <div class="phrase">
               <label class="f" for="f-phrase">Phrase to type</label>
@@ -285,11 +285,11 @@ input[type=time].in{font-variant-numeric:tabular-nums}
           </div>
           <div class="switch-row">
             <div><div class="t">Force full volume while ringing</div><div class="s">Unmutes and holds this speaker at 100%, then puts your volume back.</div></div>
-            <label class="switch"><input type="checkbox" id="lock" checked aria-label="Force full volume while ringing" /><span></span></label>
+            <label class="switch"><input type="checkbox" id="lock" aria-label="Force full volume while ringing" /><span></span></label>
           </div>
           <div class="switch-row" style="margin-top:14px">
             <div><div class="t">Also ring in this browser</div><div class="s">Useful on your phone over Tailscale.</div></div>
-            <label class="switch"><input type="checkbox" id="browser-ring" checked aria-label="Also ring in this browser" /><span></span></label>
+            <label class="switch"><input type="checkbox" id="browser-ring" aria-label="Also ring in this browser" /><span></span></label>
           </div>
           <button type="button" class="btn sm sound-unlock" id="unlock">Allow sound in this browser</button>
         </div>
@@ -364,7 +364,7 @@ const daysEl = $("days");
 DAYS.forEach((d) => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "day"; b.textContent = d.slice(0,2); b.dataset.day = d;
-  b.setAttribute("aria-label", d); b.setAttribute("aria-pressed", ["Mon","Tue","Wed","Thu","Fri"].includes(d));
+  b.setAttribute("aria-label", d); b.setAttribute("aria-pressed", false);
   b.onclick = () => { b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); syncDate(); };
   daysEl.appendChild(b);
 });
@@ -490,7 +490,7 @@ function startEdit(a){
   render(); $("h-new").scrollIntoView({behavior: "smooth", block: "center"}); $("f-label").focus({preventScroll: true});
 }
 function endEdit(){
-  editingId = null; $("form").reset(); $("f-date").value = ""; setDays(DAYS.slice(0,5));
+  editingId = null; $("form").reset(); $("f-date").value = ""; setDays([]);
   $("cr").classList.toggle("on", $("f-codered").checked);
   $("h-new").textContent = "New alarm"; $("save").textContent = "Save alarm"; $("cancel-edit").hidden = true; render();
 }
@@ -552,7 +552,7 @@ async function loadAudio(){
     }).join("");
     sel.value = d.selected || "default";
     if (sel.value !== (d.selected || "default")) sel.value = "default";
-    $("lock").checked = d.lock_volume !== false;
+    $("lock").checked = d.lock_volume === true;
     const caps = d.capabilities || {};
     $("lock").disabled = d.bridge_online && caps.volume_lock === false;
     sel.disabled = !d.bridge_online; $("test-sound").disabled = !d.bridge_online;
@@ -574,7 +574,7 @@ $("test-sound").onclick = async () => {
   try { await api("/api/audio/test", {method:"POST"}); } catch (err) { toast(err.message, true); }
   setTimeout(() => { b.disabled = false; b.textContent = "Test"; }, 3200);
 };
-$("browser-ring").checked = store.get("browserRing", true);
+$("browser-ring").checked = store.get("browserRing", false);
 $("browser-ring").onchange = () => { store.set("browserRing", $("browser-ring").checked); if (!$("browser-ring").checked) stopBrowserSiren(); };
 
 /* ---------- Browser siren (phone / other devices) ---------- */
