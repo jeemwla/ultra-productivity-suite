@@ -67,13 +67,61 @@ fn width_of(items: &[Item]) -> f64 {
 
 /// `groups`: categories in display order, each with its distinct app exes in order. `avail`: CSS pixels the
 /// strip may use (taskbar free space); infinite or NaN means "not measured yet".
-pub fn plan(groups: &[(String, Vec<String>)], avail: f64) -> Plan {
-    let avail = if avail.is_finite() { avail.max(0.0) } else { f64::MAX };
+pub fn plan(groups: &[(String, Vec<String>)], avail: f64) -> Plan { plan_capped(groups, avail, None) }
+
+/// The items before any squeezing for space.
+/// - No cap ("Automatic"): every category with two or more apps is a folder, a category with one app shows it.
+/// - Cap N (the owner's "show N apps" setting): the first N apps show as their own buttons, the rest go into
+///   folders by category (single leftovers share "More apps" folders). Never a one-app folder: when exactly one
+///   app is left over, the Nth app joins it, so the strip never shows more than N separate apps.
+fn base_items(groups: &[(String, Vec<String>)], cap: Option<usize>) -> Vec<(String, Item)> {
     let mut base: Vec<(String, Item)> = vec![];
-    for (cat, exes) in groups {
-        if exes.is_empty() { continue; }
+    let Some(cap) = cap else {
+        for (cat, exes) in groups {
+            if exes.is_empty() { continue; }
+            for it in items_for(cat, cat, exes, MAX_PER_FOLDER) { base.push((cat.clone(), it)); }
+        }
+        return base;
+    };
+    let flat: Vec<(String, String)> = groups.iter().flat_map(|(c, es)| es.iter().map(move |e| (c.clone(), e.clone()))).collect();
+    let mut loose = cap.min(flat.len());
+    if flat.len() - loose == 1 && loose > 0 { loose -= 1; }
+    // A category cut by the cap with a single app left over keeps that app with its own kind: the category's last
+    // separate app joins it, so the folder is "Chat" rather than a Chat app inside another category's folder.
+    if loose > 0 && loose < flat.len() && flat[loose - 1].0 == flat[loose].0
+        && flat[loose..].iter().filter(|(c, _)| *c == flat[loose].0).count() == 1 {
+        loose -= 1;
+    }
+    for (cat, exe) in &flat[..loose] {
+        base.push((cat.clone(), Item { key: format!("app:{exe}"), label: cat.clone(), folder: false, exes: vec![exe.clone()] }));
+    }
+    let rest = &flat[loose..];
+    if rest.len() == 1 {  // one app in all, and a cap of 0: a one-app folder would only add a click
+        base.push((rest[0].0.clone(), Item { key: format!("app:{}", rest[0].1), label: rest[0].0.clone(), folder: false, exes: vec![rest[0].1.clone()] }));
+        return base;
+    }
+    let mut cats: Vec<(String, Vec<String>)> = vec![];
+    for (cat, exe) in rest {
+        match cats.iter_mut().find(|c| c.0 == *cat) { Some(c) => c.1.push(exe.clone()), None => cats.push((cat.clone(), vec![exe.clone()])) }
+    }
+    let mut pool: Vec<String> = cats.iter().filter(|c| c.1.len() == 1).map(|c| c.1[0].clone()).collect();
+    let mut folders: Vec<(String, Vec<String>)> = cats.into_iter().filter(|c| c.1.len() > 1).collect();
+    if pool.len() == 1 {
+        // a single leftover joins the last category folder rather than standing alone
+        if let Some(last) = folders.last_mut() { last.1.push(pool.pop().unwrap()); }
+    }
+    for (cat, exes) in &folders {
         for it in items_for(cat, cat, exes, MAX_PER_FOLDER) { base.push((cat.clone(), it)); }
     }
+    if !pool.is_empty() {
+        for it in items_for("__more", MORE_LABEL, &pool, MAX_PER_FOLDER) { base.push(("__more".to_string(), it)); }
+    }
+    base
+}
+
+pub fn plan_capped(groups: &[(String, Vec<String>)], avail: f64, cap: Option<usize>) -> Plan {
+    let avail = if avail.is_finite() { avail.max(0.0) } else { f64::MAX };
+    let base = base_items(groups, cap);
     let all: Vec<String> = base.iter().flat_map(|(_, i)| i.exes.iter().cloned()).collect();
     // Merge the last k items into "More apps" folders, smallest k first, so higher-priority categories keep
     // their own folders as long as possible.
@@ -84,7 +132,8 @@ pub fn plan(groups: &[(String, Vec<String>)], avail: f64) -> Plan {
         if !tail.is_empty() {
             let exes: Vec<String> = tail.iter().flat_map(|(_, i)| i.exes.iter().cloned()).collect();
             let one_cat = tail.iter().all(|(c, _)| *c == tail[0].0);
-            let (key, label) = if one_cat { (tail[0].1.key.clone(), tail[0].0.clone()) } else { ("__more".to_string(), MORE_LABEL.to_string()) };
+            let (key, label) = if one_cat && tail[0].0 != "__more" { (tail[0].1.key.clone(), tail[0].0.clone()) }
+                else if one_cat { (tail[0].1.key.clone(), MORE_LABEL.to_string()) } else { ("__more".to_string(), MORE_LABEL.to_string()) };
             items.extend(items_for(&key, &label, &exes, MAX_PER_FOLDER));
         }
         let width = width_of(&items);
@@ -211,6 +260,8 @@ pub struct Reading<'a> {
     pub page_base: f64,
     pub sig: u64,
     pub now_ms: u64,
+    /// The owner's "show N apps" setting (None: Automatic).
+    pub cap: Option<usize>,
 }
 pub struct Assessment { pub layout_room: f64, pub fits: bool }
 
@@ -225,7 +276,7 @@ impl Assessor {
         let on = self.gate.projection_on(r.now_ms, r.sig);
         let gain_all = if on { projected_gain(r.buttons, r.pending.len(), r.button_w, r.centered) } else { 0.0 };
         let room_css = settle_room(self.used, ((r.room + gain_all) / scale).floor(), self.last_plan_w);
-        let p = plan(r.groups, room_css);
+        let p = plan_capped(r.groups, room_css, r.cap);
         let hidden_apps = r.groups.iter().flat_map(|g| g.1.iter()).filter(|e| !r.pending.contains(*e)).count();
         let recently_projected = self.projected_at.is_some_and(|t| r.now_ms.saturating_sub(t) <= FitGate::GRACE_MS);
         if gain_all > 0.0 { self.projected_at = Some(r.now_ms); }
@@ -515,7 +566,7 @@ mod tests {
                 let pending: std::collections::HashSet<String> =
                     cats.iter().flat_map(|c| c.1.iter().cloned()).filter(|e| !hidden.contains(e)).collect();
                 let a = dock.assess(&Reading { groups: &cats, pending: &pending, room, buttons: natives, button_w: 44.0,
-                    centered: is_centered(&g), scale: 1.0, page_base, sig: (apps * 1000 + pinned) as u64, now_ms: now });
+                    centered: is_centered(&g), scale: 1.0, page_base, sig: (apps * 1000 + pinned) as u64, now_ms: now, cap: None });
                 let p = plan(&listed, a.layout_room);
                 page_base = p.width - 4.0;
                 healthy = a.fits;
@@ -562,5 +613,79 @@ mod tests {
             }
         }
         assert_eq!(checked, 8 * 3 * 4 * 8);
+    }
+
+    fn loose(p: &Plan) -> usize { p.items.iter().filter(|i| !i.folder).count() }
+
+    #[test]
+    fn cap_shows_the_first_apps_and_folders_the_rest() {
+        // 12 apps in 4 categories, owner picks 10: 10 buttons, 11th and 12th in one folder
+        let g = [apps("Browsers", 3), apps("Chat", 3), apps("Games", 3), apps("Music", 3)];
+        let p = plan_capped(&g, 1e9, Some(10));
+        assert_eq!(loose(&p), 10);
+        let f: Vec<_> = p.items.iter().filter(|i| i.folder).collect();
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].exes, apps("Music", 3).1[1..].to_vec());
+        assert_eq!(f[0].label, "Music");
+        // 4: the first four apps, then folders by category
+        let p = plan_capped(&g, 1e9, Some(4));
+        assert_eq!(loose(&p), 4);
+        assert_eq!(p.items.iter().filter(|i| i.folder).map(|i| i.label.as_str()).collect::<Vec<_>>(), vec!["Chat", "Games", "Music"]);
+        // 5 would leave one Chat app alone, so the fifth (also Chat) joins it: 4 buttons and a Chat folder of 2
+        let p = plan_capped(&g, 1e9, Some(5));
+        assert_eq!(loose(&p), 4);
+        assert_eq!(p.items.iter().find(|i| i.folder && i.label == "Chat").unwrap().exes.len(), 2);
+        assert_eq!(p.items.iter().filter(|i| i.folder).map(|i| i.label.as_str()).collect::<Vec<_>>(), vec!["Chat", "Games", "Music"]);
+        // a cap at or above the app count shows every app
+        assert_eq!(loose(&plan_capped(&g, 1e9, Some(12))), 12);
+        assert_eq!(loose(&plan_capped(&g, 1e9, Some(40))), 12);
+        // 0: everything in folders
+        let p = plan_capped(&g, 1e9, Some(0));
+        assert_eq!(loose(&p), 0);
+        assert_eq!(p.items.len(), 4);
+    }
+
+    #[test]
+    fn cap_never_makes_a_one_app_folder() {
+        let g = [apps("A", 4), apps("B", 2)];
+        // 6 apps, cap 5: one left over, so the 5th joins it
+        let p = plan_capped(&g, 1e9, Some(5));
+        assert_eq!(loose(&p), 4);
+        assert!(p.items.iter().filter(|i| i.folder).all(|i| i.exes.len() >= 2));
+        // single leftovers from different categories share a More apps folder
+        let g = [apps("A", 2), apps("B", 1), apps("C", 1), apps("D", 1)];
+        let p = plan_capped(&g, 1e9, Some(2));
+        assert_eq!(loose(&p), 2);
+        assert_eq!(p.items.last().unwrap().label, MORE_LABEL);
+        assert_eq!(p.items.last().unwrap().exes.len(), 3);
+        // one leftover single next to a category folder joins that folder
+        let g = [apps("A", 1), apps("B", 2), apps("C", 1)];
+        let p = plan_capped(&g, 1e9, Some(1));
+        assert_eq!(loose(&p), 1);
+        assert_eq!(p.items.len(), 2);
+        assert_eq!(p.items[1].exes.len(), 3);
+        // a single app with cap 0 still shows (a folder of one would only add a click)
+        assert_eq!(loose(&plan_capped(&[apps("A", 1)], 1e9, Some(0))), 1);
+    }
+
+    #[test]
+    fn cap_follows_every_rule_at_every_width() {
+        let mut cases = 0;
+        for cats in 1..=6 {
+            for per in [1usize, 2, 3, 6, 7] {
+                let g: Vec<_> = (0..cats).map(|c| apps(&format!("Cat{c}"), if c % 2 == 0 { per } else { 1 + per / 3 })).collect();
+                let total: usize = g.iter().map(|x| x.1.len()).sum();
+                for cap in [0usize, 1, 2, 3, 5, 8, 10, 15, 25] {
+                    for avail in (0..=1400).step_by(13) {
+                        let p = plan_capped(&g, avail as f64, Some(cap));
+                        check_rules(&p, total, avail as f64);
+                        let l = loose(&p);
+                        assert!(l <= cap.max(usize::from(total == 1)), "cap {cap}: {l} separate apps");
+                        cases += 1;
+                    }
+                }
+            }
+        }
+        assert!(cases > 25_000);
     }
 }

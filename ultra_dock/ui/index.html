@@ -91,6 +91,11 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .act{height:40px;padding:0 10px;border-radius:4px;font-size:12px;font-weight:600;color:var(--ink-2)}
 .act:hover{background:var(--hover);color:var(--ink)}
 .act.on{color:var(--bar-active)}
+/* "Show up to N apps": minus, the value (click for Automatic), plus */
+.capctl{display:flex;align-items:center;height:40px;margin:0 4px;border-left:1px solid var(--line);border-right:1px solid var(--line);padding:0 2px}
+.capctl .act{padding:0 8px}
+.capctl .act.step{width:28px;padding:0;font-size:15px}
+.capctl .act:disabled{opacity:.35}
 .empty-hint{font-size:11px;color:var(--ink-3);padding:0 6px}
 
 /* ---------- Uninstall survey ---------- */
@@ -205,6 +210,30 @@ function applyFocus(){
   const extra = inner ? Math.max(0, inner.scrollWidth - tray.offsetWidth) : 0;
   if (s.scrollWidth + extra + 2 > room()) { target.classList.add("keep"); s.classList.add("focus"); s.scrollLeft = 0; }
 }
+/* The owner's "show up to N apps" setting: the first N apps get their own button, the rest go into folders.
+   null means Automatic (folders by category). Minus and plus start from what the strip shows now. */
+const CAP_MAX = 30;
+const capOf = () => (typeof state.cap === "number" ? state.cap : null);
+const looseNow = () => layoutItems().filter(i => !i.folder).length;
+function capControl(){
+  const c = capOf();
+  const label = c === null ? "Apps: Auto" : c === 0 ? "Apps: 0" : `Apps: ${c}`;
+  const tip = c === null ? "Automatic: apps are grouped into folders by category. Use minus or plus to choose how many apps show on their own."
+    : `Up to ${c} app${c === 1 ? "" : "s"} show on their own, the rest go into folders. Click to go back to Automatic.`;
+  return `<span class="capctl" role="group" aria-label="Apps shown on their own">
+    <button class="act step" data-act="cap-" aria-label="Fewer apps on their own" ${c === 0 ? "disabled" : ""}>−</button>
+    <button class="act ${c === null ? "" : "on"}" data-act="capauto" title="${esc(tip)}">${label}</button>
+    <button class="act step" data-act="cap+" aria-label="More apps on their own" ${c === CAP_MAX ? "disabled" : ""}>+</button></span>`;
+}
+function nextCap(c, dir, shown){
+  if (c === null) return Math.max(0, Math.min(CAP_MAX, shown + dir));
+  return Math.max(0, Math.min(CAP_MAX, c + dir));
+}
+async function setCap(c){
+  state.cap = c;
+  if (invoke) { try { await invoke("set_dock_cap", { cap: c }); } catch {} }
+  sig = ""; render();
+}
 function render(){
   const activeElement = document.activeElement;
   const focusKey = el => [el.classList.contains("grp") ? "grp" : el.classList.contains("more") ? "more" : el.classList.contains("wt") ? "wt" : el.classList.contains("win") ? "win" : "act",el.dataset.cat,el.dataset.exe,el.dataset.h,el.dataset.act].join("|");
@@ -229,6 +258,7 @@ function render(){
   const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || (update ? `Ultra Dock: version ${update.latest} is available` : "Ultra Dock"))}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
     <div class="tray ${open === "__menu" ? "open now" : ""}" aria-hidden="${open !== "__menu"}" ${open !== "__menu" ? "inert" : ""}><div class="inner">${upAct}
       <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
+      ${capControl()}
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
       <button class="act" data-act="edit">Edit</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
   $("strip").innerHTML = html + menu;
@@ -287,6 +317,9 @@ $("strip").addEventListener("click", async (e) => {
   if (a) {
     const k = a.dataset.act;
     if (k === "showall") { state.organize = !state.organize; if (invoke) await invoke("set_organize", { on: state.organize }); sig = ""; }
+    // the cap controls keep the menu open so several steps can be taken in a row
+    if (k === "cap-" || k === "cap+") { await setCap(nextCap(capOf(), k === "cap+" ? 1 : -1, looseNow())); return; }
+    if (k === "capauto") { if (capOf() !== null) await setCap(null); return; }
     if (k === "sentinel" || k === "alarm") invoke && invoke("open_app_view", { name: k });
     if (k === "edit") invoke && invoke("open_config");
     if (k === "quit") invoke && invoke("quit");
@@ -308,7 +341,7 @@ $("strip").addEventListener("keydown", e => { if (e.key === "Escape") { e.preven
 async function poll(){
   try {
     const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
-    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout && s.layout.items, s.avail]);
+    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout && s.layout.items, s.avail, s.cap]);
     state = s;
     // Commit the signature only after a successful render. Otherwise a transient
     // render exception would prevent retries while polling still looked healthy.

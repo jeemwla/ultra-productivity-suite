@@ -67,6 +67,10 @@ h1{font-size:26px;font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;min-width:112px}
 .btn.primary:hover{filter:brightness(1.08)}
 .btn:disabled{opacity:.5;cursor:default}
+.capline{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px;color:var(--ink-2)}
+.capline select{font:inherit;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:150px}
+.capline select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.capnote{font-size:12.5px;color:var(--ink-3);margin-top:-6px}
 h3{font-size:14px;font-weight:650;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin:28px 0 12px}
 table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:top}
@@ -104,6 +108,9 @@ td.muted{color:var(--ink-3)}
     <section class="card" id="c-dock">
       <div class="head"><img src="hubicons/dock.png" alt="" /><div><h2>Ultra Dock</h2><div class="ed">Taskbar folders</div></div><span class="pill" id="p-dock">Checking</span></div>
       <div class="status"><div class="big" id="s-dock">Checking the Dock…</div><div class="small" id="s-dock-2"></div></div>
+      <label class="capline" for="dock-cap">Apps shown on their own
+        <select id="dock-cap" aria-describedby="dock-cap-help"></select></label>
+      <div class="small capnote" id="dock-cap-help">The rest go into folders. Automatic groups apps by category.</div>
       <div class="actions"><button class="btn primary" id="dock-btn">Turn on</button></div>
     </section>
     <section class="card" id="c-insights" hidden>
@@ -256,6 +263,22 @@ document.addEventListener("click", async (e) => {
   if (name === "dock") { $("c-dock").scrollIntoView({ behavior: "smooth", block: "nearest" }); return; }
   if (invoke) await invoke("open_app_view", { name }).catch(() => {});
 });
+/* "Show up to N apps" for the Dock: Automatic or 0 to 30 */
+(function capPicker(){
+  const sel = $("dock-cap");
+  sel.innerHTML = `<option value="auto">Automatic</option>` + Array.from({ length: 31 }, (_, n) =>
+    `<option value="${n}">${n === 0 ? "None (all in folders)" : n === 1 ? "1 app" : n + " apps"}</option>`).join("");
+  sel.onchange = async () => {
+    if (!invoke) return;
+    const cap = sel.value === "auto" ? null : Number(sel.value);
+    try { const r = await invoke("set_dock_cap", { cap }); info.dock_cap = r && "cap" in r ? r.cap : cap; } catch {}
+  };
+})();
+function showCap(){
+  const sel = $("dock-cap"); if (document.activeElement === sel) return;
+  sel.value = typeof info.dock_cap === "number" ? String(info.dock_cap) : "auto";
+  sel.disabled = !invoke;
+}
 $("dock-btn").onclick = async () => {
   if (!invoke) return; const b = $("dock-btn"); b.disabled = true;
   try { await invoke("hub_set_dock", { on: !info.dock_on }); } catch {}
@@ -265,6 +288,8 @@ $("dock-btn").onclick = async () => {
 async function tick() {
   greet();
   await dockCard();
+  if (invoke) { try { const r = await invoke("dock_cap_info"); info.dock_cap = r ? r.cap : null; } catch {} }
+  showCap();
   $("ver").textContent = info.version ? `Ultra Suite ${info.version}` : "Ultra Suite";
   await Promise.all([alarmCard(), sentinelCard(), insightsCard()]);
   editions();

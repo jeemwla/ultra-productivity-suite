@@ -670,7 +670,7 @@ fn get_windows() -> Value {
     let layout = strip_plan(&wins);
     let avail = AVAIL_CSS.load(Ordering::Relaxed);
     json!({ "organize": ORGANIZE.load(Ordering::Relaxed), "windows": wins, "order": org_config().order, "fallback_reason": reason,
-            "layout": layout, "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
+            "layout": layout, "cap": dock_cap(), "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
 }
 
 /// Group the listed windows into the folders and apps the strip shows, sized to the taskbar's free space.
@@ -681,7 +681,7 @@ fn strip_plan(wins: &[WinInfo]) -> Value {
         if !groups[pos].1.contains(&w.exe) { groups[pos].1.push(w.exe.clone()); }
     }
     let room = LAYOUT_CSS.load(Ordering::Relaxed);
-    let plan = dock_layout::plan(&groups, if room == u32::MAX { f64::INFINITY } else { room as f64 });
+    let plan = dock_layout::plan_capped(&groups, if room == u32::MAX { f64::INFINITY } else { room as f64 }, dock_cap());
     json!({
         "items": plan.items.iter().map(|i| json!({ "key": i.key, "label": i.label, "folder": i.folder, "exes": i.exes })).collect::<Vec<_>>(),
         "width": plan.width, "compacted": plan.compacted, "over_six": plan.over_six, "left_out": plan.left_out,
@@ -1482,10 +1482,10 @@ fn taskbar_tracker(_app: AppHandle) {
                 // restores buttons (visible plus hidden buttons stays the same)
                 use std::hash::{Hash, Hasher};
                 let mut hs = std::collections::hash_map::DefaultHasher::new();
-                c.groups.hash(&mut hs); (r.left, r.right, g.obstacles.iter().min().copied(), dpi, buttons + c.hidden_apps).hash(&mut hs);
+                c.groups.hash(&mut hs); (r.left, r.right, g.obstacles.iter().min().copied(), dpi, buttons + c.hidden_apps, dock_cap()).hash(&mut hs);
                 dock.assess(&dock_layout::Reading { groups: &c.groups, pending: &c.pending, room: room as f64, buttons, button_w,
                     centered: dock_layout::is_centered(&g), scale, page_base: STRIP_BASE_W.load(Ordering::Relaxed) as f64,
-                    sig: hs.finish(), now_ms })
+                    sig: hs.finish(), now_ms, cap: dock_cap() })
             };
             AVAIL_CSS.store((room as f64 / scale).floor() as u32, Ordering::Relaxed);
             LAYOUT_CSS.store(a.layout_room as u32, Ordering::Relaxed);
@@ -1561,6 +1561,41 @@ fn set_autostart() {
 /// The "Dock" switch in the tray icon's menu (Windows' hidden-icons area). Off: every app goes back to the
 /// normal taskbar and the strip disappears. On: folders come back. Remembered in %APPDATA%\UltraSuite\dock.txt.
 static DOCK_ITEM: Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>> = Mutex::new(None);
+
+/// "Show up to N apps" (the owner's cap): the first N apps get their own button in the strip, the rest go into
+/// folders. Automatic (no cap) groups every category with two or more apps. Saved in %APPDATA%\UltraSuite\dock_apps.txt
+/// as "auto" or a number from 0 to 30.
+pub const CAP_MAX: u32 = 30;
+static DOCK_CAP: AtomicU32 = AtomicU32::new(u32::MAX);
+fn dock_cap() -> Option<usize> { let c = DOCK_CAP.load(Ordering::Relaxed); (c != u32::MAX).then_some(c as usize) }
+fn parse_cap(text: &str) -> Option<u32> { text.trim().parse::<u32>().ok().map(|n| n.min(CAP_MAX)) }
+fn load_dock_cap() {
+    let saved = std::fs::read_to_string(appdata("dock_apps.txt")).ok().and_then(|t| parse_cap(&t));
+    DOCK_CAP.store(saved.unwrap_or(u32::MAX), Ordering::Relaxed);
+}
+#[tauri::command]
+fn set_dock_cap(cap: Option<u32>) -> Value {
+    let c = cap.map(|n| n.min(CAP_MAX));
+    DOCK_CAP.store(c.unwrap_or(u32::MAX), Ordering::Relaxed);
+    let _ = std::fs::write(appdata("dock_apps.txt"), c.map(|n| n.to_string()).unwrap_or_else(|| "auto".into()));
+    json!({ "cap": c })
+}
+
+#[tauri::command]
+fn dock_cap_info() -> Value { json!({ "cap": dock_cap() }) }
+
+#[cfg(test)]
+mod cap_tests {
+    #[test]
+    fn saved_cap_parses_and_clamps() {
+        assert_eq!(super::parse_cap("5"), Some(5));
+        assert_eq!(super::parse_cap(" 10\r\n"), Some(10));
+        assert_eq!(super::parse_cap("99"), Some(super::CAP_MAX));
+        assert_eq!(super::parse_cap("auto"), None);
+        assert_eq!(super::parse_cap(""), None);
+        assert_eq!(super::parse_cap("-3"), None);
+    }
+}
 
 fn dock_saved_on() -> bool {
     std::fs::read_to_string(appdata("dock.txt")).map(|s| s.trim() != "off").unwrap_or(true)
@@ -1677,6 +1712,7 @@ fn main() {
             make_noactivate(&strip);
             if let Ok(h) = strip.hwnd() { STRIP_HWND.store(h.0 as isize, Ordering::Relaxed); }
             if !dock_saved_on() { ORGANIZE.store(false, Ordering::Relaxed); STRIP_HIDDEN.store(true, Ordering::Relaxed); }
+            load_dock_cap();
             if let Err(e) = build_tray(app) { println!("[tray] not available: {e}"); }
             // only the installed app registers itself to start with Windows (a dev build must never take over that entry)
             if !cfg!(debug_assertions) { set_autostart(); }
@@ -1718,7 +1754,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {
