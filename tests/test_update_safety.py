@@ -33,6 +33,35 @@ class Pure(unittest.TestCase):
         for nxt, ring in [(None, idle), ({"in_sec": None}, None), ({}, idle), ("x", idle)]:
             self.assertIn("Couldn't confirm", devtools.alarm_blocks_update(nxt, ring), "an unavailable check blocks")
 
+    def test_alarm_gate_requires_an_explicit_boolean_ringing_state(self):
+        for ring in [{}, None, [], "idle", {"is_ringing": None}, {"is_ringing": 0},
+                     {"is_ringing": 1}, {"is_ringing": "false"}, {"is_ringing": []}]:
+            for nxt in [{"in_sec": None}, {"in_sec": 1801}]:
+                with self.subTest(next_info=nxt, ring_info=ring):
+                    self.assertIn("Couldn't confirm", devtools.alarm_blocks_update(nxt, ring))
+
+    def test_alarm_gate_rejects_malformed_countdowns_without_raising(self):
+        for due in [True, False, float("nan"), float("inf"), float("-inf"),
+                    "1801", "", [], {}, complex(1801, 0)]:
+            with self.subTest(in_sec=due):
+                self.assertIn("Couldn't confirm", devtools.alarm_blocks_update(
+                    {"in_sec": due}, {"is_ringing": False}))
+
+    def test_null_countdown_requires_the_explicit_no_next_response(self):
+        for nxt in [{"in_sec": None, "at": "2026-11-12T12:00:00"},
+                    {"in_sec": None, "at": None}, {"in_sec": None, "error": "unavailable"}]:
+            with self.subTest(next_info=nxt):
+                self.assertIn("Couldn't confirm", devtools.alarm_blocks_update(nxt, {"is_ringing": False}))
+
+    def test_alarm_gate_preserves_finite_countdown_boundaries(self):
+        for due in [-10**1000, -1, -0.5, 0, 5, 1800, 1800.0]:
+            with self.subTest(in_sec=due):
+                self.assertIn("within 30 minutes", devtools.alarm_blocks_update(
+                    {"in_sec": due}, {"is_ringing": False}))
+        for due in [1800.5, 1801, 10**1000]:
+            with self.subTest(in_sec=due):
+                self.assertIsNone(devtools.alarm_blocks_update({"in_sec": due}, {"is_ringing": False}))
+
 
 class FakeResponse:
     def __init__(self, payload=None, chunks=()):
@@ -135,6 +164,27 @@ class InstallRoute(unittest.TestCase):
             self.assertEqual(r.status_code, 409)
             self.assertIn(word, r.json()["detail"])
             popen.assert_not_called()
+
+    def test_malformed_alarm_checks_block_before_download_or_launch(self):
+        good = "sha256:" + hashlib.sha256(self.body).hexdigest()
+        idle = {"is_ringing": False}
+        checks = [({"in_sec": None}, {}), ({"in_sec": 1801}, {"is_ringing": 0}),
+                  ({"in_sec": None, "at": "2026-11-12T12:00:00"}, idle)]
+        checks.extend(({"in_sec": due}, idle) for due in
+                      [True, False, float("nan"), float("inf"), float("-inf"), "1801", [], {}])
+        for nxt, ring in checks:
+            with self.subTest(next_info=nxt, ring_info=ring):
+                r, popen = self.run_install(good, nxt, ring)
+                self.assertEqual(r.status_code, 409, r.text)
+                self.assertIn("Couldn't confirm", r.json()["detail"])
+                popen.assert_not_called()
+                self.assertEqual(os.listdir(self.tmp), ["fe"], "no installer was downloaded")
+
+    def test_finite_alarm_beyond_the_margin_allows_verified_install(self):
+        good = "sha256:" + hashlib.sha256(self.body).hexdigest()
+        r, popen = self.run_install(good, {"in_sec": 1800.5}, {"is_ringing": False})
+        self.assertEqual(r.status_code, 200, r.text)
+        popen.assert_called_once()
 
 
 if __name__ == "__main__":

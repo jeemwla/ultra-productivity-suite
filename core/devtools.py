@@ -43,12 +43,22 @@ def expected_sha256(asset):
 def alarm_blocks_update(next_info, ring_info):
     """A reason not to update now, or None. Updating restarts the alarm service, so never while an alarm rings or is
     due within 30 minutes. An unreadable alarm state also blocks: an unavailable check is not a safe result."""
-    if not isinstance(ring_info, dict) or not isinstance(next_info, dict) or "in_sec" not in next_info:
-        return "Couldn't confirm that no alarm is due, so the update was not started. Try again in a moment."
-    if ring_info.get("is_ringing"):
+    import math
+
+    unknown = "Couldn't confirm that no alarm is due, so the update was not started. Try again in a moment."
+    if (not isinstance(ring_info, dict) or type(ring_info.get("is_ringing")) is not bool
+            or not isinstance(next_info, dict) or "in_sec" not in next_info):
+        return unknown
+    if ring_info["is_ringing"]:
         return "An alarm is ringing. Update after you stop it."
-    due = next_info.get("in_sec")
-    if due is not None and due <= UPDATE_ALARM_MARGIN_SEC:
+    due = next_info["in_sec"]
+    if due is None:
+        # /api/next returns only this field when no alarm or timer is scheduled.
+        return None if len(next_info) == 1 else unknown
+    if (type(due) not in (int, float)
+            or (isinstance(due, float) and not math.isfinite(due))):
+        return unknown
+    if due <= UPDATE_ALARM_MARGIN_SEC:
         return "An alarm is due within 30 minutes, so the update will wait. Try again after it rings."
     return None
 
