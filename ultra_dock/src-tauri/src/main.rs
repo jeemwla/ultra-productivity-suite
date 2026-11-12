@@ -7,7 +7,7 @@
 //!   last taskbar icon. Click a group to slide its apps open, click an app to switch to it.
 //!   Every hidden button is restored when the organizer is turned off or the app quits.
 //! - "alarm" / "sentinel" / "insights": app windows served by the bundled core.
-//! CLI: --open alarm|sentinel|insights  --background  --show-dock  --quit  --uninstall-survey  --event <kind>
+//! CLI: --open hub|alarm|sentinel|insights  --background  --show-dock  --quit  --uninstall-survey  --event <kind>
 
 use base64::Engine;
 mod recovery;
@@ -870,7 +870,7 @@ fn fix_shortcut_ids() {
     let dir = PathBuf::from(appdata).join(r"Microsoft\Windows\Start Menu\Programs");
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        for (file, name) in [("PC Sentinel.lnk", "sentinel"), ("Code Red Alarm.lnk", "alarm"), ("Ultra Suite Insights.lnk", "insights")] {
+        for (file, name) in [("Ultra Suite.lnk", "hub"), ("PC Sentinel.lnk", "sentinel"), ("Code Red Alarm.lnk", "alarm"), ("Ultra Suite Insights.lnk", "insights")] {
             let path = dir.join(file);
             if !path.exists() { continue; }
             let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER) else { continue };
@@ -907,6 +907,7 @@ fn set_app_identity(app: &AppHandle, win: &WebviewWindow, name: &str, title: &st
 fn set_app_identity(_app: &AppHandle, _win: &WebviewWindow, _name: &str, _title: &str) {}
 
 fn open_view(app: &AppHandle, name: &str) {
+    if name == "hub" { open_hub(app); return; }
     let Some(view) = launch::view(name) else { return };
     if let Some(win) = app.get_webview_window(name) { show_view_window(&win); }
     let Some(permit) = LAUNCHES.begin(view) else { return };
@@ -918,6 +919,51 @@ fn open_view(app: &AppHandle, name: &str) {
         open_view_worker(&app, view);
     }) { eprintln!("[launch] worker could not start: {error}"); }
 }
+
+/// The Ultra Suite hub: one launcher window that lists every app with live status cards (hub.html).
+/// It is a local page, so it opens at once even while the core is still starting.
+fn open_hub(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("hub") { show_view_window(&win); return; }
+    static HUB_OPENING: AtomicBool = AtomicBool::new(false);
+    if HUB_OPENING.swap(true, Ordering::AcqRel) { return; }
+    let app = app.clone();
+    // same rule as open_view: never build a WebView2 window inside a synchronous callback
+    let spawned = std::thread::Builder::new().name("launch-hub".into()).spawn(move || {
+        #[cfg(windows)]
+        let com = unsafe { windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED) }.is_ok();
+        let built = WebviewWindowBuilder::new(&app, "hub", WebviewUrl::App("hub.html".into()))
+            .title("Ultra Suite").inner_size(1180.0, 780.0).min_inner_size(380.0, 480.0).center().visible(false).build();
+        match built {
+            Ok(win) => {
+                let w2 = win.clone();
+                win.on_window_event(move |e| { if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w2.hide(); } });
+                if let Ok(img) = tauri::image::Image::from_bytes(include_bytes!("../icons/apps/dock.png")) { let _ = win.set_icon(img); }
+                set_app_identity(&app, &win, "hub", "Ultra Suite");
+                show_view_window(&win);
+            }
+            Err(error) => eprintln!("[launch] hub window creation failed: {error}"),
+        }
+        ensure_core(&app);
+        #[cfg(windows)]
+        if com { unsafe { windows::Win32::System::Com::CoUninitialize(); } }
+        HUB_OPENING.store(false, Ordering::Release);
+    });
+    if let Err(error) = spawned { eprintln!("[launch] hub worker could not start: {error}"); HUB_OPENING.store(false, Ordering::Release); }
+}
+
+/// What the hub needs that a web page cannot see: version, Dock state and which optional editions are installed.
+#[tauri::command]
+fn hub_info() -> Value {
+    let local = std::env::var("LOCALAPPDATA").map(PathBuf::from).ok();
+    let start = std::env::var("APPDATA").map(|a| PathBuf::from(a).join(r"Microsoft\Windows\Start Menu\Programs")).ok();
+    let insights = start.map(|d| d.join("Ultra Suite Insights.lnk").exists()).unwrap_or(false) || port_open(8301);
+    let dev = local.map(|d| d.join("Ultra Suite (Dev)").join("Ultra Suite Dev.exe").exists()).unwrap_or(false);
+    json!({"version": env!("CARGO_PKG_VERSION"), "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed),
+           "insights_installed": insights, "dev_installed": dev})
+}
+
+#[tauri::command]
+fn hub_set_dock(on: bool) { set_dock_enabled(on); }
 
 fn show_view_window(win: &WebviewWindow) {
     let _ = win.unminimize();
@@ -1342,10 +1388,11 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
     let dock = CheckMenuItem::with_id(app, "dock", "Ultra Dock", true, dock_saved_on(), None::<&str>)?;
+    let hub = MenuItem::with_id(app, "hub", "Open Ultra Suite", true, None::<&str>)?;
     let sentinel = MenuItem::with_id(app, "sentinel", "Open PC Sentinel", true, None::<&str>)?;
     let alarm = MenuItem::with_id(app, "alarm", "Open Code Red Alarm", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit Ultra Suite", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&dock, &PredefinedMenuItem::separator(app)?, &sentinel, &alarm,
+    let menu = Menu::with_items(app, &[&dock, &PredefinedMenuItem::separator(app)?, &hub, &sentinel, &alarm,
                                        &PredefinedMenuItem::separator(app)?, &quit_item])?;
     if let Ok(mut g) = DOCK_ITEM.lock() { *g = Some(dock); }
     TrayIconBuilder::with_id("ultra-suite")
@@ -1355,6 +1402,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "dock" => set_dock_enabled(STRIP_HIDDEN.load(Ordering::Relaxed)),  // hidden now: turn it on, and the reverse
+            "hub" => open_view(app, "hub"),
             "sentinel" => open_view(app, "sentinel"),
             "alarm" => open_view(app, "alarm"),
             "quit" => quit(app.clone()),
@@ -1424,7 +1472,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let rest: Vec<String> = argv.into_iter().skip(1).collect();
-            if rest.is_empty() { open_view(app, "sentinel"); } else { handle_args(app, &rest); }
+            if rest.is_empty() { open_view(app, "hub"); } else { handle_args(app, &rest); }
         }))
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -1472,11 +1520,11 @@ fn main() {
             });
             let rest: Vec<String> = args.iter().skip(1).cloned().collect();
             if !rest.iter().any(|a| a == "--background") {
-                if rest.is_empty() { open_view(&handle, "sentinel"); } else { handle_args(&handle, &rest); }
+                if rest.is_empty() { open_view(&handle, "hub"); } else { handle_args(&handle, &rest); }
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {

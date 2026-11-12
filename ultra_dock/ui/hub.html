@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ultra Suite</title>
+<style>
+/* Ultra Suite hub: one launcher window for every app in the suite, with live status cards. */
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel-2:#1e222b; --line:rgba(255,255,255,.08);
+  --ink:#f2f4f8; --ink-2:rgba(242,244,248,.74); --ink-3:rgba(242,244,248,.52);
+  --accent:#60cdff; --accent-ink:#00131c; --ok:#4cc38a; --warn:#f2b84b; --bad:#ff6b6b;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; --radius:12px;
+}
+@media (prefers-color-scheme: light){:root{
+  --bg:#f3f4f7; --panel:#ffffff; --panel-2:#f6f7fa; --line:rgba(0,0,0,.09);
+  --ink:#111318; --ink-2:rgba(17,19,24,.72); --ink-3:rgba(17,19,24,.55);
+  --accent:#005fb8; --accent-ink:#ffffff; --ok:#1d7f52; --warn:#9a6300; --bad:#c42b1c; }}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{min-height:100%;background:var(--bg)}
+body{font:14px/1.45 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+nav{background:var(--panel);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:0 8px 18px}
+.brand img{width:28px;height:28px;border-radius:7px}
+.navitem{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--ink-2);text-align:left;width:100%}
+.navitem img{width:22px;height:22px;border-radius:5px}
+.navitem:hover{background:var(--panel-2);color:var(--ink)}
+.navitem .dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.dot.on{background:var(--ok)} .dot.warn{background:var(--warn)}
+nav .foot{margin-top:auto;color:var(--ink-3);font-size:12.5px;padding:8px}
+main{padding:26px 30px 40px;overflow:auto}
+h1{font-size:24px;font-weight:650;margin-bottom:4px}
+.sub{color:var(--ink-2);margin-bottom:20px}
+.banner{display:none;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--radius);padding:12px 16px;margin-bottom:18px}
+.banner.show{display:flex}
+.banner p{flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:12px;min-height:200px}
+.head{display:flex;align-items:center;gap:12px}
+.head img{width:44px;height:44px;border-radius:10px}
+.head h2{font-size:16.5px;font-weight:650}
+.head .ed{font-size:12.5px;color:var(--ink-3)}
+.pill{margin-left:auto;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--panel-2);color:var(--ink-2);white-space:nowrap}
+.pill.on{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.off{color:var(--ink-3)}
+.status{background:var(--panel-2);border-radius:9px;padding:11px 13px;min-height:64px}
+.status .big{font-size:15.5px;font-weight:600}
+.status .small{font-size:13px;color:var(--ink-2);margin-top:3px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--ink-3)}
+.actions{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 18px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);font-weight:600}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn:disabled{opacity:.5;cursor:default}
+h3{font-size:14px;font-weight:650;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin:28px 0 12px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:top}
+th{color:var(--ink-3);font-weight:600;font-size:12.5px}
+tr:last-child td{border-bottom:0}
+td.muted{color:var(--ink-3)}
+@media (max-width:760px){body{grid-template-columns:1fr} nav{flex-direction:row;flex-wrap:wrap;padding:12px} nav .foot,.brand{display:none} main{padding:18px 16px}}
+</style>
+</head>
+<body>
+<nav aria-label="Apps">
+  <div class="brand"><img src="hubicons/dock.png" alt="" />Ultra Suite</div>
+  <button class="navitem" data-go="sentinel"><img src="hubicons/sentinel.png" alt="" />PC Sentinel<span class="dot" id="d-sentinel"></span></button>
+  <button class="navitem" data-go="alarm"><img src="hubicons/alarm.png" alt="" />Code Red Alarm<span class="dot" id="d-alarm"></span></button>
+  <button class="navitem" data-go="dock"><img src="hubicons/dock.png" alt="" />Ultra Dock<span class="dot" id="d-dock"></span></button>
+  <button class="navitem" data-go="insights" id="n-insights" hidden><img src="hubicons/insights.png" alt="" />Insights<span class="dot" id="d-insights"></span></button>
+  <div class="foot" id="ver">Ultra Suite</div>
+</nav>
+<main>
+  <h1 id="greet">Ultra Suite</h1>
+  <p class="sub">Every app in the suite, with what each one is doing right now.</p>
+  <div class="banner" id="upd"><p id="upd-text"></p><button class="btn primary" id="upd-btn">Update now</button></div>
+  <div class="grid" id="cards">
+    <section class="card" id="c-sentinel">
+      <div class="head"><img src="hubicons/sentinel.png" alt="" /><div><h2>PC Sentinel</h2><div class="ed">Hardware health and performance</div></div><span class="pill" id="p-sentinel">Checking</span></div>
+      <div class="status"><div class="big" id="s-sentinel">Reading sensors…</div>
+        <div class="stats"><div class="stat"><b id="cpu-t">--</b><span>CPU temp</span></div><div class="stat"><b id="gpu-t">--</b><span>GPU temp</span></div><div class="stat"><b id="cpu-l">--</b><span>CPU load</span></div></div></div>
+      <div class="actions"><button class="btn primary" data-launch="sentinel">Launch</button></div>
+    </section>
+    <section class="card" id="c-alarm">
+      <div class="head"><img src="hubicons/alarm.png" alt="" /><div><h2>Code Red Alarm</h2><div class="ed">Alarms that make sure you get up</div></div><span class="pill" id="p-alarm">Checking</span></div>
+      <div class="status"><div class="big" id="s-alarm">Checking alarms…</div><div class="small" id="s-alarm-2"></div></div>
+      <div class="actions"><button class="btn primary" data-launch="alarm">Launch</button></div>
+    </section>
+    <section class="card" id="c-dock">
+      <div class="head"><img src="hubicons/dock.png" alt="" /><div><h2>Ultra Dock</h2><div class="ed">Taskbar folders</div></div><span class="pill" id="p-dock">Checking</span></div>
+      <div class="status"><div class="big" id="s-dock">Checking the Dock…</div><div class="small" id="s-dock-2"></div></div>
+      <div class="actions"><button class="btn primary" id="dock-btn">Turn on</button></div>
+    </section>
+    <section class="card" id="c-insights" hidden>
+      <div class="head"><img src="hubicons/insights.png" alt="" /><div><h2>Ultra Suite Insights</h2><div class="ed">Owner dashboard</div></div><span class="pill" id="p-insights">Checking</span></div>
+      <div class="status"><div class="big" id="s-insights">Checking…</div><div class="small">Installs, versions and feedback.</div></div>
+      <div class="actions"><button class="btn primary" data-launch="insights">Launch</button></div>
+    </section>
+  </div>
+
+  <h3>Editions</h3>
+  <table aria-label="Public and Dev editions">
+    <thead><tr><th>App</th><th>Public edition (GitHub release)</th><th>Dev edition (built from source)</th></tr></thead>
+    <tbody id="eds"></tbody>
+  </table>
+  <p class="sub" style="margin-top:10px" id="ed-note"></p>
+</main>
+<script>
+const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
+const $ = (id) => document.getElementById(id);
+const ALARM = "http://127.0.0.1:8081", SENTINEL = "http://127.0.0.1:8084";
+const DEV = { alarm: 18081, sentinel: 18084, insights: 18301 };
+let info = { version: "", insights_installed: false, dev_installed: false, dock_on: null };
+
+async function getJson(url, ms = 2500) {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+  try { const r = await fetch(url, { cache: "no-store", signal: c.signal }); if (!r.ok) throw new Error(r.status); return await r.json(); }
+  finally { clearTimeout(t); }
+}
+/* A port check that works without CORS: a network error rejects, anything that answers resolves. */
+async function reachable(port, path = "/") {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), 1500);
+  try { await fetch(`http://127.0.0.1:${port}${path}`, { mode: "no-cors", cache: "no-store", signal: c.signal }); return true; }
+  catch { return false; } finally { clearTimeout(t); }
+}
+function pill(id, text, cls) { const p = $(id); p.textContent = text; p.className = "pill " + (cls || ""); const d = $(id.replace("p-", "d-")); if (d) d.className = "dot " + (cls === "on" ? "on" : cls === "warn" ? "warn" : ""); }
+
+/* "today at 6:30 AM", "tomorrow at 6:30 AM", "Saturday at 8:15 AM", "Nov 20 at 7:00 AM" */
+function whenText(iso) {
+  const at = new Date(iso); if (isNaN(at)) return "";
+  const now = new Date(), day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((day(at) - day(now)) / 86400000);
+  const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (diff === 0) return `today at ${time}`;
+  if (diff === 1) return `tomorrow at ${time}`;
+  if (diff < 7) return `${at.toLocaleDateString([], { weekday: "long" })} at ${time}`;
+  return `${at.toLocaleDateString([], { month: "short", day: "numeric" })} at ${time}`;
+}
+function inText(sec) {
+  if (sec == null) return ""; const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return h ? `in ${h} h ${m} min` : `in ${m} min`;
+}
+
+async function alarmCard() {
+  try {
+    const [ring, next, list] = await Promise.all([getJson(`${ALARM}/api/ring`), getJson(`${ALARM}/api/next`), getJson(`${ALARM}/api/alarms`)]);
+    const alarms = (list && list.alarms) || [], on = alarms.filter((a) => a.enabled);
+    if (ring && ring.is_ringing) { pill("p-alarm", "Ringing", "warn"); $("s-alarm").textContent = "An alarm is ringing now"; $("s-alarm-2").textContent = (ring.alarm && ring.alarm.label) || ""; return; }
+    pill("p-alarm", "Running", "on");
+    if (next && next.in_sec != null && next.at) {
+      $("s-alarm").textContent = `You have an alarm ${whenText(next.at)}`;
+      $("s-alarm-2").textContent = `${inText(next.in_sec)} · ${on.length} of ${alarms.length} alarm${alarms.length === 1 ? "" : "s"} on`;
+    } else {
+      $("s-alarm").textContent = "No alarm is set";
+      $("s-alarm-2").textContent = alarms.length ? `${alarms.length} saved alarm${alarms.length === 1 ? "" : "s"}, all turned off` : "Open Code Red Alarm to add one";
+    }
+  } catch { pill("p-alarm", "Not running", "off"); $("s-alarm").textContent = "The alarm service is not answering"; $("s-alarm-2").textContent = "Launch starts it again."; }
+}
+
+/* Picks a reading from the Sentinel snapshot by group kind and sensor type, preferring the named sensors. */
+function pickSensor(groups, kind, type, prefer) {
+  const ss = groups.filter((g) => g.kind === kind).flatMap((g) => g.sensors || []).filter((s) => s.type === type && typeof s.value === "number");
+  for (const p of prefer) { const hit = ss.find((s) => p.test(s.name)); if (hit) return hit.value; }
+  return ss.length ? ss[0].value : null;
+}
+async function sentinelCard() {
+  try {
+    const snap = await getJson(`${SENTINEL}/api/snapshot`, 4000);
+    const hw = snap.hardware || {}, groups = hw.groups || [];
+    const cpuT = pickSensor(groups, "cpu", "Temperature", [/Tctl|Tdie/i, /Package/i, /Core \(/i]);
+    const gpuT = pickSensor(groups, "gpu", "Temperature", [/GPU Core/i, /Core/i]);
+    const cpuL = pickSensor(groups, "cpu", "Load", [/CPU Total/i, /Total/i]);
+    $("cpu-t").textContent = cpuT == null ? "--" : `${Math.round(cpuT)}°C`;
+    $("gpu-t").textContent = gpuT == null ? "--" : `${Math.round(gpuT)}°C`;
+    $("cpu-l").textContent = cpuL == null ? "--" : `${Math.round(cpuL)}%`;
+    const hot = (cpuT != null && cpuT >= 90) || (gpuT != null && gpuT >= 85);
+    if (!hw.live) { pill("p-sentinel", "Limited", "warn"); $("s-sentinel").textContent = "Live sensors are not available"; }
+    else if (hot) { pill("p-sentinel", "Running hot", "warn"); $("s-sentinel").textContent = "Temperatures are high"; }
+    else { pill("p-sentinel", "Healthy", "on"); $("s-sentinel").textContent = "Temperatures look normal"; }
+  } catch { pill("p-sentinel", "Not running", "off"); $("s-sentinel").textContent = "The Sentinel service is not answering"; }
+}
+
+async function dockCard() {
+  let on = info.dock_on;
+  if (invoke) { try { const d = await invoke("hub_info"); info = d; on = d.dock_on; } catch {} }
+  if (on === true) { pill("p-dock", "On", "on"); $("s-dock").textContent = "The Dock is organizing your taskbar"; $("s-dock-2").textContent = "Apps are grouped into folders next to Start."; $("dock-btn").textContent = "Turn off"; }
+  else if (on === false) { pill("p-dock", "Off", "off"); $("s-dock").textContent = "The Dock is off"; $("s-dock-2").textContent = "Your taskbar shows every button as usual."; $("dock-btn").textContent = "Turn on"; }
+  else { pill("p-dock", "Unknown", "off"); $("s-dock").textContent = "Open this window from the Ultra Suite app to control the Dock"; $("dock-btn").disabled = true; }
+}
+
+async function insightsCard() {
+  const show = !!info.insights_installed;
+  $("c-insights").hidden = !show; $("n-insights").hidden = !show;
+  if (!show) return;
+  if (await reachable(8301)) { pill("p-insights", "Running", "on"); $("s-insights").textContent = "The dashboard is ready"; }
+  else { pill("p-insights", "Not running", "off"); $("s-insights").textContent = "Launch starts the dashboard"; }
+}
+
+async function updateBanner() {
+  try {
+    const u = await getJson(`${ALARM}/api/update`);
+    if (u && u.available && u.asset) { $("upd-text").textContent = `Ultra Suite ${u.latest} is available (you have ${u.current}).`; $("upd").classList.add("show"); }
+    else $("upd").classList.remove("show");
+  } catch { $("upd").classList.remove("show"); }
+}
+$("upd-btn").onclick = async () => {
+  const b = $("upd-btn"); b.disabled = true; b.textContent = "Downloading…";
+  try { const r = await fetch(`${ALARM}/api/update/install`, { method: "POST" }); if (!r.ok) throw new Error(); b.textContent = "Installing…"; }
+  catch { b.disabled = false; b.textContent = "Try again"; $("upd-text").textContent = "The update could not start. It waits while an alarm is ringing or due soon."; }
+};
+
+async function editions() {
+  const rows = [["PC Sentinel", 8084, DEV.sentinel], ["Code Red Alarm", 8081, DEV.alarm], ["Ultra Dock", null, null]];
+  if (info.insights_installed) rows.push(["Insights", 8301, DEV.insights]);
+  const out = [];
+  for (const [name, pub, dev] of rows) {
+    const p = pub ? ((await reachable(pub)) ? `Running · port ${pub}` : `Installed · not running`) : (info.dock_on ? "On" : "Off");
+    let d;
+    if (!info.dev_installed) d = "Not installed yet";
+    else if (dev) d = (await reachable(dev)) ? `Running · port ${dev}` : `Installed · not running (port ${dev})`;
+    else d = "Off by default (only one Dock manages the taskbar)";
+    out.push(`<tr><td>${name}</td><td>${p}</td><td class="${info.dev_installed ? "" : "muted"}">${d}</td></tr>`);
+  }
+  out.push(`<tr><td>Version</td><td>${info.version || "--"}</td><td class="muted">${info.dev_installed ? "Local build" : "--"}</td></tr>`);
+  out.push(`<tr><td>Rings alarms</td><td>Yes</td><td class="muted">No (Dev starts with no alarms)</td></tr>`);
+  out.push(`<tr><td>Updates</td><td>From GitHub releases</td><td class="muted">Local builds only</td></tr>`);
+  $("eds").innerHTML = out.join("");
+  $("ed-note").textContent = info.dev_installed ? "" : "The Dev edition installs side by side with its own folders, ports 18081 to 18301 and black icons once its runtime wiring is finished.";
+}
+
+function greet() {
+  const h = new Date().getHours();
+  $("greet").textContent = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+document.addEventListener("click", async (e) => {
+  const l = e.target.closest("[data-launch]"), g = e.target.closest("[data-go]");
+  const name = l ? l.dataset.launch : g ? g.dataset.go : null;
+  if (!name) return;
+  if (name === "dock") { $("c-dock").scrollIntoView({ behavior: "smooth", block: "nearest" }); return; }
+  if (invoke) await invoke("open_app_view", { name }).catch(() => {});
+});
+$("dock-btn").onclick = async () => {
+  if (!invoke) return; const b = $("dock-btn"); b.disabled = true;
+  try { await invoke("hub_set_dock", { on: !info.dock_on }); } catch {}
+  b.disabled = false; await dockCard(); editions();
+};
+
+async function tick() {
+  greet();
+  await dockCard();
+  $("ver").textContent = info.version ? `Ultra Suite ${info.version}` : "Ultra Suite";
+  await Promise.all([alarmCard(), sentinelCard(), insightsCard()]);
+  editions();
+}
+tick(); setInterval(tick, 5000);
+updateBanner(); setInterval(updateBanner, 30 * 60 * 1000);
+</script>
+</body>
+</html>
