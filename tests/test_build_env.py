@@ -136,6 +136,47 @@ class Record(unittest.TestCase):
         self.assertIn("pinned 0.0.1", r.stderr)
         self.assertFalse(os.path.exists(self.record))
 
+    def test_verify_record_accepts_only_the_same_source_bytes(self):
+        self.assertEqual(self.run_tool().returncode, 0)
+        self.assertEqual(self.run_tool("--verify-record").returncode, 0)
+        write(os.path.join(self.repo, "a.txt"), "two\n")
+        r = self.run_tool("--verify-record")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("source changed", r.stderr)
+
+    def test_dirty_source_cannot_change_again_under_the_same_filename(self):
+        write(os.path.join(self.repo, "a.txt"), "two\n")
+        self.assertEqual(self.run_tool("--allow-dirty").returncode, 0)
+        self.assertEqual(self.run_tool("--verify-record").returncode, 0)
+        write(os.path.join(self.repo, "a.txt"), "six\n")
+        r = self.run_tool("--verify-record")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("source changed", r.stderr)
+
+    def test_committing_during_build_invalidates_the_original_record(self):
+        self.assertEqual(self.run_tool().returncode, 0)
+        subprocess.run(["git", "-C", self.repo, "-c", "user.name=fixture", "-c",
+                        "user.email=fixture@invalid", "commit", "--allow-empty", "-q", "-m", "new head"],
+                       check=True, capture_output=True)
+        self.assertEqual(self.run_tool("--verify-record").returncode, 2)
+
+    def test_legacy_record_without_fingerprint_requires_a_new_build(self):
+        self.assertEqual(self.run_tool().returncode, 0)
+        with open(self.record, encoding="utf-8") as fh:
+            record = json.load(fh)
+        record.pop("buildInputs", None)
+        write(self.record, json.dumps(record))
+        r = self.run_tool("--verify-record")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("fingerprint", r.stderr)
+
+    def test_sensitive_tracked_file_is_refused_before_opening_it(self):
+        write(os.path.join(self.repo, "auth.json"), "fixture only, never read")
+        subprocess.run(["git", "-C", self.repo, "add", "auth.json"], check=True, capture_output=True)
+        with mock.patch.object(env, "open", side_effect=AssertionError("file must not be opened"), create=True):
+            with self.assertRaisesRegex(env.EnvError, "sensitive"):
+                env.tracked_inputs(self.repo)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,6 +42,8 @@ $envArgs = @("-I", "$R\tools\check_build_env.py", "--repo", $R, "--requirements"
     "--record", "$Out\build-environment.json")
 if ($AllowDirty) { $envArgs += "--allow-dirty" }
 Invoke-Native -Step "build environment" -FilePath $PythonExe -ArgumentList $envArgs
+$sourceCheckArgs = @("-I", "$R\tools\check_build_env.py", "--repo", $R,
+    "--record", "$Out\build-environment.json", "--verify-record")
 # A Dev build must not change any tracked file (the Public sources stay exactly as committed).
 $trackedBefore = if ($Dev) { (& git -C $R status --porcelain --untracked-files=no) -join "`n" } else { "" }
 
@@ -58,6 +60,7 @@ $c = [IO.File]::ReadAllText($conf) -replace '"version":\s*"[^"]+"', ('"version":
 $cargo = "$R\ultra_dock\src-tauri\Cargo.toml"
 $t = [IO.File]::ReadAllText($cargo) -replace '(?m)^version = "[^"]+"', ('version = "' + $Version + '"')
 [IO.File]::WriteAllText($cargo, $t, (New-Object Text.UTF8Encoding($false)))
+Invoke-Native -Step "source check before packaging" -FilePath $PythonExe -ArgumentList $sourceCheckArgs
 
 Write-Host "[2/3] Building $CoreName.exe" -ForegroundColor Cyan
 # Package only the files listed in tools\package_manifest.json, copied into a checked stage with a SHA-256 inventory.
@@ -89,6 +92,7 @@ Invoke-Native -Step "Tauri CLI (npm ci)" -FilePath "npm.cmd" -ArgumentList @("ci
 if (-not $Dev) {
     Invoke-Native -Step "Tauri installer" -FilePath "$R\ultra_dock\node_modules\.bin\tauri.cmd" -ArgumentList @("build")
     $installer = Assert-FreshFile -Path "$R\ultra_dock\src-tauri\target\release\bundle\nsis\Ultra Suite_${Version}_x64-setup.exe" -NotBeforeUtc $installerStarted -What "The $Version installer"
+    Invoke-Native -Step "final source check" -FilePath $PythonExe -ArgumentList $sourceCheckArgs
     $installer | Select-Object Name, @{n="MB";e={[math]::Round($_.Length/1MB,1)}}, @{n="Built (UTC)";e={$_.LastWriteTimeUtc.ToString("u")}}
     return
 }
@@ -126,6 +130,7 @@ $bundledCore = "$devTarget\release\core"
 if (-not (Test-Path -LiteralPath "$bundledCore\$CoreName.exe")) { throw "The Dev bundle has no $CoreName.exe in $bundledCore." }
 if (Test-Path -LiteralPath "$bundledCore\ultrasuite-core.exe") { throw "The Dev bundle also contains the consumer core; refusing to use it." }
 $built = Assert-FreshFile -Path "$devTarget\release\bundle\nsis\Ultra Suite (Dev)_${Version}_x64-setup.exe" -NotBeforeUtc $installerStarted -What "The Dev $Version installer"
+Invoke-Native -Step "final source check" -FilePath $PythonExe -ArgumentList $sourceCheckArgs
 $release = "$Out\release"
 if (-not (Test-Path -LiteralPath $release)) { New-Item -ItemType Directory -Path $release | Out-Null }
 $final = "$release\UltraSuite-Dev-Setup-$Version.exe"

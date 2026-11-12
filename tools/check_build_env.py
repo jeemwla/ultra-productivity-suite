@@ -12,12 +12,14 @@ interpreter version, every installed distribution as name==version, and tool ver
 variables, and the user profile prefix is replaced with %USERPROFILE%.
 """
 import argparse
+import hashlib
 import importlib.metadata
 import json
 import os
 import platform
 import re
 import subprocess
+import stat
 import sys
 
 PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([A-Za-z0-9][A-Za-z0-9.+!_-]*)$")
@@ -93,12 +95,69 @@ def git(repo, *args):
     return r.stdout
 
 
-def build_record(repo, pins, have):
+def tracked_inputs(repo):
+    """Fingerprint tracked bytes without following links or opening credential files.
+
+    Untracked local files are excluded, just as they are from the package manifest.
+    The digest also protects -AllowDirty builds from a second edit to an already
+    dirty filename. All names are checked before any file is opened.
+    """
+    paths = sorted(p for p in git(repo, "ls-files", "-z").split("\0") if p)
+    sensitive = {".env", "settings.env", "auth.json", ".netrc", ".npmrc", ".pypirc", ".git-credentials",
+                 "id_rsa", "id_ed25519", "id_ecdsa", "credentials", "credentials.json"}
+    for rel in paths:
+        parts = rel.replace("\\", "/").split("/")
+        if any(p in ("", ".", "..") or ":" in p for p in parts) or os.path.isabs(rel):
+            raise EnvError("unsafe tracked source path")
+        if any(p.lower() in sensitive or p.lower().endswith((".env", ".pem", ".key", ".pfx", ".p12")) for p in parts):
+            raise EnvError("sensitive tracked source path refused before reading files")
+    digest = hashlib.sha256()
+    for rel in paths:
+        path = os.path.abspath(repo)
+        for part in [""] + rel.split("/"):
+            path = os.path.join(path, part)
+            meta = os.lstat(path)
+            if stat.S_ISLNK(meta.st_mode) or getattr(meta, "st_file_attributes", 0) & 0x400:
+                raise EnvError("source fingerprint refuses links or reparse points")
+        if not stat.S_ISREG(meta.st_mode):
+            raise EnvError("source fingerprint requires regular tracked files")
+        with open(path, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if (opened.st_dev, opened.st_ino) != (meta.st_dev, meta.st_ino):
+                raise EnvError("source changed while fingerprinting")
+            file_hash = hashlib.file_digest(stream, "sha256").digest()
+        after = os.lstat(path)
+        if (after.st_size, after.st_mtime_ns, after.st_ino) != (meta.st_size, meta.st_mtime_ns, meta.st_ino):
+            raise EnvError("source changed while fingerprinting")
+        digest.update(rel.encode("utf-8") + b"\0" + file_hash)
+    return {"sha256": digest.hexdigest(), "trackedFileCount": len(paths)}
+
+
+def source_record(repo):
     commit = git(repo, "rev-parse", "HEAD").strip()
     changed = [line[3:] for line in git(repo, "status", "--porcelain", "--untracked-files=no").splitlines() if line]
+    inputs = tracked_inputs(repo)
+    after_changes = [line[3:] for line in git(repo, "status", "--porcelain", "--untracked-files=no").splitlines() if line]
+    if commit != git(repo, "rev-parse", "HEAD").strip() or changed != after_changes:
+        raise EnvError("source changed while fingerprinting")
+    return {"source": {"commit": commit, "trackedChanges": changed}, "buildInputs": inputs}
+
+
+def verify_record(repo, path):
+    with open(path, encoding="utf-8") as stream:
+        saved = json.load(stream)
+    if not isinstance(saved, dict) or not isinstance(saved.get("buildInputs"), dict):
+        raise EnvError("build record has no source fingerprint; start a fresh build")
+    current = source_record(repo)
+    if any(saved.get(key) != current[key] for key in ("source", "buildInputs")):
+        raise EnvError("source changed during the build; reject this installer and rebuild from frozen source")
+    return current["source"]["commit"]
+
+
+def build_record(repo, pins, have):
     return {
         "format": 1,
-        "source": {"commit": commit, "trackedChanges": changed},
+        **source_record(repo),
         "python": {"executable": _private(sys.executable), "version": sys.version.split()[0],
                    "implementation": platform.python_implementation()},
         "platform": platform.platform(),
@@ -112,14 +171,21 @@ def build_record(repo, pins, have):
 def main(argv=None):
     p = argparse.ArgumentParser(description="Check exact build-tool pins and record build inputs.")
     p.add_argument("--repo", required=True)
-    p.add_argument("--requirements", required=True)
+    p.add_argument("--requirements")
     p.add_argument("--record", required=True)
     p.add_argument("--allow-dirty", action="store_true")
+    p.add_argument("--verify-record", action="store_true", help="Refuse source drift against an existing build record")
     a = p.parse_args(argv)
     try:
-        for value, flag in ((a.repo, "--repo"), (a.requirements, "--requirements"), (a.record, "--record")):
+        for value, flag in ((a.repo, "--repo"), (a.record, "--record")):
             if not re.match(r"^[A-Za-z]:[\\/]", value):
                 raise EnvError(f"{flag} must be a full path such as D:\\folder")
+        if a.verify_record:
+            commit = verify_record(a.repo, a.record)
+            print(f"source unchanged: {commit[:12]}")
+            return 0
+        if not a.requirements or not re.match(r"^[A-Za-z]:[\\/]", a.requirements):
+            raise EnvError("--requirements must be a full path such as D:\\folder")
         pins = read_pins(a.requirements)
         have = installed()
         check_pins(pins, have)
@@ -135,7 +201,7 @@ def main(argv=None):
             json.dump(record, f, indent=2, sort_keys=True)
             f.write("\n")
         os.replace(tmp, a.record)
-    except (EnvError, OSError) as exc:
+    except (EnvError, OSError, ValueError) as exc:
         print(f"build environment refused: {exc}", file=sys.stderr)
         return 2
     print(f"build tools match {len(pins)} pins; source {record['source']['commit'][:12]}"
