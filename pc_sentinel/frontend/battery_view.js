@@ -7,7 +7,14 @@
   const fin = v => typeof v === "number" && Number.isFinite(v);
   const n0 = v => String(Math.round(v)), n1 = v => Number(v).toFixed(1);
   const hm = m => fin(m) ? `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, "0")}m` : null;
-  const wh = mwh => fin(mwh) && mwh > 0 ? `${n1(mwh / 1000)} Wh` : null;
+  const whRaw = mwh => fin(mwh) && mwh > 0 ? `${n1(mwh / 1000)} Wh` : null;
+
+  function chargerSub(p) {
+    if (p.charging) return "charging now";
+    if (p.plugged_in === true && fin(p.charge_pct) && p.charge_pct < 99)
+      return "charging is paused; a charge limit (for example 80% in Armoury Crate, G-Helper or Lenovo Vantage) does this";
+    return p.battery_count > 1 ? `${p.battery_count} batteries, shown combined` : "";
+  }
 
   function stat(k, v, sub) {
     return `<div class="bt-stat"><div class="muted">${k}</div><div class="big num">${v == null ? NR : v}</div>${sub ? `<div class="muted">${sub}</div>` : ""}</div>`;
@@ -66,8 +73,9 @@
     if (!has) {
       return hero + `<div class="banner info mt"><div class="ic">+</div><div><div class="t">Battery details aren't available</div><div class="s">${pct == null ? "Windows is not reporting a battery. This is expected on desktops; on a laptop, check that Windows can detect its battery." : "A charge sensor is available, but Windows isn't reporting battery health, cycles or charge rate."}</div></div></div>`;
     }
-    const p = pack;
-    const capacity = wh(p.full_mwh) && wh(p.design_mwh) ? `${wh(p.full_mwh)} now, ${wh(p.design_mwh)} when new` : wh(p.design_mwh) ? `${wh(p.design_mwh)} when new; full charge capacity not reported` : "";
+    const p = pack, rel = !!p.capacity_relative;
+    const wh = mwh => rel ? null : whRaw(mwh);
+    const capacity = rel ? "this battery reports capacity in relative units, so watt-hours aren't shown" : wh(p.full_mwh) && wh(p.design_mwh) ? `${wh(p.full_mwh)} now, ${wh(p.design_mwh)} when new` : wh(p.design_mwh) ? `${wh(p.design_mwh)} when new; full charge capacity not reported` : "";
     const brightness = bright && bright.available ? `<div class="muted" style="margin-bottom:6px">Screen brightness</div><div style="display:flex;align-items:center;gap:12px"><input type="range" id="bt-br" min="0" max="100" value="${+bright.percent || 0}" style="flex:1;accent-color:var(--accent)" aria-label="Screen brightness"><b class="num" id="bt-brv">${+bright.percent || 0}%</b></div>` : "";
     return hero + `<div class="grid g4 mt bt-grid">
     ${stat("Health", fin(p.health_pct) ? n1(p.health_pct) + "%" : null, capacity)}
@@ -75,9 +83,9 @@
     ${powerStat(p)}
     ${timeStat(p)}
     ${stat("Wear", fin(p.wear_pct) ? n1(p.wear_pct) + "%" : null, "capacity lost since new")}
-    ${stat("Remaining energy", wh(p.remaining_mwh), fin(p.full_mwh) && fin(p.remaining_mwh) ? `of ${wh(p.full_mwh)}` : "")}
+    ${stat("Remaining energy", wh(p.remaining_mwh), rel ? "relative units only" : wh(p.full_mwh) && wh(p.remaining_mwh) ? `of ${wh(p.full_mwh)}` : "")}
     ${dailyStat(p)}
-    ${stat("Charger", p.plugged_in === true ? "Plugged in" : p.plugged_in === false ? "Unplugged" : null, p.charging ? "charging now" : "")}</div>
+    ${stat("Charger", p.plugged_in === true ? "Plugged in" : p.plugged_in === false ? "Unplugged" : null, chargerSub(p))}</div>
     <div class="grid g2 mt"><div><div class="muted" style="margin-bottom:6px">Battery health over time</div>${historySvg(hist && hist.history)}</div><div>${brightness}</div></div>
     <p class="muted mt">Charging power is what flows into the battery. Windows doesn't report the charger's total output, which also runs the PC.</p>`;
   }

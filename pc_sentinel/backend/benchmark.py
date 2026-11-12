@@ -23,6 +23,7 @@ WAKES = 200
 MIN_REAL_DIFF_PCT = 3.0
 HARD_LIMIT_S = 30.0
 KEEP = 12
+BUSY_PCT = 20.0             # background CPU load above this makes a run unreliable for comparison
 _BUF = bytes(range(256)) * 16384  # 4 MB, same bytes every run
 _lock = threading.Lock()
 
@@ -77,10 +78,20 @@ def _spread_pct(values):
     return round((max(values) - min(values)) / med * 100, 1) if med else None
 
 
-def run(label="", passes=PASSES, cpu_seconds=CPU_SECONDS, wakes=WAKES, clock=time.time):
+def background_load(seconds=0.5):
+    """System CPU load just before a run, in percent (None when unavailable)."""
+    try:
+        import psutil
+        return round(psutil.cpu_percent(interval=seconds), 1)
+    except Exception:
+        return None
+
+
+def run(label="", passes=PASSES, cpu_seconds=CPU_SECONDS, wakes=WAKES, clock=time.time, load=background_load):
     if not _lock.acquire(blocking=False):
         raise RuntimeError("A measurement is already running.")
     try:
+        busy = load()
         start = time.perf_counter()
         stop_at = start + HARD_LIMIT_S
         threads = max(1, os.cpu_count() or 1)
@@ -93,7 +104,7 @@ def run(label="", passes=PASSES, cpu_seconds=CPU_SECONDS, wakes=WAKES, clock=tim
                 wake_med.append(statistics.median(w))
                 wake_p95.append(w[min(len(w) - 1, int(len(w) * 0.95))])
         return {
-            "ts": clock(), "label": label, "threads": threads, "passes": passes,
+            "ts": clock(), "label": label, "threads": threads, "passes": passes, "background_load_pct": busy,
             "seconds": round(time.perf_counter() - start, 1),
             "single_mbps": round(statistics.median(single), 1), "single_spread_pct": _spread_pct(single),
             "multi_mbps": round(statistics.median(multi), 1), "multi_spread_pct": _spread_pct(multi),
@@ -108,9 +119,26 @@ def run(label="", passes=PASSES, cpu_seconds=CPU_SECONDS, wakes=WAKES, clock=tim
 METRICS = (("single_mbps", "single_spread_pct", True), ("multi_mbps", "multi_spread_pct", True), ("wake_us", "wake_spread_pct", False))
 
 
+def comparable(before, after):
+    """Reasons the two runs can't be compared fairly (empty list when they can)."""
+    reasons = []
+    if (before.get("ac") is False) != (after.get("ac") is False):
+        reasons.append("One run was on battery power and the other was plugged in.")
+    if before.get("threads") and after.get("threads") and before["threads"] != after["threads"]:
+        reasons.append("The number of processor threads changed between runs.")
+    if before.get("cpu") and after.get("cpu") and before["cpu"] != after["cpu"]:
+        reasons.append("The runs were on different processors.")
+    for name, r in (("first", before), ("second", after)):
+        if isinstance(r.get("background_load_pct"), (int, float)) and r["background_load_pct"] > BUSY_PCT:
+            reasons.append(f"The PC was busy during the {name} run ({r['background_load_pct']:.0f}% CPU in use beforehand).")
+    return reasons
+
+
 def compare(before, after):
-    """Per metric: percent change (positive = better) and whether it exceeds the measured noise."""
+    """Per metric: percent change (positive = better) and whether it exceeds the measured noise.
+    A change is never "real" when the runs aren't comparable (see comparable())."""
     out = {}
+    why = comparable(before or {}, after or {})
     for key, spread, higher_better in METRICS:
         a, b = (before or {}).get(key), (after or {}).get(key)
         if not a or b is None:
@@ -118,7 +146,24 @@ def compare(before, after):
             continue
         change = (b - a) / a * 100 * (1 if higher_better else -1)
         noise = max(MIN_REAL_DIFF_PCT, (before or {}).get(spread) or 0, (after or {}).get(spread) or 0)
-        out[key] = {"better_pct": round(change, 1), "noise_pct": round(noise, 1), "real": abs(change) > noise}
+        out[key] = {"better_pct": round(change, 1), "noise_pct": round(noise, 1), "real": abs(change) > noise and not why}
+    out["not_comparable"] = why
+    return out
+
+
+def context():
+    """Power source and processor for the run, so unlike runs are never compared. Missing facts stay None."""
+    out = {"ac": None, "cpu": None}
+    try:
+        from . import laptop
+        out["ac"] = laptop.power_status().get("ac")
+    except Exception:
+        pass
+    try:
+        from .max_power import detect_device
+        out["cpu"] = detect_device().get("cpu_name") or None
+    except Exception:
+        pass
     return out
 
 
@@ -182,5 +227,6 @@ def register(app):
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from None
         result["max_active"] = st.get("active")
+        result.update(await asyncio.to_thread(context))
         await asyncio.to_thread(save_result, result)
         return summary(load_results())

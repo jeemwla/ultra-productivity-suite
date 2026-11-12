@@ -175,6 +175,8 @@ def build_battery(d: dict, sps: dict = None, report: dict = None) -> dict:
         "model": (static.get("DeviceName") or "").strip() or rep0.get("id") or None,
         "chemistry": chem or None, "verdict": _verdict(health, cycles),
         "daily_use": report.get("daily_use"), "platform_role": report.get("platform_role"),
+        "capacity_relative": any(b.get("relative") for b in rep_bats),
+        "battery_count": max(len(win), len(rep_bats), len(status_rows)) or None,
     }
 
 
@@ -283,7 +285,9 @@ def parse_battery_report(text) -> dict:
     for b in _children(_child(root, "Batteries"), "Battery"):
         design, full, cycles = _int(_text(b, "DesignCapacity")), _int(_text(b, "FullChargeCapacity")), _int(_text(b, "CycleCount"))
         batteries.append({"id": _text(b, "Id"), "maker": _text(b, "Manufacturer"), "chemistry": _text(b, "Chemistry"),
-                          "design_mwh": design or None, "full_mwh": full or None, "cycles": cycles or None})
+                          "design_mwh": design or None, "full_mwh": full or None, "cycles": cycles or None,
+                          # RelativeCapacity 1: capacities are relative units, not mWh (health ratio still holds)
+                          "relative": _int(_text(b, "RelativeCapacity")) == 1})
     start, end = _when(_text(info, "ReportStartTime")), _when(_text(info, "ScanTime"))
     entries = []
     for e in _children(_child(root, "RecentUsage"), "UsageEntry"):

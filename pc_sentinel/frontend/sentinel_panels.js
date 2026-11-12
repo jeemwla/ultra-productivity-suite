@@ -51,11 +51,15 @@
     const b = s.before, a = s.after, cmp = s.compare || {};
     const cell = (r, k, f) => r && fin(r[k]) ? f(r[k]) : "not measured";
     const when = r => r ? new Date(r.ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-    const rows = METRIC.map(([k, label, f]) => `<tr><th scope="row">${label}</th><td class="num">${cell(b, k, f)}</td><td class="num">${cell(a, k, f)}</td><td>${b && a ? verdict(cmp[k]) : ""}</td></tr>`).join("");
+    const why = (b && a && cmp.not_comparable) || [];
+    const rows = METRIC.map(([k, label, f]) => `<tr><th scope="row">${label}</th><td class="num">${cell(b, k, f)}</td><td class="num">${cell(a, k, f)}</td><td>${b && a ? (why.length ? `<span class="pill">Not compared</span>` : verdict(cmp[k])) : ""}</td></tr>`).join("");
+    const ctx = r => r ? [r.ac === false ? "on battery" : r.ac === true ? "plugged in" : null, fin(r.background_load_pct) ? `${n0(r.background_load_pct)}% CPU busy before` : null].filter(Boolean).join(" · ") : "";
+    const head = (title, r) => `${title}${r ? `<br><span class="muted">${esc(when(r))}${ctx(r) ? ` · ${esc(ctx(r))}` : ""}</span>` : ""}`;
+    const unfair = why.length ? `<div class="banner info mt"><div class="ic">i</div><div><div class="t">These two runs can't be compared fairly</div><div class="s">${why.map(esc).join(" ")} Measure both again under the same conditions.</div></div></div>` : "";
     const hint = !b && !a ? "Measure once with Max Performance off, then use it and measure again. Each run takes about 12 seconds."
       : !a ? "Now use Max Performance and measure again to compare." : !b ? "Go back to your previous plan and measure to get a baseline." : "Differences inside the run-to-run spread are not counted.";
-    return `<table class="bench"><thead><tr><th scope="col">Measured</th><th scope="col">Max Performance off${b ? `<br><span class="muted">${esc(when(b))}</span>` : ""}</th><th scope="col">Max Performance on${a ? `<br><span class="muted">${esc(when(a))}</span>` : ""}</th><th scope="col">Result</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="muted mt">${running ? "Measuring… keep other apps quiet for a moment." : esc(hint)} Workload: SHA-256 hashing of a fixed 4 MB buffer, and 200 thread wake-ups after short idle gaps; three passes each.</p>`;
+    return `<table class="bench"><thead><tr><th scope="col">Measured</th><th scope="col">${head("Max Performance off", b)}</th><th scope="col">${head("Max Performance on", a)}</th><th scope="col">Result</th></tr></thead><tbody>${rows}</tbody></table>${unfair}
+      <p class="muted mt">${running ? "Measuring… keep other apps quiet and stay plugged in for a moment." : esc(hint)} Workload: SHA-256 hashing of a fixed 4 MB buffer, and 200 thread wake-ups after short idle gaps; three passes each.</p>`;
   }
 
   /* ---------------------------------------------------------------- background writers */

@@ -68,3 +68,10 @@ test('overview pill only for warning or heavy and not when ignored',()=>{
  assert.equal(P.overviewPill({flagged:[amd]},['atieclxx']),'');
 });
 test('units',()=>{assert.equal(P.rate(650000),'650 KB/s');assert.equal(P.rate(5e6),'5.0 MB/s');assert.equal(P.bytes(4.3e11),'430.0 GB');assert.equal(P.rate(null),'–');});
+test('unfair before/after pairs say why and make no claim',()=>{
+ const before={ts:1,single_mbps:2000,multi_mbps:9000,wake_us:40,ac:true,background_load_pct:3};
+ const after={ts:2,single_mbps:2600,multi_mbps:9000,wake_us:40,ac:false,background_load_pct:4};
+ const html=P.benchHtml({before,after,compare:{single_mbps:{better_pct:30,noise_pct:3,real:false},not_comparable:['One run was on battery power and the other was plugged in.']}});
+ assert.match(html,/be compared fairly/);assert.match(html,/on battery/);assert.match(html,/Not compared/);assert.doesNotMatch(html,/% better|% worse/);
+ assert.match(html,/plugged in · 3% CPU busy before/);
+});

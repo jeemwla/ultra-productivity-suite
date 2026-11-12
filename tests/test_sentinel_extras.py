@@ -179,5 +179,28 @@ class PsuRefresh(unittest.TestCase):
         self.assertTrue(preferences.validate({"psu_refresh": True})["psu_refresh"])
 
 
+class BenchmarkFairness(unittest.TestCase):
+    BASE = {"single_mbps": 2000, "single_spread_pct": 2, "multi_mbps": 9000, "multi_spread_pct": 2, "wake_us": 40,
+            "wake_spread_pct": 2, "threads": 8, "cpu": "Fixture CPU", "ac": True, "background_load_pct": 3}
+
+    def test_unlike_runs_are_never_called_better_or_worse(self):
+        after = {**self.BASE, "single_mbps": 2600}
+        self.assertTrue(bm.compare(self.BASE, after)["single_mbps"]["real"])
+        for change, phrase in (({"ac": False}, "battery"), ({"threads": 16}, "threads"),
+                               ({"cpu": "Other CPU"}, "different processors"), ({"background_load_pct": 55}, "busy")):
+            c = bm.compare(self.BASE, {**after, **change})
+            self.assertFalse(c["single_mbps"]["real"], change)
+            self.assertTrue(any(phrase in r for r in c["not_comparable"]), (change, c["not_comparable"]))
+        self.assertEqual(bm.compare(self.BASE, after)["not_comparable"], [])
+
+    def test_unknown_context_does_not_block_a_comparison(self):
+        old = {k: v for k, v in self.BASE.items() if k not in ("ac", "cpu", "background_load_pct")}
+        self.assertEqual(bm.comparable(old, self.BASE), [])
+
+    def test_run_records_background_load(self):
+        r = bm.run("x", passes=1, cpu_seconds=0.05, wakes=5, load=lambda: 12.5)
+        self.assertEqual(r["background_load_pct"], 12.5)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -37,3 +37,11 @@ test('health history needs two points and draws a labelled chart',()=>{
  const out=render({has_battery:true},{history:[{start:'2026-10-01T00:00:00Z',health_pct:92.5},{end:'2026-11-05T00:00:00Z',health_pct:90}]});
  assert.match(out,/aria-label="Battery health from 92\.5% to 90\.0%"/);assert.match(out,/2026-10-01 · 92\.5%/);
 });
+test('relative-capacity batteries never show watt-hours; a paused charge explains charge limits',()=>{
+ const rel=render({has_battery:true,capacity_relative:true,health_pct:90,full_mwh:90,design_mwh:100,remaining_mwh:40});
+ assert.doesNotMatch(rel,/Wh/);assert.match(rel,/relative units/);assert.match(rel,/90\.0%/);
+ const paused=render({has_battery:true,plugged_in:true,charging:false,charge_pct:80,state:'Plugged in, not charging'});
+ assert.match(paused,/charge limit \(for example 80% in Armoury Crate, G-Helper or Lenovo Vantage\)/);
+ assert.doesNotMatch(render({has_battery:true,plugged_in:true,charging:false,charge_pct:100,state:'Fully charged'}),/charge limit/);
+ assert.match(render({has_battery:true,battery_count:2}),/2 batteries, shown combined/);
+});

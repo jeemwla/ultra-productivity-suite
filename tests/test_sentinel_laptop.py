@@ -92,7 +92,7 @@ class BatteryReport(unittest.TestCase):
         r = laptop.parse_battery_report(fixture("battery_report_laptop.xml"))
         self.assertEqual(r["platform_role"], "Mobile")
         self.assertEqual(r["batteries"][0], {"id": "FX76", "maker": "FixtureCell", "chemistry": "LIon",
-                                             "design_mwh": 76000, "full_mwh": 68400, "cycles": 142})
+                                             "design_mwh": 76000, "full_mwh": 68400, "cycles": 142, "relative": False})
         # 30% + 5% + 50% of a full charge drained on battery over a 3-day report window
         self.assertEqual(r["daily_use"]["pct_per_day"], 28.3)
         self.assertEqual(r["daily_use"]["on_battery_hours_per_day"], 4.3)
@@ -221,6 +221,81 @@ class CoolingAndSettings(unittest.TestCase):
             self.assertIn("javascript", r.headers.get("content-type", ""))
         for name in ("index.html", "..%2Fbackend%2Fmain.py", "psu_picker.js"):
             self.assertEqual(client.get("/ui/" + name).status_code, 404, name)
+
+
+class BatteryScenarios(unittest.TestCase):
+    """Laptop battery data seen in the wild, without a laptop: every mix of present, missing and odd values."""
+
+    def test_relative_capacity_batteries_hide_watt_hours_but_keep_health(self):
+        xml = fixture("battery_report_laptop.xml").replace(b"<RelativeCapacity>0</RelativeCapacity>", b"<RelativeCapacity>1</RelativeCapacity>")
+        r = laptop.parse_battery_report(xml)
+        self.assertTrue(r["batteries"][0]["relative"])
+        b = laptop.build_battery({"win": [{"EstimatedChargeRemaining": 70}]}, {"ac": False}, r)
+        self.assertTrue(b["capacity_relative"])
+        self.assertEqual(b["health_pct"], 90.0)
+        normal = laptop.build_battery({"win": [{}]}, {}, laptop.parse_battery_report(fixture("battery_report_laptop.xml")))
+        self.assertFalse(normal["capacity_relative"])
+
+    def test_two_batteries_are_combined(self):
+        d = {"static": [{"DesignedCapacity": 23000}, {"DesignedCapacity": 47000}],
+             "full": [{"FullChargedCapacity": 21000}, {"FullChargedCapacity": 42000}],
+             "status": [{"RemainingCapacity": 10000, "DischargeRate": 5000, "PowerOnline": False},
+                        {"RemainingCapacity": 20000, "DischargeRate": 4000, "PowerOnline": False}],
+             "win": [{"EstimatedChargeRemaining": 48}, {"EstimatedChargeRemaining": 48}]}
+        b = laptop.build_battery(d, {"ac": False}, {})
+        self.assertEqual((b["design_mwh"], b["full_mwh"], b["health_pct"], b["battery_count"]), (70000, 63000, 90.0, 2))
+        self.assertEqual((b["rate_w"], b["minutes_left"]), (-9.0, 200))
+
+    def test_thousands_of_mixed_inputs_keep_every_invariant(self):
+        import itertools
+        import math
+        statics = [None, [{"DesignedCapacity": 76000, "Chemistry": 0x4E4F494C}], [{"DesignedCapacity": 0}]]
+        fulls = [None, [{"FullChargedCapacity": 68400}], [{"FullChargedCapacity": 80000}]]
+        statuses = [None, [{}],
+                    [{"ChargeRate": 45000, "DischargeRate": 0, "RemainingCapacity": 30000, "Voltage": 16800, "PowerOnline": True, "Charging": True}],
+                    [{"ChargeRate": 0, "DischargeRate": 15000, "RemainingCapacity": 30000, "PowerOnline": False, "Discharging": True}],
+                    [{"ChargeRate": 0, "DischargeRate": 0, "RemainingCapacity": 54720, "PowerOnline": True}],
+                    [{"ChargeRate": 4294967295, "DischargeRate": 4294967295, "RemainingCapacity": 0}]]
+        wins = [None, [{}], [{"EstimatedChargeRemaining": 44, "EstimatedRunTime": 71582788}],
+                [{"EstimatedChargeRemaining": 100, "EstimatedRunTime": 300}]]
+        spss = [{}, {"ac": True, "charging": True, "no_battery": False, "percent": 44, "seconds_left": None},
+                {"ac": False, "charging": False, "no_battery": False, "percent": 44, "seconds_left": 5400},
+                {"ac": True, "charging": False, "no_battery": False, "percent": 80, "seconds_left": None},
+                {"ac": None, "charging": None, "no_battery": True, "percent": None, "seconds_left": None}]
+        reports = [{}, laptop.parse_battery_report(fixture("battery_report_laptop.xml")),
+                   laptop.parse_battery_report(fixture("battery_report_sparse.xml"))]
+        sane = lambda r, k: isinstance(r.get(k), int) and 0 <= r[k] <= laptop.MAX_SANE_MW
+        count = 0
+        for st, fu, ss, wi, sp, rp in itertools.product(statics, fulls, statuses, wins, spss, reports):
+            d = {k: v for k, v in (("static", st), ("full", fu), ("status", ss), ("win", wi)) if v is not None}
+            b = laptop.build_battery(d, sp, rp)
+            count += 1
+            if not b["has_battery"]:
+                self.assertEqual(set(b), {"has_battery", "pack"})
+                continue
+            for k, v in b.items():
+                if isinstance(v, float):
+                    self.assertFalse(math.isnan(v) or math.isinf(v), (k, d, sp))
+            if b["charge_pct"] is not None:
+                self.assertTrue(0 <= b["charge_pct"] <= 100)
+            if b["health_pct"] is not None:
+                self.assertTrue(0 < b["health_pct"] <= 100)
+                self.assertAlmostEqual(b["wear_pct"], round(100 - b["health_pct"], 1))
+            if b["charging"]:
+                self.assertIsNone(b["minutes_left"], "no time left while charging")
+                self.assertTrue(b["rate_w"] is None or b["rate_w"] >= 0)
+                self.assertEqual(b["state"], "Charging")
+            else:
+                self.assertIsNone(b["minutes_to_full"])
+            if b["plugged_in"] is True:
+                self.assertIsNone(b["minutes_left"], "no time left on the charger")
+            if b["minutes_left"] is not None:
+                self.assertGreater(b["minutes_left"], 0)
+            if not (ss and any(sane(r, "ChargeRate") or sane(r, "DischargeRate") for r in ss)):
+                self.assertIsNone(b["rate_w"], "no rate reported means no watts shown")
+            if not (ss and ss[0].get("Voltage")):
+                self.assertIsNone(b["voltage_v"])
+        self.assertEqual(count, 3 * 3 * 6 * 4 * 5 * 3)
 
 
 if __name__ == "__main__":
