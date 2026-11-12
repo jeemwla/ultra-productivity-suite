@@ -1047,6 +1047,70 @@ fn http_get(port: u16, path: &str) -> Option<String> {
     buf.split("\r\n\r\n").nth(1).map(|b| b.to_string())
 }
 
+fn http_get_slow(port: u16, path: &str, secs: u64) -> Option<String> {
+    let mut s = TcpStream::connect_timeout(&format!("127.0.0.1:{}", port).parse().ok()?, Duration::from_millis(500)).ok()?;
+    s.set_read_timeout(Some(Duration::from_secs(secs))).ok()?;
+    write!(s, "GET {} HTTP/1.0
+Host: 127.0.0.1
+
+", path).ok()?;
+    let mut buf = String::new();
+    s.read_to_string(&mut buf).ok()?;
+    buf.split("
+
+").nth(1).map(|b| b.to_string())
+}
+
+/// The version to announce, if the core reports a newer release with an installer that was not announced yet.
+fn update_to_announce(info: &Value, already_announced: &str) -> Option<String> {
+    if info["available"].as_bool() != Some(true) || info["asset"].as_str().map_or(true, |a| a.is_empty()) { return None; }
+    let latest = info["latest"].as_str()?.trim();
+    if latest.is_empty() || latest == already_announced.trim() { None } else { Some(latest.to_string()) }
+}
+
+/// Tell the user about a new release once per version, even when no app window is open. The check goes through the
+/// local core (which caches GitHub for 6 hours), so this adds no extra GitHub requests.
+fn update_notifier(app: AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+    std::thread::sleep(Duration::from_secs(90));
+    loop {
+        if let Some(info) = http_get_slow(8084, "/api/update", 20).and_then(|b| serde_json::from_str::<Value>(&b).ok()) {
+            let seen = std::fs::read_to_string(appdata("update_announced.txt")).unwrap_or_default();
+            if let Some(latest) = update_to_announce(&info, &seen) {
+                let current = info["current"].as_str().unwrap_or("");
+                let shown = app.notification().builder()
+                    .title(format!("Ultra Suite {latest} is available"))
+                    .body(format!("You have {current}. Choose Update in the Dock menu or in PC Sentinel. Updating takes about a minute."))
+                    .show();
+                if shown.is_ok() { let _ = std::fs::write(appdata("update_announced.txt"), &latest); }
+            }
+        }
+        std::thread::sleep(Duration::from_secs(6 * 3600));
+    }
+}
+
+#[cfg(test)]
+mod update_notice_tests {
+    use super::update_to_announce;
+    use serde_json::json;
+    #[test]
+    fn announces_each_new_version_once() {
+        let info = json!({"available": true, "latest": "2.2.12", "current": "2.2.11", "asset": "https://x/a.exe"});
+        assert_eq!(update_to_announce(&info, ""), Some("2.2.12".into()));
+        assert_eq!(update_to_announce(&info, "2.2.12
+"), None, "already announced");
+        assert_eq!(update_to_announce(&info, "2.2.11"), Some("2.2.12".into()), "an older announcement does not block a newer one");
+    }
+    #[test]
+    fn stays_quiet_without_a_usable_newer_release() {
+        assert_eq!(update_to_announce(&json!({"available": false, "latest": "2.2.12", "asset": "a"}), ""), None);
+        assert_eq!(update_to_announce(&json!({"available": true, "latest": "2.2.12", "asset": null}), ""), None);
+        assert_eq!(update_to_announce(&json!({"available": true, "latest": "2.2.12", "asset": ""}), ""), None);
+        assert_eq!(update_to_announce(&json!({"available": true, "latest": "", "asset": "a"}), ""), None);
+        assert_eq!(update_to_announce(&json!({"error": "ConnectError"}), ""), None);
+    }
+}
+
 /// Keep the background services running 24/7: if the core ever stops (crash, killed), start it again.
 fn core_supervisor(app: AppHandle) {
     std::thread::sleep(Duration::from_secs(20));
@@ -1357,6 +1421,7 @@ fn main() {
     #[cfg(windows)]
     wait_for_old_copy(&args);
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let rest: Vec<String> = argv.into_iter().skip(1).collect();
             if rest.is_empty() { open_view(app, "sentinel"); } else { handle_args(app, &rest); }
@@ -1394,6 +1459,8 @@ fn main() {
             std::thread::spawn(move || alarm_watch(h3));
             let h4 = handle.clone();
             std::thread::spawn(move || core_supervisor(h4));
+            let h5 = handle.clone();
+            std::thread::spawn(move || update_notifier(h5));
             #[cfg(windows)]
             std::thread::spawn(alarm_wake_timer);
             std::thread::spawn(|| loop {

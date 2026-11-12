@@ -9,6 +9,7 @@ Shared routes every Ultra Suite web app mounts (alarm, sentinel, insights):
   /api/update/install   POST: download the newest installer and start it
   /api/about            app version, mode, data folder
 """
+import hashlib
 import json
 import os
 import re
@@ -28,6 +29,28 @@ REPO = os.environ.get("ULTRASUITE_REPO", "jeemwla/ultra-productivity-suite")
 DATA = os.environ.get("ULTRASUITE_DATA") or os.path.join(ROOT, "data")
 THEMES = {"system", "light", "dark", "midnight", "sakura", "matcha", "ember", "arctic", "paper", "terminal", "synthwave"}
 _upd = {"at": 0.0, "data": None}
+ALARM_PORT = int(os.environ.get("ULTRASUITE_ALARM_PORT", "8081"))
+UPDATE_ALARM_MARGIN_SEC = 30 * 60
+
+
+def expected_sha256(asset):
+    """The installer's SHA-256 from GitHub's release asset 'digest' ("sha256:<64 hex>"), or None."""
+    digest = (asset or {}).get("digest") or ""
+    m = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", digest.strip())
+    return m.group(1).lower() if m else None
+
+
+def alarm_blocks_update(next_info, ring_info):
+    """A reason not to update now, or None. Updating restarts the alarm service, so never while an alarm rings or is
+    due within 30 minutes. An unreadable alarm state also blocks: an unavailable check is not a safe result."""
+    if not isinstance(ring_info, dict) or not isinstance(next_info, dict) or "in_sec" not in next_info:
+        return "Couldn't confirm that no alarm is due, so the update was not started. Try again in a moment."
+    if ring_info.get("is_ringing"):
+        return "An alarm is ringing. Update after you stop it."
+    due = next_info.get("in_sec")
+    if due is not None and due <= UPDATE_ALARM_MARGIN_SEC:
+        return "An alarm is due within 30 minutes, so the update will wait. Try again after it rings."
+    return None
 
 
 def version() -> str:
@@ -207,6 +230,7 @@ def add_shared_routes(app, frontend_dir: str):
             out.update(latest=tag.lstrip("vV"), available=_vtuple(tag) > _vtuple(cur), notes=(r.get("body") or "")[:4000],
                        summary=summarize_notes(r.get("body") or ""),
                        url=r.get("html_url"), asset=asset.get("browser_download_url") if asset else None,
+                       asset_sha256=expected_sha256(asset),
                        published=r.get("published_at"))
         except Exception as exc:
             out["error"] = exc.__class__.__name__
@@ -218,16 +242,35 @@ def add_shared_routes(app, frontend_dir: str):
         info = await check_update(force=True)
         if not info.get("available") or not info.get("asset"):
             raise HTTPException(409, "You're already on the newest version.")
+        if not info.get("asset_sha256"):
+            raise HTTPException(409, "This release has no published checksum, so it can't be verified. Download it from GitHub instead.")
+        try:
+            async with httpx.AsyncClient(timeout=5) as c:
+                nxt = (await c.get(f"http://127.0.0.1:{ALARM_PORT}/api/next")).json()
+                ring = (await c.get(f"http://127.0.0.1:{ALARM_PORT}/api/ring")).json()
+        except Exception:
+            nxt, ring = None, None
+        blocked = alarm_blocks_update(nxt, ring)
+        if blocked:
+            raise HTTPException(409, blocked)
         dest = os.path.join(tempfile.gettempdir(), f"UltraSuite-Setup-{info['latest']}.exe")
+        h = hashlib.sha256()
         try:
             async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
                 async with c.stream("GET", info["asset"]) as r:
                     r.raise_for_status()
                     with open(dest, "wb") as f:
                         async for chunk in r.aiter_bytes():
+                            h.update(chunk)
                             f.write(chunk)
         except Exception:
             raise HTTPException(502, "Couldn't download the update. Check your connection and try again.")
+        if h.hexdigest() != info["asset_sha256"]:
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+            raise HTTPException(502, "The download did not match GitHub's published checksum, so nothing was installed.")
         # The installer closes the running app itself, then reinstalls in place and restarts it.
         subprocess.Popen([dest], close_fds=True, creationflags=0x00000008 if os.name == "nt" else 0)  # DETACHED_PROCESS
         return {"ok": True, "started": dest}
