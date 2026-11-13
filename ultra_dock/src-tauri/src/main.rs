@@ -2195,7 +2195,13 @@ unsafe fn foreground_is_shell_surface(hwnd: windows::Win32::Foundation::HWND) ->
     let mut size = buffer.len() as u32;
     let success = QueryFullProcessImageNameW(process,PROCESS_NAME_WIN32,PWSTR(buffer.as_mut_ptr()),&mut size).is_ok();
     let _ = CloseHandle(process);
-    let result = success && std::env::var("SystemRoot").is_ok_and(|root| dock_surface::shell_surface_path(&String::from_utf16_lossy(&buffer[..size as usize]),&root));
+    let mut class = [0u16;128];
+    let class_len = windows::Win32::UI::WindowsAndMessaging::GetClassNameW(hwnd,&mut class).max(0) as usize;
+    let class = String::from_utf16_lossy(&class[..class_len.min(class.len())]);
+    let result = success && std::env::var("SystemRoot").is_ok_and(|root| {
+        let path = String::from_utf16_lossy(&buffer[..size as usize]);
+        dock_surface::shell_surface_path(&path,&root) || dock_surface::task_view_surface(&path,&root,&class)
+    });
     LAST.with(|last| *last.borrow_mut() = Some((hwnd.0 as isize,pid,result)));
     result
 }

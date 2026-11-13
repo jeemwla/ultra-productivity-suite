@@ -16,6 +16,12 @@ pub fn shell_surface_path(path: &str, windows: &str) -> bool {
     path.starts_with(&(root + "\\systemapps\\")) && matches!(path.rsplit('\\').next(),
         Some("startmenuexperiencehost.exe" | "searchhost.exe" | "shellexperiencehost.exe"))
 }
+pub fn task_view_surface(path: &str, windows: &str, class: &str) -> bool {
+    let path = path.replace('/', "\\").to_ascii_lowercase();
+    let root = windows.replace('/', "\\").trim_end_matches('\\').to_ascii_lowercase();
+    path == root + "\\explorer.exe"
+        && matches!(class, "MultitaskingViewFrame" | "XamlExplorerHostIslandWindow")
+}
 pub fn switcher_requested(event_pending: bool, visible: bool, _modifier_down: bool) -> bool {
     // Start, screenshots and ordinary menu shortcuts are not app-switcher sessions.
     event_pending || visible
@@ -149,6 +155,15 @@ mod tests {
         assert!(!shell_surface_path("C:\\Games\\game.exe", "C:\\Windows"));
         assert!(!shell_surface_path("C:\\Temp\\StartMenuExperienceHost.exe", "C:\\Windows"));
         assert!(!shell_surface_path("C:\\Windows\\SystemAppsFake\\StartMenuExperienceHost.exe", "C:\\Windows"));
+    }
+    #[test]
+    fn task_view_is_distinct_from_fullscreen_file_explorer_and_other_apps() {
+        for class in ["MultitaskingViewFrame","XamlExplorerHostIslandWindow"] {
+            assert!(task_view_surface("C:\\Windows\\explorer.exe","C:\\Windows",class));
+            assert!(!task_view_surface("C:\\Temp\\explorer.exe","C:\\Windows",class));
+            assert!(!task_view_surface("C:\\Games\\game.exe","C:\\Windows",class));
+        }
+        assert!(!task_view_surface("C:\\Windows\\explorer.exe","C:\\Windows","CabinetWClass"));
     }
     #[test]
     fn windows_or_alt_key_alone_never_requests_taskbar_restoration() {
