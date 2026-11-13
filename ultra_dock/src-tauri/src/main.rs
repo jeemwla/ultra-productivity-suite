@@ -2054,7 +2054,9 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
 
 
         let mut last_uia = Instant::now() - Duration::from_secs(10);
-        let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false);
+        let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false, false);
+        let shell_clock = Instant::now();
+        let mut shell_refresh = dock_surface::ShellRefresh::default();
         loop {
             std::thread::sleep(Duration::from_millis(80));
             let hwnd = HWND(strip as _);
@@ -2072,6 +2074,7 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             // "busy" state can't be used: a full-screen picture on ANY screen (a USB sensor LCD, a second
             // monitor) sets it, which once hid the dock for good while its folders were still holding apps.
             let fullscreen = foreground_covers_taskbar_monitor(tb);
+            let shell_surface = foreground_is_shell_surface(GetForegroundWindow());
             TB_VISIBLE.store(tb_visible, Ordering::Relaxed);
             if tb_visible && last_uia.elapsed() > Duration::from_millis(350) {
                 last_uia = Instant::now();
@@ -2134,8 +2137,11 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             STRIP_FITS.store(show, Ordering::Relaxed);
             STRIP_SHOWN.store(show, Ordering::Relaxed);
             let (x, y, w, h) = (position.x, position.y, position.width as u32, position.height as u32);
-            let state = (x, y, w, h, show);
-            if state == last { continue; }
+            // Start promotes Explorer's taskbar in z-order without changing its geometry.
+            // Reassert our non-activating button once on that transition, even at the same bounds.
+            let state = (x, y, w, h, show, shell_surface);
+            let refresh = shell_refresh.update(shell_surface,shell_clock.elapsed().as_millis() as u64);
+            if state == last && !refresh { continue; }
             last = state;
             if show {
                 // ASYNCWINDOWPOS: post the move to the window's own thread instead of waiting for it
@@ -2155,6 +2161,7 @@ unsafe fn foreground_covers_taskbar_monitor(tb: windows::Win32::Foundation::HWND
     use windows::Win32::UI::WindowsAndMessaging::*;
     let fg = GetForegroundWindow();
     if fg.is_invalid() || fg == tb { return false; }
+    if foreground_is_shell_surface(fg) { return false; }
     let mut pid = 0u32;
     GetWindowThreadProcessId(fg, Some(&mut pid));
     if pid == std::process::id() { return false; }
@@ -2170,6 +2177,27 @@ unsafe fn foreground_covers_taskbar_monitor(tb: windows::Win32::Foundation::HWND
     if GetWindowRect(fg, &mut r).is_err() { return false; }
     let m = mi.rcMonitor;
     r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom
+}
+#[cfg(windows)]
+unsafe fn foreground_is_shell_surface(hwnd: windows::Win32::Foundation::HWND) -> bool {
+    use windows::core::PWSTR;
+    use windows::Win32::{Foundation::CloseHandle, System::Threading::{OpenProcess,QueryFullProcessImageNameW,PROCESS_QUERY_LIMITED_INFORMATION,PROCESS_NAME_WIN32}, UI::WindowsAndMessaging::GetWindowThreadProcessId};
+    if hwnd.is_invalid() { return false; }
+    let mut pid = 0;
+    GetWindowThreadProcessId(hwnd,Some(&mut pid));
+    thread_local! { static LAST: std::cell::RefCell<Option<(isize,u32,bool)>> = const { std::cell::RefCell::new(None) }; }
+    if let Some(result) = LAST.with(|last| last.borrow().filter(|(h,p,_)| *h == hwnd.0 as isize && *p == pid).map(|(_,_,result)| result)) { return result; }
+    let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,false,pid) else {
+        LAST.with(|last| *last.borrow_mut() = Some((hwnd.0 as isize,pid,false)));
+        return false;
+    };
+    let mut buffer = [0u16;1024];
+    let mut size = buffer.len() as u32;
+    let success = QueryFullProcessImageNameW(process,PROCESS_NAME_WIN32,PWSTR(buffer.as_mut_ptr()),&mut size).is_ok();
+    let _ = CloseHandle(process);
+    let result = success && std::env::var("SystemRoot").is_ok_and(|root| dock_surface::shell_surface_path(&String::from_utf16_lossy(&buffer[..size as usize]),&root));
+    LAST.with(|last| *last.borrow_mut() = Some((hwnd.0 as isize,pid,result)));
+    result
 }
 
 #[cfg(windows)]

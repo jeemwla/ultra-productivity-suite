@@ -1,5 +1,21 @@
 //! Per-taskbar render acknowledgements and stable placement, without Windows calls.
 use std::collections::HashSet;
+#[derive(Default)]
+pub struct ShellRefresh { active: bool, until: u64 }
+impl ShellRefresh {
+    pub fn update(&mut self, shell: bool, now_ms: u64) -> bool {
+        if shell && !self.active { self.until = now_ms.saturating_add(600); }
+        self.active = shell;
+        shell && now_ms <= self.until
+    }
+}
+/// Only Windows' own Start/search/notification hosts qualify, never arbitrary full-screen apps.
+pub fn shell_surface_path(path: &str, windows: &str) -> bool {
+    let path = path.replace('/', "\\").to_ascii_lowercase();
+    let root = windows.replace('/', "\\").trim_end_matches('\\').to_ascii_lowercase();
+    path.starts_with(&(root + "\\systemapps\\")) && matches!(path.rsplit('\\').next(),
+        Some("startmenuexperiencehost.exe" | "searchhost.exe" | "shellexperiencehost.exe"))
+}
 pub fn switcher_requested(event_pending: bool, visible: bool, _modifier_down: bool) -> bool {
     // Start, screenshots and ordinary menu shortcuts are not app-switcher sessions.
     event_pending || visible
@@ -115,6 +131,25 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shell_z_order_refresh_is_bounded_and_restarts_on_next_start_open() {
+        let mut refresh = ShellRefresh::default();
+        assert!(!refresh.update(false,0));
+        assert!(refresh.update(true,10));
+        assert!(refresh.update(true,610));
+        assert!(!refresh.update(true,611));
+        assert!(!refresh.update(false,700));
+        assert!(refresh.update(true,800));
+        assert!(!refresh.update(true,1401));
+    }
+    #[test]
+    fn start_is_a_shell_surface_but_fullscreen_applications_are_not() {
+        assert!(shell_surface_path("C:\\Windows\\SystemApps\\StartPackage\\StartMenuExperienceHost.exe", "C:\\Windows"));
+        assert!(shell_surface_path("C:\\WINDOWS\\SystemApps\\CBS\\SearchHost.exe", "C:\\Windows"));
+        assert!(!shell_surface_path("C:\\Games\\game.exe", "C:\\Windows"));
+        assert!(!shell_surface_path("C:\\Temp\\StartMenuExperienceHost.exe", "C:\\Windows"));
+        assert!(!shell_surface_path("C:\\Windows\\SystemAppsFake\\StartMenuExperienceHost.exe", "C:\\Windows"));
+    }
     #[test]
     fn windows_or_alt_key_alone_never_requests_taskbar_restoration() {
         assert!(!switcher_requested(false,false,true));
