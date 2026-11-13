@@ -654,20 +654,34 @@ fn all_taskbars_covered() -> bool {
 }
 
 #[cfg(windows)]
-fn watchdog() {
+fn watchdog(app: tauri::AppHandle) {
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_NULL};
     let mut missed = 0u32;
     let mut was = true;
+    let started = Instant::now();
+    let heartbeat = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let queued = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     loop {
         std::thread::sleep(Duration::from_secs(2));
+        // A window-message failure is not proof that the application event loop is frozen.
+        // Keep one outstanding callback so a real stall cannot grow an unbounded queue.
+        if queued.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            let beat = heartbeat.clone();
+            let pending = queued.clone();
+            if app.run_on_main_thread(move || {
+                beat.store(started.elapsed().as_millis() as u64, Ordering::Release);
+                pending.store(false, Ordering::Release);
+            }).is_err() {
+                queued.store(false, Ordering::Release);
+            }
+        }
         let h = STRIP_HWND.load(Ordering::Relaxed);
         let answered = h == 0 || unsafe {
             let mut res = 0usize;
             SendMessageTimeoutW(HWND(h as _), WM_NULL, WPARAM(0), LPARAM(0), SMTO_ABORTIFHUNG, 1500, Some(&mut res)).0 != 0
         };
         missed = if answered { 0 } else { missed + 1 };
-        if missed >= 5 { restart_frozen_dock(); }
         let seen = UI_RENDERED.load(Ordering::Relaxed);
         let since = if seen == 0 { u64::MAX } else { uptime_secs().saturating_sub(seen - 1) };
         let ok = dock_safety::Visibility {
@@ -678,6 +692,11 @@ fn watchdog() {
             all_taskbars_covered: all_taskbars_covered(), rendered_age: since,
         }.may_hide();
         HEALTHY.store(ok, Ordering::Relaxed);
+        let heartbeat_age = (started.elapsed().as_millis() as u64).saturating_sub(heartbeat.load(Ordering::Acquire));
+        if missed == 1 || missed == 5 {
+            watchdog_diagnostic(missed, heartbeat_age);
+        }
+        if watchdog_should_restart(missed, heartbeat_age) { restart_frozen_dock(); }
         if ok != was { println!("[watchdog] dock {}", if ok { "healthy again: organizing" } else { "visibility checks failed: native taskbar mode" }); was = ok; }
     }
 }
@@ -779,9 +798,28 @@ fn wait_for_old_copy(args: &[String]) {
     }
 }
 
+fn watchdog_should_restart(missed_window_pings: u32, main_heartbeat_age_ms: u64) -> bool {
+    missed_window_pings >= 5 && main_heartbeat_age_ms >= 15_000
+}
+#[cfg(windows)]
+fn watchdog_diagnostic(missed: u32, heartbeat_age_ms: u64) {
+    use std::io::Write;
+    let path = appdata("dock_watchdog.log");
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > 65_536) { let _ = std::fs::write(&path, ""); }
+    if let Ok(mut log) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(log, "{} missed_strip_pings={} main_heartbeat_age_ms={}", now_secs(), missed, heartbeat_age_ms);
+    }
+}
 #[cfg(test)]
 mod watchdog_tests {
     use super::dock_healthy;
+    #[test]
+    fn an_answering_main_thread_cannot_be_restarted_by_a_strip_ping_failure() {
+        assert!(!super::watchdog_should_restart(50, 20));
+        assert!(!super::watchdog_should_restart(5, 4_999));
+        assert!(super::watchdog_should_restart(5, 15_000));
+        assert!(!super::watchdog_should_restart(0, 15_000));
+    }
     #[test]
     fn decides_when_buttons_must_come_back() {
         // (missed pings, strip shown, taskbar visible, seconds since the strip last refreshed)
@@ -2282,7 +2320,8 @@ fn main() {
                 spawn_guard();
                 std::thread::spawn(switcher_events);
                 std::thread::spawn(organizer_loop);
-                std::thread::spawn(watchdog);
+                let watchdog_app = handle.clone();
+                std::thread::spawn(move || watchdog(watchdog_app));
             }
             let workers = launch::BackgroundWorkers::for_profile(edition::current().expect("validated edition"));
             if workers.alarm_watch {
