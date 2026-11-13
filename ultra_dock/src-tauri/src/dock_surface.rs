@@ -1,6 +1,16 @@
 //! Per-taskbar render acknowledgements and stable placement, without Windows calls.
 use std::collections::HashSet;
 
+/// Physical-pixel popup bounds on the button's monitor, including negative monitor origins.
+pub fn menu_rect(anchor: (i32,i32), work: (i32,i32,i32,i32), wanted: (i32,i32), gap: i32) -> (i32,i32,i32,i32) {
+    let (left,top,right,bottom) = (i64::from(work.0),i64::from(work.1),i64::from(work.2),i64::from(work.3));
+    let w = i64::from(wanted.0).max(1).min((right-left).max(1));
+    let h = i64::from(wanted.1).max(1).min((bottom-top).max(1));
+    let x = (i64::from(anchor.0)-w).clamp(left,(right-w).max(left));
+    let y = (i64::from(anchor.1)-h-i64::from(gap.max(0))).clamp(top,(bottom-h).max(top));
+    (x as i32,y as i32,w as i32,h as i32)
+}
+
 /// Stabilizes recovery, while visibility failures always restore native buttons immediately.
 #[derive(Default)]
 pub struct HidingStability { ready_since: Option<u64> }
@@ -101,6 +111,19 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transient_menu_is_bounded_on_each_monitors_work_area() {
+        for left in [-3840,-1920,0,2560] {
+            for scale in [1.0,1.25,1.5,2.0] {
+                for (width,height) in [(1920,1032),(800,552),(280,240)] {
+                    let (x,y,w,h) = menu_rect((left+width-4,height),(left,0,left+width,height),
+                        ((320.0*scale) as i32,(440.0*scale) as i32),8);
+                    assert!(x>=left && y>=0 && x+w<=left+width && y+h<=height);
+                    assert!(w>0 && h>0);
+                }
+            }
+        }
+    }
     #[test]
     fn transient_health_and_overlay_changes_cannot_repeatedly_rehide_native_buttons() {
         let mut gate = HidingStability::default();

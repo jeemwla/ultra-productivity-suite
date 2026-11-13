@@ -684,15 +684,16 @@ fn watchdog(app: tauri::AppHandle) {
         missed = if answered { 0 } else { missed + 1 };
         let seen = UI_RENDERED.load(Ordering::Relaxed);
         let since = if seen == 0 { u64::MAX } else { uptime_secs().saturating_sub(seen - 1) };
+        let last_beat = heartbeat.load(Ordering::Acquire);
+        let heartbeat_age = (started.elapsed().as_millis() as u64).saturating_sub(last_beat);
         let ok = dock_safety::Visibility {
             enabled: ORGANIZE.load(Ordering::Relaxed), guard_ready: guard_running(),
-            main_responsive: missed < 2 && SWITCHER_EVENTS_READY.load(Ordering::Acquire),
+            main_responsive: watchdog_main_responsive(missed, (last_beat != 0).then_some(heartbeat_age)) && SWITCHER_EVENTS_READY.load(Ordering::Acquire),
             strip_visible: STRIP_SHOWN.load(Ordering::Relaxed) && strip_is_present(HWND(h as _)),
             strip_fits: STRIP_FITS.load(Ordering::Relaxed) && !RENDER_OVERFLOW.load(Ordering::Relaxed),
             all_taskbars_covered: all_taskbars_covered(), rendered_age: since,
         }.may_hide();
         HEALTHY.store(ok, Ordering::Relaxed);
-        let heartbeat_age = (started.elapsed().as_millis() as u64).saturating_sub(heartbeat.load(Ordering::Acquire));
         if missed == 1 || missed == 5 {
             watchdog_diagnostic(missed, heartbeat_age);
         }
@@ -801,6 +802,11 @@ fn wait_for_old_copy(args: &[String]) {
 fn watchdog_should_restart(missed_window_pings: u32, main_heartbeat_age_ms: u64) -> bool {
     missed_window_pings >= 5 && main_heartbeat_age_ms >= 15_000
 }
+fn watchdog_main_responsive(missed_window_pings: u32, heartbeat_age_ms: Option<u64>) -> bool {
+    // Either executed main-thread work or a successful window ping proves responsiveness.
+    // Geometry, visibility, guard and render freshness remain independent requirements.
+    missed_window_pings < 2 || heartbeat_age_ms.is_some_and(|age| age < 5_000)
+}
 #[cfg(windows)]
 fn watchdog_diagnostic(missed: u32, heartbeat_age_ms: u64) {
     use std::io::Write;
@@ -813,6 +819,19 @@ fn watchdog_diagnostic(missed: u32, heartbeat_age_ms: u64) {
 #[cfg(test)]
 mod watchdog_tests {
     use super::dock_healthy;
+    #[test]
+    fn fresh_executed_callbacks_prevent_false_main_thread_health_failures() {
+        assert!(super::watchdog_main_responsive(50, Some(4)));
+        assert!(!super::watchdog_main_responsive(5, Some(5_000)));
+        assert!(!super::watchdog_main_responsive(5, None));
+        assert!(super::watchdog_main_responsive(0, None));
+        let missing_strip = super::dock_safety::Visibility {
+            enabled: true, guard_ready: true, main_responsive: true,
+            strip_visible: false, strip_fits: true, all_taskbars_covered: true, rendered_age: 0,
+        };
+        assert!(!missing_strip.may_hide(), "fresh callback never overrides a missing replacement");
+        assert!(!super::dock_safety::Visibility { strip_visible: true, rendered_age: 5, ..missing_strip }.may_hide());
+    }
     #[test]
     fn an_answering_main_thread_cannot_be_restarted_by_a_strip_ping_failure() {
         assert!(!super::watchdog_should_restart(50, 20));
@@ -1340,35 +1359,57 @@ fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app, false); 
 #[tauri::command]
 async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || -> tauri::Result<()> {
-        use tauri::menu::{CheckMenuItem, ContextMenu, Menu, MenuItem, PredefinedMenuItem, Submenu};
+        static OPENING: Mutex<()> = Mutex::new(());
+        let Ok(_opening) = OPENING.lock() else { return Ok(()); };
         #[cfg(windows)]
         if let Ok(hwnd) = window.hwnd() {
             if unsafe { foreground_covers_taskbar_monitor(windows::Win32::Foundation::HWND(hwnd.0)) } { return Ok(()); }
         }
-        let menu = Menu::new(&app)?;
-        let organize = MenuItem::with_id(&app, "dockpopup_organize",
-            if ORGANIZE.load(Ordering::Acquire) { "Show all native buttons" } else { "Organize apps" }, true, None::<&str>)?;
-        menu.append(&organize)?;
-        let cap = Submenu::new(&app, "Apps shown individually", true)?;
-        let auto = CheckMenuItem::with_id(&app, "dockpopup_cap_auto", "Automatic", true, dock_cap().is_none(), None::<&str>)?;
-        cap.append(&auto)?;
-        for count in 0..=CAP_MAX {
-            let text = if count == 0 { "None (all in folders)".to_string() } else { format!("{count} apps") };
-            let item = CheckMenuItem::with_id(&app, format!("dockpopup_cap_{count}"), text, true,
-                dock_cap() == Some(count as usize), None::<&str>)?;
-            cap.append(&item)?;
+        if let Some(existing) = app.get_webview_window("dock-menu") { existing.close()?; return Ok(()); }
+        #[cfg(windows)]
+        let bounds = {
+            let hwnd = window.hwnd()?;
+            use windows::Win32::Foundation::RECT;
+            use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+            use windows::Win32::UI::{HiDpi::GetDpiForWindow, WindowsAndMessaging::GetWindowRect};
+            unsafe {
+                let h = windows::Win32::Foundation::HWND(hwnd.0);
+                let mut r = RECT::default();
+                let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+                if GetWindowRect(h, &mut r).is_ok() && GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mut mi).as_bool() {
+                    let scale = f64::from(GetDpiForWindow(h).max(96)) / 96.0;
+                    dock_surface::menu_rect((r.right,r.top),
+                        (mi.rcWork.left,mi.rcWork.top,mi.rcWork.right,mi.rcWork.bottom),
+                        ((320.0*scale).round() as i32,(440.0*scale).round() as i32), (8.0*scale).round() as i32)
+                } else {
+                    return Err(std::io::Error::other("Dock menu anchor is unavailable").into());
+                }
+            }
+        };
+        let popup = WebviewWindowBuilder::new(&app, "dock-menu", WebviewUrl::App("dock_menu.html".into()))
+            .title(format!("{} menu", app_label("dock"))).inner_size(320.0, 440.0)
+            .decorations(false).resizable(false).always_on_top(true).skip_taskbar(true)
+            .transparent(true).visible(false).build()?;
+        #[cfg(windows)]
+        {
+            let (x,y,w,h) = bounds;
+            let placed = popup.set_size(tauri::PhysicalSize::new(w as u32,h as u32))
+                .and_then(|_| popup.set_position(tauri::PhysicalPosition::new(x,y)));
+            if let Err(error) = placed { let _ = popup.close(); return Err(error); }
         }
-        menu.append(&cap)?;
-        menu.append(&PredefinedMenuItem::separator(&app)?)?;
-        for (id, label) in [("sentinel", app_label("sentinel")), ("alarm", app_label("alarm")),
-            ("edit", "Edit folders"), ("settings", "Dock settings"),
-            ("updates", "Updates"), ("quit", "Quit Ultra Suite")] {
-            let item = MenuItem::with_id(&app, format!("dockpopup_{id}"), label, true, None::<&str>)?;
-            menu.append(&item)?;
-        }
-        menu.popup(window.as_ref().window())?;
+        let closing = popup.clone();
+        let mut_focused = std::sync::Arc::new(AtomicBool::new(false));
+        popup.on_window_event(move |event| {
+            if matches!(event, WindowEvent::Focused(true)) { mut_focused.store(true,Ordering::Release); }
+            if matches!(event, WindowEvent::Focused(false)) && mut_focused.load(Ordering::Acquire) { let _ = closing.close(); }
+        });
+        if let Err(error) = popup.show().and_then(|_| popup.set_focus()) { let _ = popup.close(); return Err(error); }
         Ok(())
     }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn close_dock_menu(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("dock-menu") { let _ = window.close(); }
 }
 
 fn handle_dock_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
@@ -1426,7 +1467,10 @@ fn dock_settings_get() -> Value {
         else if !covered { Some("Waiting for the Dock on each connected screen to finish loading.") }
         else if !HEALTHY.load(Ordering::Relaxed) { Some("The Dock is reconnecting. Native buttons stay available until every screen is ready.") }
         else { None };
-    json!({ "config": config, "defaults": defaults, "apps": apps, "cap": dock_cap(), "cap_max": CAP_MAX,
+    let snapshot = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
+    let individual_apps = strip_plan(&snapshot, AVAIL_CSS.load(Ordering::Relaxed))["items"].as_array()
+        .map(|items| items.iter().filter(|item| item["folder"] == false).count()).unwrap_or(0);
+    json!({ "config": config, "defaults": defaults, "apps": apps, "cap": dock_cap(), "cap_max": CAP_MAX, "individual_apps": individual_apps,
             "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed), "organize": ORGANIZE.load(Ordering::Relaxed),
             "grouping": covered && HEALTHY.load(Ordering::Relaxed), "note": note, "path": org_path().display().to_string() })
 }
@@ -2350,7 +2394,7 @@ fn main() {
             Ok(())
         })
         .on_menu_event(handle_dock_menu)
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {

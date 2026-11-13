@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dock menu</title>
+<style>
+:root{color-scheme:dark light;--bg:#20232b;--card:#292d37;--ink:#f5f6fa;--muted:#adb4c3;--line:#ffffff12;--hover:#ffffff0d;--accent:#67d2fa;--accent-ink:#06232f}
+@media(prefers-color-scheme:light){:root{--bg:#f9fafc;--card:#edf0f5;--ink:#18202f;--muted:#5e6879;--line:#16243c18;--hover:#16243c09;--accent:#006cba;--accent-ink:#fff}}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}body{padding:8px;font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);user-select:none}button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;border-radius:8px}button:hover,summary:hover{background:var(--hover)}button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button:disabled{opacity:.35;cursor:default}button:disabled:hover{background:transparent}
+main{height:100%;overflow:auto;scrollbar-width:thin;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 6px 20px #0003}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}h1{font-size:15px;font-weight:650;margin:0}#close{width:28px;height:28px;font-size:21px;color:var(--muted)}.grouping{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:9px 3px}.switch{width:30px;height:18px;border:1px solid var(--muted);border-radius:20px;padding:2px}.switch:after{content:"";display:block;width:12px;height:12px;border-radius:50%;background:var(--muted)}[aria-checked=true] .switch{background:var(--accent);border-color:var(--accent)}[aria-checked=true] .switch:after{background:var(--accent-ink);transform:translateX(12px)}
+.counter{padding:12px;background:var(--card);border-radius:12px;margin:4px 0 10px}.counter-title{display:flex;align-items:center;justify-content:space-between;gap:6px;font-weight:600}#auto{font-size:11px;padding:4px 8px;color:var(--muted);border:1px solid var(--line);border-radius:20px}#auto[aria-pressed=true]{color:var(--accent);border-color:var(--accent)}.stepper{display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px}.stepper button{width:36px;height:36px;background:var(--bg);border:1px solid var(--line);font-size:24px;line-height:1}.stepper button:hover{border-color:var(--accent)}output{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}.hint{font-size:11px;color:var(--muted);text-align:center}.action{width:100%;padding:9px 8px;display:flex;align-items:center;gap:10px;text-align:left}.action .symbol{width:20px;text-align:center;font-size:17px;color:var(--muted)}.action .arrow{margin-left:auto;color:var(--muted)}.apps{display:flex;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:8px}.apps button{flex:1;padding:9px 4px;background:var(--card);font-size:12px}.apps button:hover{box-shadow:inset 0 0 0 1px var(--accent)}details{margin-top:8px;color:var(--muted);font-size:12px}summary{cursor:pointer;border-radius:8px;padding:6px 8px}details .action{font-size:12px}#status{font-size:11px;color:var(--muted);min-height:16px;margin-top:4px}#status.error{color:#ef8787}[hidden]{display:none!important}
+</style></head><body><main aria-label="Dock controls">
+<header><h1 id="title">Ultra Dock</h1><button id="close" aria-label="Close Dock menu">×</button></header>
+<button id="grouping" class="grouping" role="switch" aria-checked="true"><span>Group apps into folders</span><span class="switch" aria-hidden="true"></span></button>
+<section class="counter" aria-label="Apps outside folders"><div class="counter-title"><span>Apps outside folders</span><button id="auto" aria-pressed="false">Automatic</button></div>
+<div class="stepper"><button id="less" aria-label="Show fewer apps individually">−</button><output id="count" aria-live="polite">7</output><button id="more" aria-label="Show more apps individually">+</button></div><div class="hint" id="hint">Other apps stay in folders</div></section>
+<button class="action" data-action="settings"><span class="symbol" aria-hidden="true">⚙</span>Dock settings<span class="arrow" aria-hidden="true">›</span></button>
+<button class="action" data-action="edit"><span class="symbol" aria-hidden="true">▦</span>Edit folders<span class="arrow" aria-hidden="true">›</span></button>
+<div class="apps"><button data-action="sentinel">PC Sentinel</button><button data-action="alarm">Code Red Alarm</button></div>
+<details><summary>More</summary><button class="action" data-action="updates">Open Ultra Suite / updates</button><button class="action" data-action="quit">Quit Ultra Suite</button></details><div id="status" role="status" aria-live="polite"></div>
+</main><script>
+const invoke = window.__TAURI__?.core?.invoke;
+const $ = id => document.getElementById(id);
+let cap = null, shown = 0, maximum = 30, organize = true, busy = true;
+function render(){
+  const value = cap === null ? shown : cap;
+  $('count').textContent = value;
+  $('auto').setAttribute('aria-pressed',String(cap === null));
+  $('grouping').setAttribute('aria-checked',String(organize));
+  $('hint').textContent = cap === null ? 'Automatic layout · adjust to set a limit' : value === 0 ? 'All unpinned apps stay in folders' : `${value === 1 ? '1 app' : value+' apps'} outside folders`;
+  $('less').disabled = busy || value <= 0;
+  $('more').disabled = busy || value >= maximum;
+  $('auto').disabled = busy || cap === null;
+  $('grouping').disabled = busy;
+}
+async function saveCap(value){
+  if(busy) return;
+  const previous = cap; busy = true; cap = value; render();
+  $('status').textContent = ''; $('status').className = '';
+  try { if(invoke) await invoke('set_dock_cap',{cap:value}); }
+  catch(error){ cap = previous; $('status').textContent = 'Could not save. Try again.'; $('status').className = 'error'; }
+  finally { busy = false; render(); }
+}
+$('less').onclick = () => saveCap(Math.max(0,(cap === null ? shown : cap)-1));
+$('more').onclick = () => saveCap(Math.min(maximum,(cap === null ? shown : cap)+1));
+$('auto').onclick = () => saveCap(null);
+$('grouping').onclick = async () => {
+  if(busy) return; busy = true; const previous = organize; organize = !organize; render();
+  try { if(invoke) await invoke('set_organize',{on:organize}); }
+  catch { organize = previous; $('status').textContent = 'Could not save. Try again.'; $('status').className = 'error'; }
+  finally { busy = false; render(); }
+};
+const close = () => invoke && invoke('close_dock_menu');
+$('close').onclick = close;
+document.addEventListener('keydown',event => { if(event.key === 'Escape'){event.preventDefault();close();} });
+document.querySelectorAll('[data-action]').forEach(button => button.onclick = async () => {
+  if(!invoke) return;
+  const action = button.dataset.action;
+  try {
+    if(action === 'settings') await invoke('open_dock_settings');
+    if(action === 'edit') await invoke('open_dock_editor');
+    if(action === 'sentinel' || action === 'alarm') await invoke('open_app_view',{name:action});
+    if(action === 'updates') await invoke('open_app_view',{name:'hub'});
+    if(action === 'quit') { await invoke('quit'); return; }
+    await close();
+  } catch { $('status').textContent = 'Could not open. Try again.'; $('status').className = 'error'; }
+});
+async function load(){
+  try {
+    if(invoke){
+      const [settings,windows,edition] = await Promise.all([invoke('dock_settings_get'),invoke('get_windows'),invoke('edition_info')]);
+      cap = settings.cap; maximum = settings.cap_max || 30; organize = settings.organize;
+      shown = windows.layout?.items?.filter(item=>!item.folder).length || 0;
+      $('title').textContent = edition.edition === 'Dev' ? 'Ultra Dock (Dev)' : 'Ultra Dock';
+      if(edition.edition === 'Dev') document.querySelectorAll('.apps button').forEach(button=>button.title=button.textContent+' (Dev)');
+    }
+  } catch { $('status').textContent = 'Controls could not load. Reopen to try again.'; $('status').className = 'error'; return; }
+  busy = false; render(); $('less').focus();
+}
+render();load();
+if(invoke) setInterval(async()=>{
+  if(busy || cap !== null) return;
+  try {
+    const windows = await invoke('get_windows');
+    if(!busy && cap === null){ shown = windows.layout?.items?.filter(item=>!item.folder).length || 0; render(); }
+  } catch {}
+},700);
+</script></body></html>

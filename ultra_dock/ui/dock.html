@@ -42,6 +42,15 @@ main{max-width:980px;margin:0 auto;padding:24px 24px 48px}
 .row .txt span{display:block;color:var(--ink-3);font-size:12.5px}
 select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 select{min-width:170px}
+.cap-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cap-stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);overflow:hidden}
+.cap-stepper button{width:36px;height:36px;font-size:20px}
+.cap-stepper button:hover:not(:disabled){background:var(--hover,var(--panel-3))}
+.cap-stepper button:disabled{opacity:.35;cursor:default}
+.cap-stepper button:focus-visible{outline-offset:-3px}
+.cap-stepper output{min-width:72px;text-align:center;font-variant-numeric:tabular-nums;font-size:13px}
+.cap-auto{height:36px;padding:0 12px;border:1px solid var(--line);border-radius:10px}
+.cap-auto[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* Switch */
 .sw{position:relative;width:44px;height:24px;border-radius:99px;background:var(--panel-3);border:1px solid var(--line);flex:none;transition:background .15s}
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--ink-2);transition:transform .18s cubic-bezier(.2,.9,.25,1),background .15s}
@@ -114,8 +123,11 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
       <button class="sw" role="switch" id="organize" aria-checked="false" aria-label="Group apps into folders"></button>
     </div>
     <div class="row">
-      <label class="txt" for="cap"><b>Apps shown on their own</b><span>The first apps get their own button; the rest go into folders. Automatic groups apps by category.</span></label>
-      <select id="cap"></select>
+      <div class="txt"><b id="cap-label">Apps shown on their own</b><span id="cap-help">The first apps get their own button; the rest go into folders. Automatic groups apps by category.</span></div>
+      <div class="cap-controls" role="group" aria-labelledby="cap-label" aria-describedby="cap-help">
+        <div class="cap-stepper"><button type="button" id="cap-minus" aria-label="Fewer apps on their own">−</button><output id="cap-count" aria-live="polite" aria-atomic="true">Automatic</output><button type="button" id="cap-plus" aria-label="More apps on their own">+</button></div>
+        <button type="button" id="cap-auto" class="cap-auto" aria-pressed="true" disabled>Automatic</button>
+      </div>
     </div>
   </section>
 
@@ -210,7 +222,39 @@ function setKeep(cfg, entry, on){
   if (on) keep.push(entry);
   return { ...cfg, keep };
 }
+// Kept for existing helper consumers; the settings UI no longer renders an options list.
 function capOptions(max){ return [["auto", "Automatic"]].concat(Array.from({ length: max + 1 }, (_, n) => [String(n), n === 0 ? "None (all in folders)" : n === 1 ? "1 app" : `${n} apps`])); }
+// Cap actions run in click order; each step uses the last acknowledged value.
+let capQueue = Promise.resolve(), capPending = 0;
+const capMax = () => Math.min(30, Math.max(0, Number.isInteger(S.cap_max) ? S.cap_max : 30));
+function renderCap(){
+  const auto = S.cap === null, n = auto ? null : S.cap;
+  $("cap-count").textContent = auto ? "Automatic" : `${n} ${n === 1 ? "app" : "apps"}`;
+  $("cap-minus").disabled = !auto && n <= 0;
+  $("cap-plus").disabled = !auto && n >= capMax();
+  $("cap-auto").setAttribute("aria-pressed", String(auto));
+  $("cap-auto").disabled = auto;
+}
+function queueCap(action){
+  capPending++;
+  const run = capQueue.then(async () => {
+    const previous = S.cap, max = capMax();
+    const base = previous === null ? Math.max(0, Math.min(max, Number.isInteger(S.individual_apps) ? S.individual_apps : 0)) : previous;
+    const cap = action === "auto" ? null : Math.max(0, Math.min(max, base + action));
+    if (cap === previous) return;
+    S.cap = cap; renderCap();
+    if (!invoke) return;
+    try { await invoke("set_dock_cap", { cap }); status("Saved"); }
+    catch(e) {
+      S.cap = previous; renderCap();
+      status(`Could not save app count: ${String(e)}`, true);
+      await refresh(true, true);
+    }
+  }).finally(() => { capPending--; refreshSequence++; });
+  capQueue = run.catch(() => {});
+  return run;
+}
+
 
 /* ---------- saving ---------- */
 const autosave = DockEditor.saver({
@@ -294,9 +338,7 @@ function renderTop(){
   $("note").textContent = S.note || "The Dock is organizing your taskbar.";
   $("dock-on").setAttribute("aria-checked", String(on));
   $("organize").setAttribute("aria-checked", String(S.organize)); $("organize").disabled = !on;
-  const sel = $("cap");
-  if (!sel.options.length) sel.innerHTML = capOptions(S.cap_max || 30).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
-  if (document.activeElement !== sel) sel.value = typeof S.cap === "number" ? String(S.cap) : "auto";
+  renderCap();
   $("path").textContent = S.path || "";
 }
 function renderApps(){
@@ -344,14 +386,14 @@ function renderAll(){ renderTop(); renderApps(); renderCats(); renderKeep(); }
 
 /* ---------- loading ---------- */
 let refreshSequence = 0;
-async function refresh(keepConfig){
+async function refresh(keepConfig, readCap = false){
   if (!invoke) { renderAll(); return; }
   try {
     const sequence = ++refreshSequence, revision = autosave.revision;
     const d = await invoke("dock_settings_get");
     if (sequence !== refreshSequence || revision !== autosave.revision) return;
     const typing = document.activeElement && /INPUT|SELECT/.test(document.activeElement.tagName);
-    S = { ...S, ...d, config: keepConfig || dirty ? S.config : d.config };
+    S = { ...S, ...d, cap: typeof capPending !== "undefined" && capPending && !readCap ? S.cap : d.cap, config: keepConfig || dirty ? S.config : d.config };
     renderTop();
     if (!typing && !editing && !dragging) { renderApps(); renderCats(); renderKeep(); }
   } catch { $("note").textContent = "Could not read the Dock settings. Open this window from Ultra Suite."; }
@@ -360,7 +402,9 @@ async function refresh(keepConfig){
 /* ---------- events ---------- */
 $("dock-on").onclick = async () => { if (!invoke) return; const on = !S.dock_on; S.dock_on = on; renderTop(); try { await invoke("hub_set_dock", { on }); } catch {} refresh(true); };
 $("organize").onclick = async () => { if (!invoke || !S.dock_on) return; S.organize = !S.organize; renderTop(); try { await invoke("set_organize", { on: S.organize }); } catch {} refresh(true); };
-$("cap").onchange = async () => { const v = $("cap").value, cap = v === "auto" ? null : Number(v); S.cap = cap; if (invoke) { try { await invoke("set_dock_cap", { cap }); status("Saved"); } catch(e) { status(`Could not save app count: ${String(e)}`,true); await refresh(true); } } };
+$("cap-minus").onclick = () => queueCap(-1);
+$("cap-plus").onclick = () => queueCap(1);
+$("cap-auto").onclick = () => queueCap("auto");
 $("find").oninput = renderApps;
 $("refresh").onclick = () => refresh();
 $("apps").addEventListener("change", e => { const sel = e.target.closest('[data-act="cat"]'); if (!sel) return; const file = sel.closest(".app").dataset.file; change(setAppCategory(S.config, file, sel.value)); renderApps(); renderCats(); });
