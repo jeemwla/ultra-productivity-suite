@@ -37,6 +37,8 @@ const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
 static SURFACES: Mutex<Vec<dock_surface::Surface>> = Mutex::new(Vec::new());
 static SWITCHER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static SWITCHER_VISIBLE: AtomicBool = AtomicBool::new(false);
+// Latched independently of visibility so a complete short switcher session is never lost between samples.
+static SWITCHER_RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
 static SWITCHER_EVENTS_READY: AtomicBool = AtomicBool::new(false);
 static STRIP_W: AtomicU32 = AtomicU32::new(60);
 static STRIP_FITS: AtomicBool = AtomicBool::new(false);
@@ -465,7 +467,8 @@ fn organizer_loop() {
         for _ in 0..35 {
             std::thread::sleep(Duration::from_millis(20));
             use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_MENU, VK_LWIN, VK_RWIN};
-            let switching = SWITCHER_VISIBLE.load(Ordering::Acquire)
+            let event_pending = SWITCHER_RESTORE_REQUESTED.swap(false, Ordering::AcqRel);
+            let switching = event_pending || SWITCHER_VISIBLE.load(Ordering::Acquire)
                 || unsafe { [VK_MENU, VK_LWIN, VK_RWIN].iter().any(|k| GetAsyncKeyState(k.0 as i32) < 0) };
             let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
@@ -477,7 +480,7 @@ fn organizer_loop() {
                 }
                 continue;
             }
-            if SWITCHER_ACTIVE.load(Ordering::Acquire) || !grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire)) { continue; }
+            if SWITCHER_ACTIVE.load(Ordering::Acquire) || SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire) || SWITCHER_VISIBLE.load(Ordering::Acquire) || !grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire)) { continue; }
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 recovery::hide_window(h, true, &tbl);
@@ -512,7 +515,9 @@ fn organizer_loop() {
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
             // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
-            let hidden = on && ORGANIZE.load(Ordering::Relaxed) && !RESTORATION_PENDING.load(Ordering::Acquire)
+            let hidden = on && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+                && !SWITCHER_VISIBLE.load(Ordering::Acquire) && !SWITCHER_ACTIVE.load(Ordering::Acquire)
+                && ORGANIZE.load(Ordering::Relaxed) && !RESTORATION_PENDING.load(Ordering::Acquire)
                 && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
             if hidden { hidden_now.insert(*h); }
             else if on { recovery::restore_window(*h, &tbl); }
@@ -1795,7 +1800,10 @@ fn switcher_events() {
     use windows::Win32::{Foundation::HWND, UI::{Accessibility::*, WindowsAndMessaging::*}};
     unsafe extern "system" fn changed(_: HWINEVENTHOOK, event: u32, _: HWND, _: i32, _: i32, _: u32, _: u32) {
         SWITCHER_VISIBLE.store(event == EVENT_SYSTEM_SWITCHSTART, Ordering::Release);
-        if event == EVENT_SYSTEM_SWITCHSTART { SWITCHER_ACTIVE.store(true, Ordering::Release); }
+        if event == EVENT_SYSTEM_SWITCHSTART {
+            SWITCHER_RESTORE_REQUESTED.store(true, Ordering::Release);
+            SWITCHER_ACTIVE.store(true, Ordering::Release);
+        }
     }
     unsafe {
         let hook = SetWinEventHook(EVENT_SYSTEM_SWITCHSTART, EVENT_SYSTEM_SWITCHEND, None, Some(changed), 0, 0, WINEVENT_OUTOFCONTEXT);
@@ -1819,8 +1827,10 @@ fn taskbar_tracker(app: AppHandle) {
     loop {
         let bars = native_taskbars();
         let mut removed = if let Ok(mut surfaces) = SURFACES.lock() {
-            let gone: Vec<_> = surfaces.iter().filter(|s| !bars.contains(&s.taskbar)).map(|s| s.label.clone()).collect();
-            surfaces.retain(|s| bars.contains(&s.taskbar));
+            let alive = |s: &dock_surface::Surface| bars.contains(&s.taskbar)
+                && unsafe { IsWindow(Some(HWND(s.hwnd as _))).as_bool() };
+            let gone: Vec<_> = surfaces.iter().filter(|s| !alive(s)).map(|s| s.label.clone()).collect();
+            surfaces.retain(alive);
             gone
         } else { vec![] };
         let gone: Vec<_> = pending.keys().filter(|tb| !bars.contains(tb)).copied().collect();
