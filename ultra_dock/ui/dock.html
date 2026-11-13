@@ -87,6 +87,14 @@ select{min-width:170px}
 code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--ink-2);word-break:break-all}
 @media (max-width:640px){main{padding:16px}.hero{flex-wrap:wrap}.hero .grow{flex:1 1 calc(100% - 64px)}.row{flex-wrap:wrap}.cat{grid-template-columns:1fr auto}.cat .moves{flex-direction:row;grid-column:1/-1}select{min-width:0;width:100%}}
 @media (prefers-reduced-motion:reduce){.sw,.sw::after,.status{transition:none}}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin:14px 0}
+.tile{padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--panel-2);min-width:0}
+.tile button{overflow-wrap:anywhere;max-width:100%}.tile img,.tile .ph{width:32px;height:32px;display:inline-block;background:var(--panel-3);border-radius:8px}
+.tile [aria-pressed=true]{outline:2px solid var(--accent)}
+.tile.preview{outline:3px solid var(--accent);background:var(--panel-3)}
+.tile .members{display:flex;flex-wrap:wrap;gap:8px}.tile .member{display:grid;gap:6px;justify-items:center}
+.tile .remove{font-size:12px;color:var(--accent)}
+#editor-help,#editor-message{margin:8px 0;color:var(--ink-2)}
 </style>
 </head>
 <body>
@@ -116,6 +124,13 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
     <p class="lead">Choose each app's folder, or keep it as a normal taskbar button. Apps you pinned in Windows always stay as they are.</p>
     <div class="toolbar"><input type="text" id="find" placeholder="Find an app" aria-label="Find an app" />
       <button class="btn small" id="refresh">Refresh</button></div>
+    <div class="toolbar"><button class="btn" id="edit-mode" aria-pressed="false">Edit</button></div>
+    <p id="editor-help">Edit the app grid to create folders. Category controls remain below.</p>
+    <div id="edit-tools" class="toolbar" hidden><label for="folder-name">Folder name</label><input id="folder-name" type="text" maxlength="120" value="New folder">
+      <button class="btn" id="group-apps" disabled>Group selected</button></div>
+    <button class="btn small" id="retry-save">Save again</button>
+    <p id="editor-message" role="status" aria-live="polite"></p>
+    <div id="app-board" class="board" aria-label="Editable app grid"></div>
     <div id="apps"></div>
   </section>
 
@@ -146,6 +161,7 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
   </section>
 </main>
 <div class="status" id="status" role="status" aria-live="polite"></div>
+<script src="dock_editor.js"></script>
 <script>
 const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
 const $ = (id) => document.getElementById(id);
@@ -160,7 +176,7 @@ let S = { config: { keep: [], order: [], categories: {}, overrides: {} }, apps: 
 let saveTimer = 0, saving = false, dirty = false;
 const icons = new Map();
 
-function status(text, err){ const s = $("status"); s.textContent = text; s.className = "status show" + (err ? " err" : ""); clearTimeout(status.t); status.t = setTimeout(() => s.className = "status", err ? 5000 : 1600); }
+function status(text, err){ const s = $("status"); s.textContent = text; s.className = "status show" + (err ? " err" : ""); clearTimeout(status.t); if(err) return; status.t = setTimeout(() => s.className = "status", err ? 5000 : 1600); }
 
 /* ---------- pure helpers (tested in tests/dock_settings.test.cjs) ---------- */
 function categoryNames(cfg){ const names = Object.keys(cfg.categories || {}); const order = (cfg.order || []).filter(o => o === OTHER || names.includes(o)); for (const n of names) if (!order.includes(n)) order.push(n); if (!order.includes(OTHER)) order.push(OTHER); return order; }
@@ -197,15 +213,72 @@ function setKeep(cfg, entry, on){
 function capOptions(max){ return [["auto", "Automatic"]].concat(Array.from({ length: max + 1 }, (_, n) => [String(n), n === 0 ? "None (all in folders)" : n === 1 ? "1 app" : `${n} apps`])); }
 
 /* ---------- saving ---------- */
-function change(next){ S.config = next; dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(save, 450); }
-async function save(){
-  if (!invoke) { dirty = false; status("Preview only: nothing was saved"); return; }
-  if (saving) { saveTimer = setTimeout(save, 300); return; }
-  saving = true;
-  try { S.config = await invoke("dock_settings_save", { config: S.config }); dirty = false; status("Saved"); await refresh(true); }
-  catch (e) { status(String(e || "Could not save"), true); }
-  finally { saving = false; }
+const autosave = DockEditor.saver({
+  read: () => S.config, write: cfg => { S.config = cfg; renderApps(); renderCats(); renderKeep(); },
+  send: config => invoke ? invoke("dock_settings_save", { config }) : Promise.reject("Preview only: nothing was saved"),
+  state: (pending, active) => { dirty = pending; saving = active; },
+  report: (message, error) => { status(message,error); $("editor-message").textContent = error ? `Save failed: ${message}. Your edits remain here. Use Save again to retry.` : message; }
+});
+function change(next){ S.config = next; autosave.changed(); clearTimeout(saveTimer); saveTimer = setTimeout(save, 450); }
+function save(){ clearTimeout(saveTimer); return autosave.flush(); }
+
+let editing = false, dragging = null, preview = null;
+const selectedApps = new Set();
+const hover = DockEditor.dwell(tile => { preview=tile; tile.classList.add("preview"); $("editor-message").textContent="Release to group these apps."; }, () => { if(preview) preview.classList.remove("preview"); preview=null; });
+function renderBoard(){
+  hover.reset();
+  const available = new Set(S.apps.map(a=>a.file));
+  for(const file of selectedApps) if(!available.has(file)) selectedApps.delete(file);
+  const q = $("find").value.trim().toLowerCase();
+  $("group-apps").disabled = selectedApps.size<2;
+  $("app-board").innerHTML = DockEditor.board(S.config,S.apps).filter(item=>!q || item.apps.some(a=>a.name.toLowerCase().includes(q)||a.file.toLowerCase().includes(q))).map(item => {
+    const members = item.apps.map(a=> {
+      const u=iconFor(a);
+      return `<div class="member"><button type="button" data-file="${esc(a.file)}" draggable="${editing&&!a.pinned}" aria-pressed="${selectedApps.has(a.file)}" aria-label="Select ${esc(a.name)}" ${!editing||a.pinned?'disabled':''}>${u?`<img src="${esc(u)}" alt="" data-icon="${esc(a.exe)}">`:`<span class="ph" data-icon="${esc(a.exe)}"></span>`}<br>${esc(a.name)}</button>${editing&&item.folder&&!a.pinned?`<button class="remove" data-out="${esc(a.file)}">Move ${esc(a.name)} out</button>`:''}</div>`;
+    }).join('');
+    return `<div class="tile" ${item.folder?`data-folder="${esc(item.category)}"`:''}>${item.folder?`<p>${esc(item.category)} (${item.apps.length})</p>`:''}<div class="members">${members}</div></div>`;
+  }).join('');
 }
+function applyGroup(files, name, existing){
+  try { change(DockEditor.group(S.config,S.apps,files,name,existing)); selectedApps.clear(); renderApps(); renderCats(); renderKeep(); $("editor-message").textContent=`Grouped in ${name}.`; }
+  catch(error){ $("editor-message").textContent=error.message; status(error.message,true); }
+}
+$("edit-mode").onclick = () => {
+  editing=!editing; dragging=null; selectedApps.clear(); hover.reset();
+  $("edit-mode").textContent=editing?'Done':'Edit'; $("edit-mode").setAttribute('aria-pressed',String(editing));
+  $("edit-tools").hidden=!editing;
+  $("editor-help").textContent=editing?'Drag an app over another app or folder, wait for the highlight, then release. Or select apps and choose Group selected. Move out keeps an app on its own.':'Edit the app grid to create folders. Category controls remain below.';
+  renderBoard(); if(!editing) save();
+};
+$("group-apps").onclick=()=>applyGroup([...selectedApps],$("folder-name").value,false);
+$("retry-save").onclick=save;
+$("app-board").addEventListener('click',e=>{
+  if(!editing)return;
+  const out=e.target.closest('[data-out]');
+  if(out){ const app=S.apps.find(a=>a.file===out.dataset.out); change(DockEditor.moveOut(S.config,app)); renderApps(); renderKeep(); return; }
+  const b=e.target.closest('button[data-file]'); if(!b||b.disabled)return;
+  if(selectedApps.has(b.dataset.file))selectedApps.delete(b.dataset.file);else selectedApps.add(b.dataset.file);
+  b.setAttribute('aria-pressed',String(selectedApps.has(b.dataset.file))); $("group-apps").disabled=selectedApps.size<2;
+});
+$("app-board").addEventListener('dragstart',e=>{
+  const b=e.target.closest('button[data-file]'); if(!editing||!b||b.disabled){e.preventDefault();return;}
+  dragging=b.dataset.file; e.dataTransfer.setData('text/plain',dragging); e.dataTransfer.effectAllowed='move';
+});
+$("app-board").addEventListener('dragover',e=>{
+  const tile=e.target.closest('.tile');
+  if(!editing||!dragging||!tile||tile.querySelector(`[data-file="${CSS.escape(dragging)}"]`)){hover.reset();return;}
+  e.preventDefault(); e.dataTransfer.dropEffect='move'; hover.enter(tile);
+});
+$("app-board").addEventListener('dragleave',e=>{if(!e.currentTarget.contains(e.relatedTarget))hover.reset();});
+$("app-board").addEventListener('drop',e=>{
+  e.preventDefault(); const tile=e.target.closest('.tile');
+  if(editing&&dragging&&tile&&tile===preview){
+    const files=[dragging,...[...tile.querySelectorAll('[data-file]')].map(b=>b.dataset.file)];
+    applyGroup(files,tile.dataset.folder||$("folder-name").value,!!tile.dataset.folder);
+  }
+  dragging=null; hover.reset();
+});
+$("app-board").addEventListener('dragend',()=>{dragging=null;hover.reset();});
 
 /* ---------- rendering ---------- */
 function iconFor(app){
@@ -227,6 +300,7 @@ function renderTop(){
   $("path").textContent = S.path || "";
 }
 function renderApps(){
+  renderBoard();
   const q = $("find").value.trim().toLowerCase(), names = categoryNames(S.config);
   const list = S.apps.filter(a => !q || a.name.toLowerCase().includes(q) || a.file.includes(q));
   if (!S.apps.length) { $("apps").innerHTML = `<p class="muted">No open apps found${invoke ? "" : " (preview)"}.</p>`; return; }
@@ -269,21 +343,24 @@ function renderKeep(){
 function renderAll(){ renderTop(); renderApps(); renderCats(); renderKeep(); }
 
 /* ---------- loading ---------- */
+let refreshSequence = 0;
 async function refresh(keepConfig){
   if (!invoke) { renderAll(); return; }
   try {
+    const sequence = ++refreshSequence, revision = autosave.revision;
     const d = await invoke("dock_settings_get");
+    if (sequence !== refreshSequence || revision !== autosave.revision) return;
     const typing = document.activeElement && /INPUT|SELECT/.test(document.activeElement.tagName);
     S = { ...S, ...d, config: keepConfig || dirty ? S.config : d.config };
     renderTop();
-    if (!typing) { renderApps(); renderCats(); renderKeep(); }
+    if (!typing && !editing && !dragging) { renderApps(); renderCats(); renderKeep(); }
   } catch { $("note").textContent = "Could not read the Dock settings. Open this window from Ultra Suite."; }
 }
 
 /* ---------- events ---------- */
 $("dock-on").onclick = async () => { if (!invoke) return; const on = !S.dock_on; S.dock_on = on; renderTop(); try { await invoke("hub_set_dock", { on }); } catch {} refresh(true); };
 $("organize").onclick = async () => { if (!invoke || !S.dock_on) return; S.organize = !S.organize; renderTop(); try { await invoke("set_organize", { on: S.organize }); } catch {} refresh(true); };
-$("cap").onchange = async () => { const v = $("cap").value, cap = v === "auto" ? null : Number(v); S.cap = cap; if (invoke) { try { await invoke("set_dock_cap", { cap }); status("Saved"); } catch {} } };
+$("cap").onchange = async () => { const v = $("cap").value, cap = v === "auto" ? null : Number(v); S.cap = cap; if (invoke) { try { await invoke("set_dock_cap", { cap }); status("Saved"); } catch(e) { status(`Could not save app count: ${String(e)}`,true); await refresh(true); } } };
 $("find").oninput = renderApps;
 $("refresh").onclick = () => refresh();
 $("apps").addEventListener("change", e => { const sel = e.target.closest('[data-act="cat"]'); if (!sel) return; const file = sel.closest(".app").dataset.file; change(setAppCategory(S.config, file, sel.value)); renderApps(); renderCats(); });
@@ -317,7 +394,14 @@ function resetAsk(){
   $("reset-box").innerHTML = `<span class="muted" style="font-size:13px">Reset categories, order and keep list?</span><button class="btn danger" id="reset-yes">Reset</button><button class="btn" id="reset-no">Cancel</button>`;
   $("reset-no").onclick = resetIdle;
   $("reset-yes").onclick = async () => {
-    if (invoke) { try { S.config = await invoke("dock_settings_reset"); dirty = false; status("Back to the defaults"); await refresh(true); renderAll(); } catch (e) { status(String(e), true); } }
+    if (invoke) { document.querySelector("main").inert=true; try {
+      await save();
+      if (dirty) throw Error("Save pending edits before resetting.");
+      const revision=autosave.revision;
+      const defaults=await invoke("dock_settings_reset");
+      if(revision===autosave.revision){ S.config=defaults; status("Back to the defaults"); renderAll(); }
+      else { autosave.changed(); await save(); }
+    } catch (e) { status(String(e), true); } finally { document.querySelector("main").inert=false; } }
     resetIdle();
   };
   $("reset-yes").focus();
@@ -335,7 +419,11 @@ async function loadEdition(){
     $("title").textContent = `${name} settings`; document.title = `${name} settings`;
   } catch {}
 }
-loadEdition(); renderAll(); refresh(); setInterval(() => { if (!dirty && !saving) refresh(); }, 5000);
+function enterEditor(){ if(!editing) $("edit-mode").click(); $("app-board").scrollIntoView({block:"center"}); }
+window.addEventListener("dock-edit",enterEditor);
+loadEdition(); renderAll(); refresh();
+if(new URLSearchParams(location.search).get("edit")==="1") enterEditor();
+setInterval(() => { if (!dirty && !saving) refresh(); }, 5000);
 </script>
 </body>
 </html>

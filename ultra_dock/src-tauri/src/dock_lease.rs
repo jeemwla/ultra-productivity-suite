@@ -14,6 +14,16 @@ pub const STRIP_TITLES: [&str; 2] = ["Ultra Dock", "Ultra Dock (Dev)"];
 /// v1 declares the shared lease and checked cross-edition journal protocol, including release-pending visibility.
 const CAPABILITY_VERSION: usize = 1;
 
+
+#[derive(Debug, PartialEq)]
+enum HookRegistration { Install, Reuse, Reject }
+fn hook_registration(current: isize, hook: isize, previous: isize) -> HookRegistration {
+    if current == 0 || hook == 0 { HookRegistration::Reject }
+    else if current == hook && previous != 0 { HookRegistration::Reuse }
+    else if current != hook && previous == 0 { HookRegistration::Install }
+    else { HookRegistration::Reject }
+}
+
 /// Missing, inaccessible and future/unknown markers are all unproven capability.
 fn strip_blocks(visible: bool, capability: Option<usize>) -> bool {
     visible || capability != Some(CAPABILITY_VERSION)
@@ -127,37 +137,38 @@ mod win {
     use windows::Win32::UI::WindowsAndMessaging::*;
 
     const CAPABILITY_PROPERTY: PCWSTR = w!("UltraSuite.Dock.LeaseCapability.v1");
-    static PREVIOUS_STRIP_PROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
-    static REGISTERED: AtomicBool = AtomicBool::new(false);
+    // A separate chain target per HWND: the primary can be registered repeatedly and each monitor can own a hook.
+    const PREVIOUS_PROPERTY: PCWSTR = w!("UltraSuite.Dock.PreviousProc.v1");
 
     unsafe extern "system" fn strip_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
-        // SetProp's contract requires removal before returning from WM_NCDESTROY.
+        let previous = GetPropW(h, PREVIOUS_PROPERTY).0 as isize;
         if msg == WM_NCDESTROY {
-            REGISTERED.store(false, Ordering::Release);
             let _ = RemovePropW(h, CAPABILITY_PROPERTY);
+            let _ = RemovePropW(h, PREVIOUS_PROPERTY);
         }
-        let previous = PREVIOUS_STRIP_PROC.load(Ordering::Relaxed);
+        if previous == 0 { return DefWindowProcW(h, msg, wp, lp); }
         CallWindowProcW(Some(std::mem::transmute::<isize, unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT>(previous)), h, msg, wp, lp)
     }
 
-    /// Called on the strip's owning UI thread, before the organizer starts. Never publishes on failure.
+    /// Runs on the owning UI thread. A second registration reuses the existing chain rather than disabling it.
     pub fn register_strip(h: HWND) -> bool {
-        REGISTERED.store(false, Ordering::Release);
-        if PREVIOUS_STRIP_PROC.load(Ordering::Relaxed) != 0 { return false; }
         let mut pid = 0;
         unsafe {
             if GetWindowThreadProcessId(h, Some(&mut pid)) == 0 || pid != std::process::id() { return false; }
-            // Save a valid chain target before installing the hook, including for any reentrant messages.
-            let original = GetWindowLongPtrW(h, GWLP_WNDPROC);
-            if original == 0 { return false; }
-            PREVIOUS_STRIP_PROC.store(original, Ordering::Relaxed);
-            let previous = SetWindowLongPtrW(h, GWLP_WNDPROC, strip_proc as *const () as isize);
-            if previous == 0 { PREVIOUS_STRIP_PROC.store(0, Ordering::Relaxed); return false; }
-            PREVIOUS_STRIP_PROC.store(previous, Ordering::Relaxed);
+            let current = GetWindowLongPtrW(h, GWLP_WNDPROC);
+            let original = GetPropW(h, PREVIOUS_PROPERTY).0 as isize;
+            match hook_registration(current, strip_proc as *const () as isize, original) {
+                HookRegistration::Reject => return false,
+                HookRegistration::Reuse => {},
+                HookRegistration::Install => {
+                    // Publish the chain target before installing the callback, including reentrant messages.
+                    if SetPropW(h, PREVIOUS_PROPERTY, Some(HANDLE(current as *mut _))).is_err() { return false; }
+                    let previous = SetWindowLongPtrW(h, GWLP_WNDPROC, strip_proc as *const () as isize);
+                    if previous == 0 { let _ = RemovePropW(h, PREVIOUS_PROPERTY); return false; }
+                }
+            }
             if SetPropW(h, CAPABILITY_PROPERTY, Some(HANDLE(CAPABILITY_VERSION as *mut _))).is_err() { return false; }
-            let registered = GetPropW(h, CAPABILITY_PROPERTY).0 as usize == CAPABILITY_VERSION;
-            REGISTERED.store(registered, Ordering::Release);
-            registered
+            GetPropW(h, CAPABILITY_PROPERTY).0 as usize == CAPABILITY_VERSION
         }
     }
 
@@ -224,8 +235,9 @@ mod win {
             true.into()
         }
         let own = HWND(own_strip as _);
-        let registered = REGISTERED.load(Ordering::Acquire) && own_strip != 0
-            && unsafe { IsWindow(Some(own)).as_bool() && GetPropW(own, CAPABILITY_PROPERTY).0 as usize == CAPABILITY_VERSION };
+        let registered = own_strip != 0
+            && unsafe { IsWindow(Some(own)).as_bool() && GetPropW(own, PREVIOUS_PROPERTY).0 as isize != 0
+                && GetPropW(own, CAPABILITY_PROPERTY).0 as usize == CAPABILITY_VERSION };
         let mut scan = Scan { strips: vec![], count: 0, complete: true };
         let complete = unsafe { EnumWindows(Some(inspect), LPARAM(&mut scan as *mut Scan as isize)).is_ok() } && scan.complete;
         compatibility_blocks(registered, complete, &scan.strips)
@@ -240,6 +252,17 @@ pub fn publish(held_now: bool, want: bool) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn registering_primary_again_and_secondary_windows_keeps_each_chain_target() {
+        use super::{hook_registration, HookRegistration::*};
+        assert_eq!(hook_registration(10, 99, 0), Install);
+        assert_eq!(hook_registration(99, 99, 10), Reuse);
+        assert_eq!(hook_registration(20, 99, 0), Install, "second monitor has its own original procedure");
+        assert_eq!(hook_registration(99, 99, 20), Reuse);
+        assert_eq!(hook_registration(99, 99, 0), Reject, "an unproven chain cannot be published");
+        assert_eq!(hook_registration(0, 99, 0), Reject);
+    }
+
     use super::*;
 
     #[test]

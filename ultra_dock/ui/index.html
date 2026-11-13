@@ -20,8 +20,9 @@ body{font:12px/1 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased
 button{font:inherit;color:inherit;border:0;background:none;cursor:default;outline:none}
 button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 
-.strip{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.strip{position:absolute;left:0;bottom:0;height:48px;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .strip::-webkit-scrollbar{display:none}
+.strip > .group[data-cat="__menu"]{position:sticky;right:0;z-index:3;background:#24262df5;border-radius:6px}
 /* Small screens: the strip never grows past the taskbar's free space (max-width is set from the measured room).
    An open folder or menu that needs more room hides the other folders until it closes, and scrolls with the wheel. */
 .strip.focus > .group:not(.keep){display:none}
@@ -111,10 +112,19 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
 .sv button{height:40px;padding:0 18px;border-radius:10px;font-weight:600;cursor:pointer;border:1px solid rgba(127,127,127,.35)}
 .sv button.primary{background:#2a78d6;border-color:#2a78d6;color:#fff}
 .sv small{display:block;opacity:.55;margin-top:12px}
+
+.dock-menu{--ink:#fff;--ink-2:#dedfe5;--ink-3:#a5a8b2;--hover:#ffffff15;--line:#ffffff30;position:absolute;width:520px;left:0;bottom:56px;max-width:none;padding:10px;display:grid;grid-template-columns:repeat(3,minmax(max-content,1fr));gap:6px;background:#24262d;color:#fff;border:1px solid #6b6f7d;border-radius:12px;box-shadow:0 4px 14px #0005}
+.dock-menu[hidden]{display:none}
+.dock-menu .act{min-width:max-content;height:36px;padding:0 12px;text-align:left;white-space:nowrap;flex:none}
+.dock-menu .capctl{grid-column:1 / -1;justify-content:center}
+.dock-menu .menu-note{grid-column:1 / -1;white-space:normal;font-size:12px;line-height:1.4;color:#ddd;max-width:460px;padding:4px}
+@media(max-width:360px){.dock-menu{grid-template-columns:repeat(2,minmax(max-content,1fr));padding:6px;gap:2px}}
+body.shelf .strip{--ink:#fff;--ink-2:#dedfe5;--ink-3:#a5a8b2;background:#24262ded;border:1px solid #6b6f7d;border-radius:10px;color:#fff;padding:0 4px}
 </style>
 </head>
 <body>
 <div class="strip" id="strip"></div>
+<div id="dock-menu" class="dock-menu" hidden role="menu" aria-label="Dock menu"></div>
 <div class="sv" id="survey" hidden>
   <h1>Sorry to see you go</h1>
   <p>Before Ultra Suite is removed, would you tell us why? It takes five seconds and helps make it better for everyone.</p>
@@ -204,6 +214,7 @@ function applyFocus(){
   s.classList.remove("focus"); s.querySelectorAll(".group.keep").forEach(g => g.classList.remove("keep"));
   s.classList.toggle("tight", room() < 360);
   s.style.maxWidth = isFinite(room()) ? room() + "px" : "";
+  if (open === "__menu") return;
   const target = open ? [...s.children].find(g => g.dataset.cat === open) : pick ? s.querySelector('.win[aria-expanded="true"]')?.closest(".group") : null;
   if (!target) return;
   const tray = open && target.querySelector(".tray"), inner = tray && tray.querySelector(".inner");
@@ -230,8 +241,9 @@ function nextCap(c, dir, shown){
   return Math.max(0, Math.min(CAP_MAX, c + dir));
 }
 async function setCap(c){
+  const previous = state.cap;
   state.cap = c;
-  if (invoke) { try { await invoke("set_dock_cap", { cap: c }); } catch {} }
+  if (invoke) { try { await invoke("set_dock_cap", { cap: c }); } catch (e) { state.cap = previous; state.fallback_reason = `Could not save app count: ${String(e)}`; } }
   sig = ""; render();
 }
 function render(){
@@ -255,12 +267,14 @@ function render(){
   }).join("");
   shownHwnds = [...shown];
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
-  const menu = `<div class="group" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || (update ? `Ultra Dock: version ${update.latest} is available` : "Ultra Dock"))}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button>
-    <div class="tray ${open === "__menu" ? "open now" : ""}" aria-hidden="${open !== "__menu"}" ${open !== "__menu" ? "inert" : ""}><div class="inner">${upAct}
-      <button class="act ${state.organize ? "" : "on"}" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
-      ${capControl()}
+  const menu = `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
+  const popup = $("dock-menu");
+  popup.hidden = open !== "__menu";
+  popup.style.width = Math.min(520, room()) + "px";
+  popup.innerHTML = `${upAct}<button class="act" data-act="showall">${state.organize ? "Show all" : "Organize"}</button>
       <button class="act" data-act="sentinel">Sentinel</button><button class="act" data-act="alarm">Alarm</button>
-      <button class="act" data-act="edit" title="Dock settings: folders, categories, apps to keep and more">Settings</button><button class="act" data-act="quit">Quit</button></div></div></div>`;
+      ${capControl()}<button class="act" data-act="edit">Edit folders</button><button class="act" data-act="settings">Settings</button><button class="act" data-act="quit">Quit</button>
+      ${state.fallback_reason ? `<div class="menu-note" role="status">${esc(state.fallback_reason)}</div>` : ""}`;
   $("strip").innerHTML = html + menu;
   if (oldFocus && document.hasFocus()) {
     const replacement = [...$("strip").querySelectorAll("button")].find(button => focusKey(button) === oldFocus && !button.closest("[inert]"));
@@ -274,14 +288,18 @@ function render(){
 /* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
 function report(){
   if (!invoke) return;
-  const full = Math.ceil($("strip").scrollWidth) + 2;
+  const popup = $("dock-menu");
+  const menuWidth = popup.hidden ? 0 : Math.ceil(popup.getBoundingClientRect().width);
+  const menuHeight = popup.hidden ? 0 : Math.ceil(popup.getBoundingClientRect().height) + 56;
+  const full = Math.max(Math.ceil($("strip").scrollWidth) + 8, menuWidth);
   if (!open && !pick) baseW = full;
   else if (state.layout && state.layout.width) baseW = Math.ceil(state.layout.width);
-  invoke("set_strip_width", { width: Math.min(full, room() + 2), rendered: shownHwnds, base: baseW });
+  invoke("set_strip_width", { width: Math.min(full, room() + 2), rendered: shownHwnds, base: baseW, height: Math.max(48, menuHeight) });
 }
 
 function setOpen(cat){
   const prev = open; open = cat;
+  if (cat === "__menu" || prev === "__menu") { render(); return; }
   if (pick && prev !== cat) { pick = null; render(); }  // a window list never outlives its folder
   $("strip").querySelectorAll(".group:not(.solo)").forEach(g => {
     const isOpen = g.dataset.cat === cat, tray = g.querySelector(".tray"), b = g.querySelector(".grp,.more");
@@ -306,7 +324,7 @@ function setOpen(cat){
   setTimeout(report, 340); // settle the measured native width after either transition
 }
 
-$("strip").addEventListener("click", async (e) => {
+async function handleDockClick(e){
   const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), t = e.target.closest(".wt"), a = e.target.closest(".act");
   if (g) { setOpen(open === g.dataset.cat ? null : g.dataset.cat); return; }
   if (t) { if (invoke) await invoke("activate", { hwnd: +t.dataset.h }); setTimeout(closeAll, 220); return; }
@@ -321,28 +339,34 @@ $("strip").addEventListener("click", async (e) => {
     if (k === "cap-" || k === "cap+") { await setCap(nextCap(capOf(), k === "cap+" ? 1 : -1, looseNow())); return; }
     if (k === "capauto") { if (capOf() !== null) await setCap(null); return; }
     if (k === "sentinel" || k === "alarm") invoke && invoke("open_app_view", { name: k });
-    if (k === "edit") invoke && invoke("open_dock_settings");
+    if (k === "edit") invoke && invoke("open_dock_editor");
+    if (k === "settings") invoke && invoke("open_dock_settings");
     if (k === "quit") invoke && invoke("quit");
     if (k === "update") { installUpdate(); return; }  // keep the menu open so the progress text stays visible
     setTimeout(() => setOpen(null), 150);
   }
-});
+}
+$("strip").addEventListener("click", handleDockClick);
+$("dock-menu").addEventListener("click", handleDockClick);
 /* Close any open folder and window list (a single app's list lives outside any folder) */
 function closeAll(){
   if (open) { setOpen(null); return; }  // setOpen also clears a list inside the folder
   if (pick) { pick = null; render(); }
 }
-$("strip").addEventListener("mouseleave", () => { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 1200); });
+// A menu stays open while the pointer crosses the gap to its upward panel.
+$("strip").addEventListener("mouseleave", () => { if (open !== "__menu") { clearTimeout(closeTimer); closeTimer = setTimeout(closeAll, 1200); } });
+$("dock-menu").addEventListener("mouseenter", () => clearTimeout(closeTimer));
 $("strip").addEventListener("mouseenter", () => clearTimeout(closeTimer));
 /* A strip wider than the free space (an open folder on a small screen) scrolls sideways with the wheel */
 $("strip").addEventListener("wheel", e => { const s = $("strip"); if (s.scrollWidth > s.clientWidth + 1) { s.scrollLeft += e.deltaY || e.deltaX; e.preventDefault(); } }, { passive: false });
-$("strip").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeAll(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeAll(); } });
 
 async function poll(){
   try {
     const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
     const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout && s.layout.items, s.avail, s.cap]);
     state = s;
+    document.body.classList.toggle("shelf", !!s.shelf);
     // Commit the signature only after a successful render. Otherwise a transient
     // render exception would prevent retries while polling still looked healthy.
     if (nsig !== sig) { render(); sig = nsig; }
@@ -364,7 +388,7 @@ async function checkUpdate(){
 }
 function setUpdateLabel(text){
   if (!update) return; update.label = text;
-  const b = $("strip").querySelector('[data-act="update"]'); if (!b) return;
+  const b = $("dock-menu").querySelector('[data-act="update"]'); if (!b) return;
   b.textContent = text;
   const tray = b.closest(".tray"); if (tray && tray.classList.contains("open")) { const w = tray.querySelector(".inner").scrollWidth; tray.style.width = w + "px"; report(); }
 }

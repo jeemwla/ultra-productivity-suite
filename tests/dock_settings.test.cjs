@@ -51,8 +51,62 @@ test('app count options run from Automatic through 0 to 30',()=>{
 });
 
 test('the Dock menu opens the settings window instead of Notepad, and the file stays reachable',()=>{
-  assert.match(strip,/data-act="edit"[^>]*>Settings</);
+  assert.match(strip,/data-act="edit"[^>]*>Edit folders</);
   assert.match(strip,/invoke\("open_dock_settings"\)/);
   assert.doesNotMatch(strip,/invoke\("open_config"\)/);
   assert.match(html,/invoke\("open_config"\)/,'Advanced still opens the file');
+});
+
+function savingPage(){
+  const E=require('../ultra_dock/ui/dock_editor.js');
+  const requests=[],messages=[];
+  const elements=new Map();
+  const context=vm.createContext({DockEditor:E,structuredClone,Promise,setTimeout:()=>1,clearTimeout:()=>{},
+    invoke:(command,args)=>new Promise((resolve,reject)=>requests.push({command,args,resolve,reject})),
+    status:(...args)=>messages.push(args),
+    $:id=>{if(!elements.has(id))elements.set(id,{textContent:''});return elements.get(id);},
+    document:{activeElement:null},renderApps:()=>{},renderCats:()=>{},renderKeep:()=>{},renderTop:()=>{},renderAll:()=>{}});
+  vm.runInContext('let S={config:{value:0},apps:[]};let dirty=false,saving=false,saveTimer=0;',context);
+  vm.runInContext(html.slice(html.indexOf('const autosave ='),html.indexOf('let editing =')),context);
+  vm.runInContext(html.slice(html.indexOf('let refreshSequence ='),html.indexOf('/* ---------- events')),context);
+  return {context,requests,messages,run:code=>vm.runInContext(code,context)};
+}
+test('page integration keeps changes made during native save and sends the newest config next',async()=>{
+  const p=savingPage();p.run('change({value:1})');const pending=p.run('save()');
+  p.run('change({value:2})');p.run('save()');
+  assert.equal(p.requests.length,1);
+  p.requests[0].resolve({value:1});for(let i=0;i<8 && p.requests.length<2;i++)await Promise.resolve();
+  assert.equal(p.run('S.config.value'),2);assert.equal(p.requests.length,2);
+  assert.equal(p.requests[1].args.config.value,2);
+  p.requests[1].resolve({value:2});await pending;assert.equal(p.run('dirty'),false);
+});
+test('out-of-order refresh results and reads started before an edit cannot replace local settings',async()=>{
+  const p=savingPage(),first=p.run('refresh()'),second=p.run('refresh()');
+  p.requests[1].resolve({config:{value:2}});await second;
+  p.requests[0].resolve({config:{value:1}});await first;
+  assert.equal(p.run('S.config.value'),2);
+  const old=p.run('refresh()');p.run('change({value:3})');
+  p.requests[2].resolve({config:{value:2}});await old;
+  assert.equal(p.run('S.config.value'),3);assert.equal(p.run('dirty'),true);
+});
+test('page save failure retains dirty state and exposes retry guidance',async()=>{
+  const p=savingPage();p.run('change({value:4})');const pending=p.run('save()');
+  p.requests[0].reject(Error('cannot write'));await pending;
+  assert.equal(p.run('dirty'),true);assert.equal(p.run('saving'),false);
+  assert.match(p.run('$("editor-message").textContent'),/Save failed:.*Save again/);
+});
+test('editor preserves dropdown controls and offers inline names and keyboard grouping',()=>{
+  assert.match(html,/id="edit-mode"/);assert.match(html,/id="folder-name"/);
+  assert.match(html,/id="group-apps"/);assert.match(html,/data-act="cat"/);
+  assert.doesNotMatch(html,/\bprompt\s*\(/);
+  // Compile the actual inline script as well as exercising its saving code above.
+  new vm.Script(html.match(/<script>\s*([\s\S]*?)<\/script>/)[1]);
+});
+
+test('a refresh started during a save cannot undo the acknowledged save',async()=>{
+  const p=savingPage();p.run('change({value:7})');const saved=p.run('save()');
+  const read=p.run('refresh()');
+  p.requests[0].resolve({value:7});await saved;
+  p.requests[1].resolve({config:{value:0}});await read;
+  assert.equal(p.run('S.config.value'),7);
 });

@@ -15,6 +15,7 @@ mod wake;
 mod dock_safety;
 mod dock_layout;
 mod dock_settings;
+mod dock_surface;
 mod launch;
 mod edition;
 mod dock_lease;
@@ -33,6 +34,10 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 const DEFAULT_ORG: &str = include_str!("../../config/organizer.json");
 const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
 
+static SURFACES: Mutex<Vec<dock_surface::Surface>> = Mutex::new(Vec::new());
+static SWITCHER_ACTIVE: AtomicBool = AtomicBool::new(false);
+static SWITCHER_VISIBLE: AtomicBool = AtomicBool::new(false);
+static SWITCHER_EVENTS_READY: AtomicBool = AtomicBool::new(false);
 static STRIP_W: AtomicU32 = AtomicU32::new(60);
 static STRIP_FITS: AtomicBool = AtomicBool::new(false);
 static RENDER_OVERFLOW: AtomicBool = AtomicBool::new(false);
@@ -406,8 +411,8 @@ fn organizer_loop() {
     let mut last_reapply = Instant::now();
     let mut last_guard_retry = Instant::now();
     let started = Instant::now();
-    let mut listing = dock_safety::StripListing::default();
     let mut burst = dock_layout::RehideBurst::default();
+    let mut switcher = dock_surface::SwitcherPause::default();
     let mut hidden_now: std::collections::HashSet<isize> = Default::default();
     // Only one Dock (Public or Dev) may manage the taskbar: see dock_lease.rs. Without the lease nothing is hidden.
     let mut lease = dock_lease::Lease::open(dock_lease::LEASE_NAME);
@@ -457,9 +462,22 @@ fn organizer_loop() {
         }
         // Between full passes, watch the foreground window: activating a window makes Windows put its hidden
         // taskbar button back, so hide it again right away (and for a short burst after) instead of 4 s later.
-        for _ in 0..5 {
-            std::thread::sleep(Duration::from_millis(140));
-            if !grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire)) { continue; }
+        for _ in 0..35 {
+            std::thread::sleep(Duration::from_millis(20));
+            use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_MENU, VK_LWIN, VK_RWIN};
+            let switching = SWITCHER_VISIBLE.load(Ordering::Acquire)
+                || unsafe { [VK_MENU, VK_LWIN, VK_RWIN].iter().any(|k| GetAsyncKeyState(k.0 as i32) < 0) };
+            let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
+            SWITCHER_ACTIVE.store(paused, Ordering::Release);
+            if paused {
+                if restore_for_switcher {
+                    RESTORATION_PENDING.store(true, Ordering::Release);
+                    if recovery::restore_all(&tbl).is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                    hidden_now.clear();
+                }
+                continue;
+            }
+            if SWITCHER_ACTIVE.load(Ordering::Acquire) || !grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire)) { continue; }
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 recovery::hide_window(h, true, &tbl);
@@ -471,7 +489,7 @@ fn organizer_loop() {
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
         let guarded = guard_running();
-        let on = guarded && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
+        let on = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire) && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
         if !on {
             RESTORATION_PENDING.store(true, Ordering::Release);
             match recovery::restore_all(&tbl) {
@@ -484,10 +502,9 @@ fn organizer_loop() {
                 }
             }
         }
-        let rendered = RENDERED_WINDOWS.lock().map(|r| r.clone()).unwrap_or_default();
+        let rendered = SURFACES.lock().map(|s| dock_surface::acknowledged(&s, uptime_secs())).unwrap_or_default();
         let mut snap = vec![];
         let reapply = last_reapply.elapsed() > Duration::from_secs(4);
-        let now_ms = started.elapsed().as_millis() as u64;
         let mut pending: std::collections::HashSet<String> = Default::default();
         let mut hidden_exes: std::collections::HashSet<String> = Default::default();
         let mut cands: Vec<(usize, String, String, String)> = vec![];
@@ -504,15 +521,14 @@ fn organizer_loop() {
                 cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone()));
                 if hidden { hidden_exes.insert(exe.clone()); } else { pending.insert(exe.clone()); }
             }
-            // List a window only while its native button is hidden (or briefly while hiding is first tried), so an
-            // app never shows twice: native button plus strip copy.
-            if !kept && ORGANIZE.load(Ordering::Relaxed) && listing.decide(*h, now_ms, on, hidden) {
+            // Presentation is stable while native buttons restore, the switcher opens, or another monitor loads.
+            // Hiding is a separate decision requiring all live surfaces to acknowledge the window.
+            if !kept && ORGANIZE.load(Ordering::Relaxed) {
                 snap.push(WinInfo { hwnd: *h, title: title.clone(), exe: exe.clone(), name: pretty_name(exe),
                                     category: categorize(exe, &cfg), active: *h == fg });
             }
         }
-        listing.retain(&wins.iter().map(|w| w.0).collect());
-        let recovery_view = !on || RESTORATION_PENDING.load(Ordering::Acquire);
+        let recovery_view = !ORGANIZE.load(Ordering::Acquire) || RESTORATION_PENDING.load(Ordering::Acquire);
         if recovery_view {
             let previous = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
             let live: Vec<_> = wins.iter().map(|(h, title, exe)| WinInfo { hwnd: *h, title: title.clone(), exe: exe.clone(),
@@ -596,13 +612,30 @@ fn strip_is_present(hwnd: windows::Win32::Foundation::HWND) -> bool {
 }
 
 #[cfg(windows)]
+fn native_taskbars() -> Vec<isize> {
+    use windows::Win32::{Foundation::{HWND, LPARAM}, UI::WindowsAndMessaging::*};
+    unsafe extern "system" fn scan(h: HWND, p: LPARAM) -> windows::core::BOOL {
+        let mut cls = [0u16; 80];
+        let n = GetClassNameW(h, &mut cls).max(0) as usize;
+        if ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"].contains(&String::from_utf16_lossy(&cls[..n]).as_str()) {
+            (*(p.0 as *mut Vec<isize>)).push(h.0 as isize);
+        }
+        true.into()
+    }
+    let mut bars: Vec<isize> = vec![];
+    unsafe { if EnumWindows(Some(scan), LPARAM(&mut bars as *mut _ as isize)).is_err() { return vec![]; } }
+    bars
+}
+
+#[cfg(windows)]
 fn all_taskbars_covered() -> bool {
-    use windows::core::w;
-    use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
-    // There is currently one strip. ITaskbarList removes buttons globally, so
-    // per-window monitor filtering would still lose mirrored secondary buttons.
-    // Fail open until every taskbar has its own healthy strip.
-    unsafe { FindWindowW(w!("Shell_SecondaryTrayWnd"), None).map(|h| h.is_invalid()).unwrap_or(true) }
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
+    let bars = native_taskbars();
+    let Ok(surfaces) = SURFACES.lock() else { return false };
+    !bars.is_empty() && bars.iter().all(|tb| surfaces.iter().any(|s| s.taskbar == *tb && s.shown
+        && s.fresh(uptime_secs()) && strip_is_present(HWND(s.hwnd as _))
+        && unsafe { MonitorFromWindow(HWND(s.hwnd as _), MONITOR_DEFAULTTONEAREST) == MonitorFromWindow(HWND(s.taskbar as _), MONITOR_DEFAULTTONEAREST) }))
 }
 
 #[cfg(windows)]
@@ -624,7 +657,7 @@ fn watchdog() {
         let since = if seen == 0 { u64::MAX } else { uptime_secs().saturating_sub(seen - 1) };
         let ok = dock_safety::Visibility {
             enabled: ORGANIZE.load(Ordering::Relaxed), guard_ready: guard_running(),
-            main_responsive: missed < 2,
+            main_responsive: missed < 2 && SWITCHER_EVENTS_READY.load(Ordering::Acquire),
             strip_visible: STRIP_SHOWN.load(Ordering::Relaxed) && strip_is_present(HWND(h as _)),
             strip_fits: STRIP_FITS.load(Ordering::Relaxed) && !RENDER_OVERFLOW.load(Ordering::Relaxed),
             all_taskbars_covered: all_taskbars_covered(), rendered_age: since,
@@ -746,11 +779,9 @@ mod watchdog_tests {
     }
 }
 
-/// The strip lists other apps only where it can stand in for their native taskbar buttons. While a taskbar it cannot
-/// cover keeps every native button visible, listing the same apps in the strip would show each app twice, and
-/// clicking the copy would only bring up the window the native button already opens. Brief health dips do not
-/// empty the strip, so it does not flicker while it resizes.
-fn strip_lists_windows(organize: bool, all_taskbars_covered: bool) -> bool { organize && all_taskbars_covered }
+/// Presentation does not depend on native-hiding health: apps remain accessible through brief health dips.
+/// Native buttons may temporarily coexist while another surface loads or the Windows switcher is open.
+fn strip_lists_windows(organize: bool, _all_taskbars_covered: bool) -> bool { organize }
 
 fn grouping_allowed(lease_allows: bool, organize: bool, healthy: bool, restoring: bool) -> bool {
     lease_allows && organize && healthy && !restoring
@@ -778,7 +809,7 @@ const RECOVERY_NOTE: &str = "Taskbar restoration is pending. Remaining entries a
 fn dock_fallback_reason(organize: bool, covered: bool, healthy: bool, restoring: bool) -> Option<&'static str> {
     if restoring { Some(RECOVERY_NOTE) }
     else if !organize { Some("Grouping is off; native taskbar buttons stay visible.") }
-    else if !covered { Some("Native taskbar mode: multiple taskbars need their own Dock strips.") }
+    else if !covered { Some("Waiting for the Dock strips on the connected screens.") }
     else if !healthy { Some("Native taskbar mode until the Dock is visible, fits, and finishes rendering.") }
     else { None }
 }
@@ -791,9 +822,14 @@ mod strip_listing_tests {
     }
     fn ids(windows: &[WinInfo]) -> Vec<isize> { windows.iter().map(|w| w.hwnd).collect() }
     #[test]
+    fn a_waiting_edition_does_not_steal_the_active_dock() {
+        assert!(!strip_display_requested(false, false, false), "a waiting edition cannot obstruct the active edition");
+    }
+
+    #[test]
     fn apps_are_listed_only_where_native_buttons_can_be_replaced() {
         assert!(strip_lists_windows(true, true));
-        assert!(!strip_lists_windows(true, false), "an uncovered taskbar keeps native buttons, so no duplicates");
+        assert!(strip_lists_windows(true, false), "loading another monitor keeps existing Dock apps visible; global hiding is gated separately");
         assert!(!strip_lists_windows(false, true), "grouping off: native buttons only");
         assert!(!strip_lists_windows(false, false));
     }
@@ -853,7 +889,7 @@ mod strip_listing_tests {
 }
 
 #[tauri::command]
-fn get_windows() -> Value {
+fn get_windows(window: WebviewWindow) -> Value {
     UI_SEEN.store(now_secs(), Ordering::Relaxed);  // polling is diagnostic, not proof of rendering
     #[cfg(windows)]
     let covered = all_taskbars_covered();
@@ -869,9 +905,12 @@ fn get_windows() -> Value {
     let wins = offered_snapshot(&snapshot, organize, covered, restoring, pending.as_deref());
     let reason = dock_fallback_reason(organize, covered, HEALTHY.load(Ordering::Relaxed), restoring);
     let layout = strip_plan(&wins);
-    let avail = AVAIL_CSS.load(Ordering::Relaxed);
+    let surface = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.label == window.label()).cloned());
+    let avail = surface.as_ref().map(|s| s.room).unwrap_or(AVAIL_CSS.load(Ordering::Relaxed));
+    let shelf = surface.is_some_and(|s| s.shelf);
+    let counts = CANDIDATES.lock().map(|v| v.as_ref().map(|c| (c.groups.iter().map(|g| g.1.len()).sum::<usize>(), c.pending.len(), c.hidden_apps)).unwrap_or_default()).unwrap_or_default();
     json!({ "organize": organize, "windows": wins, "order": org_config().order, "fallback_reason": reason,
-            "layout": layout, "cap": dock_cap(), "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
+            "layout": layout, "cap": dock_cap(), "shelf": shelf, "managed_apps": counts.0, "native_pending": counts.1, "grouped_apps": counts.2, "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
 }
 
 /// Group the listed windows into the folders and apps the strip shows, sized to the taskbar's free space.
@@ -882,7 +921,8 @@ fn strip_plan(wins: &[WinInfo]) -> Value {
         if !groups[pos].1.contains(&w.exe) { groups[pos].1.push(w.exe.clone()); }
     }
     let room = LAYOUT_CSS.load(Ordering::Relaxed);
-    let plan = dock_layout::plan_capped(&groups, if room == u32::MAX { f64::INFINITY } else { room as f64 }, dock_cap());
+    let _ = room;
+    let plan = dock_layout::plan_capped(&groups, f64::INFINITY, dock_cap());
     json!({
         "items": plan.items.iter().map(|i| json!({ "key": i.key, "label": i.label, "folder": i.folder, "exes": i.exes })).collect::<Vec<_>>(),
         "width": plan.width, "compacted": plan.compacted, "over_six": plan.over_six, "left_out": plan.left_out,
@@ -1042,10 +1082,19 @@ async fn get_icon(target: String, hwnd: Option<isize>) -> Option<String> {
 }
 
 #[tauri::command]
-fn set_strip_width(width: f64, rendered: Option<Vec<isize>>, base: Option<f64>) {
+fn set_strip_width(window: WebviewWindow, width: f64, rendered: Option<Vec<isize>>, base: Option<f64>, height: Option<f64>) {
     if !width.is_finite() || width < 0.0 { return; }
+    if let Ok(mut surfaces) = SURFACES.lock() {
+        if let Some(s) = surfaces.iter_mut().find(|s| s.label == window.label()) {
+            s.width = width.ceil().clamp(20.0, 1800.0) as u32;
+            s.height = height.filter(|h| h.is_finite()).unwrap_or(48.0).ceil().clamp(48.0, 600.0) as u32;
+            if let Some(ref ids) = rendered {
+                if ids.len() <= 4096 { s.rendered = ids.iter().copied().collect(); s.rendered_at = Some(uptime_secs()); }
+            }
+        }
+    }
     if let Some(b) = base.filter(|b| b.is_finite() && *b >= 0.0) { STRIP_BASE_W.store(b.ceil().min(1800.0) as u32, Ordering::Relaxed); }
-    RENDER_OVERFLOW.store(width > 1800.0, Ordering::Relaxed);
+    RENDER_OVERFLOW.store(false, Ordering::Relaxed); // intentional horizontal scrolling is not a failed render
     STRIP_W.store(width.ceil().max(20.0).min(1800.0) as u32, Ordering::Relaxed);
     if let Some(windows) = rendered {
         if windows.len() <= 4096 {
@@ -1144,7 +1193,8 @@ fn fix_shortcut_ids() {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let p = profile();
         let links = [(format!("{}.lnk", p.product_name()), "hub"), (format!("{}.lnk", app_label("sentinel")), "sentinel"),
-                     (format!("{}.lnk", app_label("alarm")), "alarm"), (format!("{}.lnk", app_label("insights")), "insights")];
+                     (format!("{}.lnk", app_label("alarm")), "alarm"), (format!("{}.lnk", app_label("insights")), "insights"),
+                     (format!("{}.lnk", app_label("dock")), "dock")];
         for (file, name) in links {
             let path = dir.join(file);
             if !path.exists() { continue; }
@@ -1183,7 +1233,7 @@ fn set_app_identity(_app: &AppHandle, _win: &WebviewWindow, _name: &str, _title:
 
 fn open_view(app: &AppHandle, name: &str) {
     if name == "hub" { open_hub(app); return; }
-    if name == "docksettings" { open_dock_settings_window(app); return; }
+    if name == "docksettings" || name == "dock" { open_dock_settings_window(app, false); return; }
     let Some(view) = launch::view(name) else { return };
     if let Some(win) = app.get_webview_window(name) { show_view_window(&win); }
     let Some(permit) = LAUNCHES.begin(view) else { return };
@@ -1199,8 +1249,12 @@ fn open_view(app: &AppHandle, name: &str) {
 /// The Ultra Suite hub: one launcher window that lists every app with live status cards (hub.html).
 /// It is a local page, so it opens at once even while the core is still starting.
 /// The Dock settings window (ui/dock.html): everything the Dock can be told, without editing a file by hand.
-fn open_dock_settings_window(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window("docksettings") { show_view_window(&win); return; }
+fn open_dock_settings_window(app: &AppHandle, edit: bool) {
+    if let Some(win) = app.get_webview_window("docksettings") {
+        show_view_window(&win);
+        if edit { let _ = win.eval("window.dispatchEvent(new Event('dock-edit'))"); }
+        return;
+    }
     static OPENING: AtomicBool = AtomicBool::new(false);
     if OPENING.swap(true, Ordering::AcqRel) { return; }
     let app = app.clone();
@@ -1208,14 +1262,14 @@ fn open_dock_settings_window(app: &AppHandle) {
     let spawned = std::thread::Builder::new().name("launch-docksettings".into()).spawn(move || {
         #[cfg(windows)]
         let com = unsafe { windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED) }.is_ok();
-        let built = WebviewWindowBuilder::new(&app, "docksettings", WebviewUrl::App("dock.html".into()))
+        let built = WebviewWindowBuilder::new(&app, "docksettings", WebviewUrl::App(if edit { "dock.html?edit=1".into() } else { "dock.html".into() }))
             .title(format!("{} settings", app_label("dock"))).inner_size(1000.0, 780.0).min_inner_size(380.0, 480.0).center().visible(false).build();
         match built {
             Ok(win) => {
                 let w2 = win.clone();
                 win.on_window_event(move |e| { if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w2.hide(); } });
                 if let Ok(img) = tauri::image::Image::from_bytes(art::DOCK) { let _ = win.set_icon(img); }
-                set_app_identity(&app, &win, "hub", profile().product_name());
+                set_app_identity(&app, &win, "dock", app_label("dock"));
                 show_view_window(&win);
             }
             Err(error) => eprintln!("[launch] Dock settings window creation failed: {error}"),
@@ -1228,7 +1282,10 @@ fn open_dock_settings_window(app: &AppHandle) {
 }
 
 #[tauri::command]
-fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app); }
+fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app, false); }
+
+#[tauri::command]
+fn open_dock_editor(app: AppHandle) { open_dock_settings_window(&app, true); }
 
 /// Everything the settings window shows: the saved organizer settings, the bundled defaults, the apps open now
 /// (with the category and keep state the Dock gives each), and the Dock switches.
@@ -1260,8 +1317,8 @@ fn dock_settings_get() -> Value {
     let covered = false;
     let note = if STRIP_HIDDEN.load(Ordering::Relaxed) { Some("The Dock is off. Your taskbar shows every button as usual.") }
         else if !ORGANIZE.load(Ordering::Relaxed) { Some("Folders are off: every app keeps its normal taskbar button.") }
-        else if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible for now.") }
-        else if !HEALTHY.load(Ordering::Relaxed) { Some("Not enough room on the taskbar right now, so every button stays visible.") }
+        else if !covered { Some("Waiting for the Dock on each connected screen to finish loading.") }
+        else if !HEALTHY.load(Ordering::Relaxed) { Some("The Dock is reconnecting. Native buttons stay available until every screen is ready.") }
         else { None };
     json!({ "config": config, "defaults": defaults, "apps": apps, "cap": dock_cap(), "cap_max": CAP_MAX,
             "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed), "organize": ORGANIZE.load(Ordering::Relaxed),
@@ -1355,8 +1412,8 @@ fn hub_info() -> Value {
     let restoring = RESTORATION_PENDING.load(Ordering::Acquire);
     let dock_note = if restoring { Some(RECOVERY_NOTE) }
         else if on && dock_lease::waiting_for_other() { Some("The other edition's Ultra Dock manages the taskbar. Turning this one on again takes it over.") }
-        else if !covered { Some("More than one taskbar (a second monitor), so every taskbar button stays visible.") }
-        else if !HEALTHY.load(Ordering::Relaxed) { Some("Not enough room on the taskbar right now, so every button stays visible.") }
+        else if !covered { Some("Waiting for the Dock on each connected screen to finish loading.") }
+        else if !HEALTHY.load(Ordering::Relaxed) { Some("The Dock is reconnecting. Native buttons stay available until every screen is ready.") }
         else { None };
     let editions: Vec<Value> = ["Public", "Dev"].iter().filter_map(|e| edition::profile(e).ok()).map(edition_json).collect();
     let dev_installed = editions.iter().any(|e| e["edition"] == "Dev" && (e["installed"] == true || e["current"] == true));
@@ -1731,8 +1788,77 @@ fn alarm_watch(app: AppHandle) {
 /// monitor queries). It used to call the window framework's size/position/monitor functions from here; those
 /// hold the window's internal lock while waiting for the main thread, and when the main thread needed the same
 /// lock (answering a UI Automation request) both waited forever: the 2026-11-11 freezes.
+/// Listen through the complete Windows switcher session, including Ctrl+Alt+Tab after all keys are released.
+/// https://learn.microsoft.com/windows/win32/winauto/event-constants
 #[cfg(windows)]
-fn taskbar_tracker(_app: AppHandle) {
+fn switcher_events() {
+    use windows::Win32::{Foundation::HWND, UI::{Accessibility::*, WindowsAndMessaging::*}};
+    unsafe extern "system" fn changed(_: HWINEVENTHOOK, event: u32, _: HWND, _: i32, _: i32, _: u32, _: u32) {
+        SWITCHER_VISIBLE.store(event == EVENT_SYSTEM_SWITCHSTART, Ordering::Release);
+        if event == EVENT_SYSTEM_SWITCHSTART { SWITCHER_ACTIVE.store(true, Ordering::Release); }
+    }
+    unsafe {
+        let hook = SetWinEventHook(EVENT_SYSTEM_SWITCHSTART, EVENT_SYSTEM_SWITCHEND, None, Some(changed), 0, 0, WINEVENT_OUTOFCONTEXT);
+        if hook.is_invalid() { eprintln!("[dock] Windows switcher observer unavailable; keeping native buttons"); return; }
+        SWITCHER_EVENTS_READY.store(true, Ordering::Release);
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, None, 0, 0).0 > 0 { let _ = TranslateMessage(&msg); DispatchMessageW(&msg); }
+        SWITCHER_EVENTS_READY.store(false, Ordering::Release);
+        SWITCHER_VISIBLE.store(false, Ordering::Release);
+        let _ = UnhookWinEvent(hook);
+    }
+}
+
+#[cfg(windows)]
+fn taskbar_tracker(app: AppHandle) {
+    unsafe { let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED); }
+    use windows::core::w;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, IsWindow};
+    let mut pending: HashMap<isize, String> = HashMap::new();
+    loop {
+        let bars = native_taskbars();
+        let mut removed = if let Ok(mut surfaces) = SURFACES.lock() {
+            let gone: Vec<_> = surfaces.iter().filter(|s| !bars.contains(&s.taskbar)).map(|s| s.label.clone()).collect();
+            surfaces.retain(|s| bars.contains(&s.taskbar));
+            gone
+        } else { vec![] };
+        let gone: Vec<_> = pending.keys().filter(|tb| !bars.contains(tb)).copied().collect();
+        for tb in gone { if let Some(label) = pending.remove(&tb) { removed.push(label); } }
+        for label in removed { if let Some(w) = app.get_webview_window(&label) { let _ = w.destroy(); } }
+        for tb in bars {
+            let exists = SURFACES.lock().map(|v| v.iter().any(|s| s.taskbar == tb)).unwrap_or(true);
+            if exists { continue; }
+            let primary = unsafe { FindWindowW(w!("Shell_TrayWnd"), None).ok().is_some_and(|h| h.0 as isize == tb) };
+            let label = if primary { "taskbar".to_string() } else { format!("taskbar-{tb:x}") };
+            let win = if let Some(w) = app.get_webview_window(&label) { Some(w) } else {
+                match WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html?view=strip".into()))
+                    .title(app_label("dock")).decorations(false).transparent(true).always_on_top(true).skip_taskbar(true)
+                    .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0).build() {
+                    Ok(w) => Some(w), Err(e) => { eprintln!("[dock] taskbar strip could not open: {e}"); None }
+                }
+            };
+            let Some(win) = win else { continue };
+            pending.insert(tb, label.clone());
+            make_noactivate(&win);
+            let Ok(h) = win.hwnd() else { continue };
+            if !unsafe { IsWindow(Some(HWND(h.0))).as_bool() } { continue; }
+            let register_hwnd = h.0 as isize;
+            let (tx, rx) = std::sync::mpsc::sync_channel(1);
+            if app.run_on_main_thread(move || { let _ = tx.send(dock_lease::register_strip(HWND(register_hwnd as _))); }).is_err()
+                || !rx.recv_timeout(Duration::from_secs(2)).unwrap_or(false) { continue; }
+            if primary { STRIP_HWND.store(h.0 as isize, Ordering::Release); }
+            if let Ok(mut surfaces) = SURFACES.lock() { surfaces.push(dock_surface::Surface::new(tb, h.0 as isize, label.clone())); }
+            pending.remove(&tb);
+            let sh = h.0 as isize;
+            std::thread::spawn(move || taskbar_surface_tracker(label, tb, sh));
+        }
+        std::thread::sleep(Duration::from_millis(700));
+    }
+}
+
+#[cfg(windows)]
+fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
     use windows::core::w;
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
@@ -1746,17 +1872,17 @@ fn taskbar_tracker(_app: AppHandle) {
         let uia: Option<IUIAutomation> = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok();
         // Latest UI Automation reading of the taskbar: Start, the native buttons and the notification area
         let mut geom = dock_layout::TaskbarGeom::default();
-        let (mut buttons, mut button_w) = (0usize, 0f64);
-        let mut dock = dock_layout::Assessor::default();
-        let started = Instant::now();
+
+        let mut shelf = false;
+        let mut geometry_key = (0, 0, 0, 0);
+
         let mut last_uia = Instant::now() - Duration::from_secs(10);
         let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false);
         loop {
             std::thread::sleep(Duration::from_millis(80));
-            let sh = STRIP_HWND.load(Ordering::Relaxed);
-            if sh == 0 { continue; }
-            let hwnd = HWND(sh as _);
-            let Ok(tb) = FindWindowW(w!("Shell_TrayWnd"), None) else { continue };
+            let hwnd = HWND(strip as _);
+            let tb = HWND(taskbar as _);
+            if !IsWindow(Some(tb)).as_bool() || !IsWindow(Some(hwnd)).as_bool() { break; }
             let mut r = RECT::default();
             if GetWindowRect(tb, &mut r).is_err() { continue; }
             let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
@@ -1804,10 +1930,10 @@ fn taskbar_tracker(_app: AppHandle) {
                         let avg = if n > 0 { total as f64 / n as f64 } else { 44.0 * scale };
                         Ok((g, n, avg))
                     })();
-                    if let Ok((g, n, avg)) = res { geom = g; buttons = n; button_w = avg; }
+                    if let Ok((g, _, _)) = res { geom = g; }
                 }
             }
-            let h = (r.bottom - r.top).max(1) as u32;
+
             // The legacy notification-area window is a second, cheap reading of where the tray starts.
             let mut g = dock_layout::TaskbarGeom { left: r.left, right: r.right, scale, ..geom.clone() };
             if let Ok(tn) = FindWindowExW(Some(tb), None, w!("TrayNotifyWnd"), None) {
@@ -1815,39 +1941,32 @@ fn taskbar_tracker(_app: AppHandle) {
                 if GetWindowRect(tn, &mut tr).is_ok() && tr.right - tr.left > 4 { g.obstacles.push(tr.left); }
             }
             let span = dock_layout::free_span(&g);
-            let room = span.width();
-            let now_ms = started.elapsed().as_millis() as u64;
-            let a = {
-                let guard = CANDIDATES.lock().ok();
-                let empty = Candidates::default();
-                let c = guard.as_ref().and_then(|g| g.as_ref()).unwrap_or(&empty);
-                // The situation: the apps, the taskbar and the tray, none of which change when the Dock hides or
-                // restores buttons (visible plus hidden buttons stays the same)
-                use std::hash::{Hash, Hasher};
-                let mut hs = std::collections::hash_map::DefaultHasher::new();
-                c.groups.hash(&mut hs); (r.left, r.right, g.obstacles.iter().min().copied(), dpi, buttons + c.hidden_apps, dock_cap()).hash(&mut hs);
-                dock.assess(&dock_layout::Reading { groups: &c.groups, pending: &c.pending, room: room as f64, buttons, button_w,
-                    centered: dock_layout::is_centered(&g), scale, page_base: STRIP_BASE_W.load(Ordering::Relaxed) as f64,
-                    sig: hs.finish(), now_ms, cap: dock_cap() })
-            };
-            AVAIL_CSS.store((room as f64 / scale).floor() as u32, Ordering::Relaxed);
-            LAYOUT_CSS.store(a.layout_room as u32, Ordering::Relaxed);
-            let fits = a.fits;
-            let x = span.x;
-            let requested = (STRIP_W.load(Ordering::Relaxed) as f64 * scale).round() as i32;
-            let w = requested.min(room).max(0) as u32;
-            // A strip that cannot show even its menu is hidden rather than drawn as a sliver beside the tray,
-            // unless room is on its way (the fit check's short grace while buttons are being hidden).
-            let show = tb_visible && !fullscreen && strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire))
-                && w > 8 && (w as i32 >= requested || fits);
-            STRIP_FITS.store(show && fits, Ordering::Relaxed);
+
+            let key = (mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom);
+            if key != geometry_key { shelf = false; geometry_key = key; }
+            if !tb_visible { shelf = true; } // auto-hide must not remove the Dock while its shelf is in use
+            let report = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.label == label).cloned());
+            let Some(report) = report else { break };
+            let position = dock_surface::place(mi.rcMonitor.left, mi.rcMonitor.right, mi.rcMonitor.top, mi.rcMonitor.bottom,
+                r.top, span.x, span.limit, scale, report.width, report.height, &mut shelf);
+            // A shelf uses the screen width rather than guessing how much native room DeleteTab may free.
+            // The same lane stays latched while folders/menus open and native apps enter/leave the taskbar.
+            let available = ((mi.rcMonitor.right - mi.rcMonitor.left) as f64 / scale - 16.0).clamp(1.0, 1800.0) as u32;
+            let show = (tb_visible || shelf) && !fullscreen && strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire));
+            if let Ok(mut surfaces) = SURFACES.lock() {
+                if let Some(s) = surfaces.iter_mut().find(|s| s.label == label) { s.shown = show; s.shelf = position.shelf; s.room = available; }
+                AVAIL_CSS.store(surfaces.iter().map(|s| s.room).min().unwrap_or(available), Ordering::Relaxed);
+            }
+            LAYOUT_CSS.store(available, Ordering::Relaxed);
+            STRIP_FITS.store(show, Ordering::Relaxed);
             STRIP_SHOWN.store(show, Ordering::Relaxed);
-            let state = (x, r.top, w, h, show);
+            let (x, y, w, h) = (position.x, position.y, position.width as u32, position.height as u32);
+            let state = (x, y, w, h, show);
             if state == last { continue; }
             last = state;
             if show {
                 // ASYNCWINDOWPOS: post the move to the window's own thread instead of waiting for it
-                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, r.top, w as i32, h as i32,
+                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, w as i32, h as i32,
                                      SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS);
             } else {
                 let _ = ShowWindowAsync(hwnd, SW_HIDE);
@@ -1918,11 +2037,13 @@ fn load_dock_cap() {
     DOCK_CAP.store(saved.unwrap_or(u32::MAX), Ordering::Relaxed);
 }
 #[tauri::command]
-fn set_dock_cap(cap: Option<u32>) -> Value {
+fn set_dock_cap(cap: Option<u32>) -> Result<Value, String> {
     let c = cap.map(|n| n.min(CAP_MAX));
-    DOCK_CAP.store(c.unwrap_or(u32::MAX), Ordering::Relaxed);
-    let _ = std::fs::write(appdata("dock_apps.txt"), c.map(|n| n.to_string()).unwrap_or_else(|| "auto".into()));
-    json!({ "cap": c })
+    let path = appdata("dock_apps.txt");
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    std::fs::write(path, c.map(|n| n.to_string()).unwrap_or_else(|| "auto".into())).map_err(|e| format!("Could not save app count: {e}"))?;
+    DOCK_CAP.store(c.unwrap_or(u32::MAX), Ordering::Release);
+    Ok(json!({ "cap": c }))
 }
 
 #[tauri::command]
@@ -2003,7 +2124,7 @@ fn handle_args(app: &AppHandle, args: &[String]) {
     }
     if let Some(v) = get("--open") { open_view(app, &v); }
     if let Some(k) = get("--event") { std::thread::spawn(move || { post_event(&k, None, None); }); }
-    if args.iter().any(|a| a == "--show-dock") { set_dock_enabled(true); }
+    if args.iter().any(|a| a == "--show-dock") { set_dock_enabled(true); open_dock_settings_window(app, false); }
     if args.iter().any(|a| a == "--quit") {
         // clean shutdown (puts every tucked-away taskbar button back first)
         #[cfg(windows)]
@@ -2092,6 +2213,7 @@ fn main() {
                 let h2 = handle.clone();
                 std::thread::spawn(move || taskbar_tracker(h2));
                 spawn_guard();
+                std::thread::spawn(switcher_events);
                 std::thread::spawn(organizer_loop);
                 std::thread::spawn(watchdog);
             }
@@ -2121,7 +2243,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, dock_settings_get, dock_settings_save, dock_settings_reset])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_settings_get, dock_settings_save, dock_settings_reset])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {

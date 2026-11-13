@@ -6,7 +6,7 @@ const vm=require('node:vm');
 const html=fs.readFileSync(path.join(__dirname,'../ultra_dock/ui/index.html'),'utf8');
 test('a failed Dock render retries and never counts as a successful frame',async()=>{
  const source=html.slice(html.indexOf('async function poll(){'),html.indexOf('/* ---------------- Update dot'));
- const context=vm.createContext({JSON,renderCalls:0,reports:0,invoke:async()=>({organize:true,windows:[{hwnd:42,category:'Tools',active:false,title:'Example'}]}),
+ const context=vm.createContext({JSON,document:{body:{classList:{toggle:()=>{}}}},renderCalls:0,reports:0,invoke:async()=>({organize:true,windows:[{hwnd:42,category:'Tools',active:false,title:'Example'}]}),
   render:()=>{context.renderCalls++;if(context.renderCalls===1)throw new Error('fixture render failure');},report:()=>context.reports++});
  vm.runInContext("let state={},sig='';\n"+source,context);
  await context.poll();assert.equal(context.renderCalls,1);assert.equal(context.reports,0);assert.equal(vm.runInContext('sig',context),'');
@@ -25,4 +25,19 @@ test('rapid folder close cannot be undone by a stale animation frame',()=>{
  context.setOpen('Tools');assert.equal(tray.inert,false);assert.equal(button.attrs['aria-label'],'Collapse Tools');
  context.setOpen(null);assert.equal(tray.inert,true);assert.equal(button.attrs['aria-label'],'Expand Tools');
  frames.forEach(cb=>cb());assert.equal(tray.style.width,'0px');assert.equal(vm.runInContext('open',context),null);
+});
+
+
+test('an open Dock menu reserves its complete rectangle including the Alarm action',()=>{
+ const source=html.slice(html.indexOf('function report(){'),html.indexOf('function setOpen(cat){'));
+ const calls=[], popup={hidden:false,getBoundingClientRect:()=>({width:520,height:152})};
+ const context=vm.createContext({$:id=>id==='dock-menu'?popup:{scrollWidth:90},invoke:(name,args)=>calls.push({name,args}),Math,room:()=>800});
+ vm.runInContext('let open="__menu",pick=null,baseW=90,state={layout:{width:90}},shownHwnds=[42];\n'+source,context);
+ context.report();
+ assert.equal(calls[0].args.width,520);
+ assert.equal(calls[0].args.height,208,'152 px popup plus the bottom strip and gap');
+ assert.deepEqual([...calls[0].args.rendered],[42]);
+ popup.hidden=true; context.report();
+ assert.equal(calls[1].args.height,48);
+ assert.equal(calls[1].args.width,98);
 });
