@@ -1305,6 +1305,16 @@ fn set_app_identity(_app: &AppHandle, _win: &WebviewWindow, _name: &str, _title:
 fn open_view(app: &AppHandle, name: &str) {
     if name == "hub" { open_hub(app); return; }
     if name == "docksettings" || name == "dock" { open_dock_settings_window(app, false); return; }
+    // Also supports a keyboard shortcut targeting --open dockmenu.
+    if name == "dockmenu" {
+        if let Some(anchor) = app.get_webview_window("taskbar") {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = show_dock_menu(app, anchor).await { eprintln!("[dock] menu could not open: {error}"); }
+            });
+        }
+        return;
+    }
     let Some(view) = launch::view(name) else { return };
     if let Some(win) = app.get_webview_window(name) { show_view_window(&win); }
     let Some(permit) = LAUNCHES.begin(view) else { return };
