@@ -415,6 +415,7 @@ fn organizer_loop() {
     let started = Instant::now();
     let mut burst = dock_layout::RehideBurst::default();
     let mut switcher = dock_surface::SwitcherPause::default();
+    let mut hiding_stability = dock_surface::HidingStability::default();
     let mut hidden_now: std::collections::HashSet<isize> = Default::default();
     // Only one Dock (Public or Dev) may manage the taskbar: see dock_lease.rs. Without the lease nothing is hidden.
     let mut lease = dock_lease::Lease::open(dock_lease::LEASE_NAME);
@@ -473,6 +474,7 @@ fn organizer_loop() {
             let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
+                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
                 if restore_for_switcher {
                     RESTORATION_PENDING.store(true, Ordering::Release);
                     if recovery::restore_all(&tbl).is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
@@ -480,7 +482,14 @@ fn organizer_loop() {
                 }
                 continue;
             }
-            if SWITCHER_ACTIVE.load(Ordering::Acquire) || SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire) || SWITCHER_VISIBLE.load(Ordering::Acquire) || !grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire)) { continue; }
+            let fast_ready = !SWITCHER_ACTIVE.load(Ordering::Acquire)
+                && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire) && !SWITCHER_VISIBLE.load(Ordering::Acquire)
+                && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
+            if !fast_ready {
+                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
+                continue;
+            }
+            if !hiding_stability.active(started.elapsed().as_millis() as u64) { continue; }
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 recovery::hide_window(h, true, &tbl);
@@ -492,7 +501,8 @@ fn organizer_loop() {
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
         let guarded = guard_running();
-        let on = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire) && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
+        let ready = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire) && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
+        let on = hiding_stability.allow(ready, started.elapsed().as_millis() as u64);
         if !on {
             RESTORATION_PENDING.store(true, Ordering::Release);
             match recovery::restore_all(&tbl) {

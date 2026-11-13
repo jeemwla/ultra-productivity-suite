@@ -25,8 +25,10 @@ fn hook_registration(current: isize, hook: isize, previous: isize) -> HookRegist
 }
 
 /// Missing, inaccessible and future/unknown markers are all unproven capability.
-fn strip_blocks(visible: bool, capability: Option<usize>) -> bool {
-    visible || capability != Some(CAPABILITY_VERSION)
+fn strip_blocks(_visible: bool, capability: Option<usize>) -> bool {
+    // Checked-journal peers already serialize control through the same mutex. Their recovery strips can
+    // remain visible until restoration completes; visibility alone is never an instruction to switch us off.
+    capability != Some(CAPABILITY_VERSION)
 }
 
 fn compatibility_blocks(own_registered: bool, scan_complete: bool, strips: &[(bool, Option<usize>)]) -> bool {
@@ -83,7 +85,8 @@ pub struct Inputs {
 pub fn decide(i: Inputs) -> Step {
     if i.held {
         if !i.want || i.release_pending { return Step::Release; }
-        if i.other_requested_later || i.compatibility_blocked { return Step::Yield; }
+        if i.other_requested_later { return Step::Yield; }
+        if i.compatibility_blocked { return Step::Release; }
         if i.recovery_pending { return Step::Recover; }
         return Step::Organize;
     }
@@ -253,6 +256,25 @@ pub fn publish(held_now: bool, want: bool) {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn a_capable_peer_cannot_turn_this_dock_off_without_a_newer_request() {
+        use super::*;
+        for visible in [false, true] {
+            let blocked = compatibility_blocks(true, true, &[(visible, Some(CAPABILITY_VERSION))]);
+            assert!(!blocked, "the shared lease serializes compatible Docks, not transient strip visibility");
+            assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked,
+                ..Inputs::default() }), Step::Organize);
+        }
+    }
+
+    #[test]
+    fn an_unknown_peer_releases_safely_without_persisting_the_user_switch_off() {
+        use super::*;
+        assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: true,
+            ..Inputs::default() }), Step::Release,
+            "Release restores checked journals; only an explicit newer handover request may Yield and write Off");
+    }
+
+    #[test]
     fn registering_primary_again_and_secondary_windows_keeps_each_chain_target() {
         use super::{hook_registration, HookRegistration::*};
         assert_eq!(hook_registration(10, 99, 0), Install);
@@ -275,7 +297,7 @@ mod tests {
         assert_eq!(decide(Inputs { want: true, held: true, recovery_pending: true, ..base }), Step::Recover);
         assert_eq!(decide(Inputs { want: false, held: true, ..base }), Step::Release);
         assert_eq!(decide(Inputs { want: true, held: true, other_requested_later: true, ..base }), Step::Yield);
-        assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: true, ..base }), Step::Yield);
+        assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: true, ..base }), Step::Release);
         // turning off always wins, even while the other edition asks
         assert_eq!(decide(Inputs { want: false, held: true, other_requested_later: true, ..base }), Step::Release);
     }
@@ -287,16 +309,16 @@ mod tests {
                 let blocked = compatibility_blocks(true, true, &[(visible, capability)]);
                 assert!(blocked, "unproven strip: visible={visible}, marker={capability:?}");
                 assert_eq!(decide(Inputs { want: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Wait);
-                assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Yield);
+                assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Release);
             }
         }
     }
 
     #[test]
-    fn only_hidden_capable_strips_allow_normal_edition_handover() {
+    fn capable_strips_allow_only_explicit_edition_handover() {
         for (mine, other) in [("Public", "Dev"), ("Dev", "Public")] {
             assert!(!compatibility_blocks(true, true, &[(false, Some(1))]));
-            assert!(compatibility_blocks(true, true, &[(true, Some(1))]));
+            assert!(!compatibility_blocks(true, true, &[(true, Some(1))]));
             let mut first = Inputs { want: true, held: true,
                 other_requested_later: requested_by_other(Some((other.into(), 20)), mine, 10), ..Inputs::default() };
             assert_eq!(decide(first), Step::Yield);
@@ -316,7 +338,7 @@ mod tests {
                 let blocked = compatibility_blocks(registered, complete, &strips);
                 assert!(blocked);
                 assert_eq!(decide(Inputs { want: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Wait);
-                assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Yield);
+                assert_eq!(decide(Inputs { want: true, held: true, compatibility_blocked: blocked, ..Inputs::default() }), Step::Release);
             }
         }
         assert!(compatibility_blocks(true, true, &[(false, Some(1)), (false, None)]), "one capable neighbor cannot excuse an unknown one");

@@ -1,6 +1,21 @@
 //! Per-taskbar render acknowledgements and stable placement, without Windows calls.
 use std::collections::HashSet;
 
+/// Stabilizes recovery, while visibility failures always restore native buttons immediately.
+#[derive(Default)]
+pub struct HidingStability { ready_since: Option<u64> }
+impl HidingStability {
+    pub const RECOVERY_MS: u64 = 1500;
+    pub fn allow(&mut self, ready: bool, now_ms: u64) -> bool {
+        if !ready { self.ready_since = None; return false; }
+        let since = self.ready_since.get_or_insert(now_ms);
+        now_ms.saturating_sub(*since) >= Self::RECOVERY_MS
+    }
+    pub fn active(&self, now_ms: u64) -> bool {
+        self.ready_since.is_some_and(|since| now_ms.saturating_sub(since) >= Self::RECOVERY_MS)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Surface {
     pub taskbar: isize,
@@ -59,7 +74,7 @@ pub fn strip_visible(taskbar_visible: bool, fullscreen: bool, fits: bool, reques
 
 /// Place the persistent strip in physical taskbar coordinates. Width requests are
 /// CSS pixels; page overflow handles requests larger than the safe native gap.
-/// A usable strip needs 78 CSS pixels (folder 44, menu 28, slack 6). Smaller
+/// A usable menu-only strip needs 44 CSS pixels (a native-sized 40px button plus padding). Smaller
 /// requests are raised to that minimum. Unusable spans return zero width and
 /// `fits = false`, so callers must retain native buttons and hide the strip.
 /// Menu heights deliberately have no input here: transient popups cannot resize
@@ -74,7 +89,7 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
     let safe_end = gap_right.clamp(left, end).max(x);
     let span = (i64::from(safe_end) - i64::from(x)).min(i64::from(i32::MAX));
     let native_height = (i64::from(bottom) - i64::from(top)).clamp(0, i64::from(i32::MAX));
-    let minimum = (78.0 * scale).ceil();
+    let minimum = (44.0 * scale).ceil();
     let height = native_height.min((48.0 * scale).floor() as i64) as i32;
     let fits = span as f64 >= minimum && height > 0;
     let width = if fits {
@@ -86,6 +101,20 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transient_health_and_overlay_changes_cannot_repeatedly_rehide_native_buttons() {
+        let mut gate = HidingStability::default();
+        let mut last = false;
+        let mut transitions = 0;
+        for now in (0..5000).step_by(100) {
+            let ready = now % 400 >= 200;
+            let hide = gate.allow(ready, now);
+            if hide != last { transitions += 1; }
+            assert!(!hide || ready, "unavailable replacement must restore immediately");
+            last = hide;
+        }
+        assert_eq!(transitions, 0, "short recovery intervals cannot trigger restore/hide storms");
+    }
     #[test]
     fn hidden_taskbars_and_fullscreen_apps_never_get_an_independent_overlay() {
         for taskbar in [false, true] {
@@ -127,14 +156,14 @@ mod tests {
     #[test]
     fn narrow_gaps_fail_closed_and_exact_minimum_fits_at_all_dpis() {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
-            for gap in [0, 14, 70] {
+            for gap in [0, 14, 43] {
                 let p = place_in_taskbar(0, 1000, 1920, 1100, 100, 100 + gap, scale, 400);
                 assert!(!p.fits);
                 assert_eq!(p.width, 0);
                 assert!(!p.shelf);
                 assert!(p.height >= 0 && p.height <= 100);
             }
-            let minimum = (78.0_f64 * scale).ceil() as i32;
+            let minimum = (44.0_f64 * scale).ceil() as i32;
             assert!(!place_in_taskbar(0, 0, 1920, 100, 100, 100 + minimum - 1, scale, 400).fits);
             let p = place_in_taskbar(0, 0, 1920, 100, 100, 100 + minimum, scale, 0);
             assert!(p.fits);
@@ -142,6 +171,52 @@ mod tests {
         }
     }
 
+    #[test]
+    fn restored_buttons_leave_a_usable_menu_in_a_sixty_pixel_gap() {
+        let p = place_in_taskbar(0, 0, 1920, 48, 100, 160, 1.0, 400);
+        assert!(p.fits);
+        assert_eq!(p.width, 60);
+        // Placement alone never acknowledges replacement app buttons.
+        assert!(acknowledged(&[Surface::new(1, 11, "taskbar".into())], 0).is_empty());
+    }
+    #[test]
+    fn a_complete_switcher_cycle_between_slow_passes_restarts_recovery() {
+        let mut gate = HidingStability::default();
+        assert!(!gate.allow(true, 0));
+        assert!(gate.allow(true, 2100));
+        // The fast loop sees the entire pause before the next 700ms pass.
+        assert!(!gate.allow(false, 2120));
+        assert!(!gate.active(2500));
+        assert!(!gate.allow(true, 2800));
+        assert!(!gate.active(3500));
+        assert!(!gate.allow(true, 4200));
+        assert!(gate.allow(true, 4900));
+    }
+    #[test]
+    fn recovery_policy_survives_a_million_simulated_shell_samples() {
+        let mut gate = HidingStability::default();
+        let mut seed = 0x1357_2468_u64;
+        let mut stable_since = None;
+        for sample in 0..1_000_000_u64 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let ready = seed >> 60 != 0;
+            let now = sample * 20;
+            if !ready { stable_since = None; }
+            let expected = ready && now.saturating_sub(*stable_since.get_or_insert(now)) >= 1500;
+            assert_eq!(gate.allow(ready, now), expected);
+        }
+    }
+    #[test]
+    fn stable_recovery_waits_then_restores_immediately_on_failure() {
+        let mut gate = HidingStability::default();
+        assert!(!gate.allow(true, 100));
+        assert!(!gate.allow(true, 1599));
+        assert!(gate.allow(true, 1600));
+        assert!(!gate.allow(false, 1601));
+        assert!(!gate.active(5000));
+        assert!(!gate.allow(true, 5000));
+        assert!(gate.allow(true, 6500));
+    }
     #[test]
     fn wide_gap_clamps_width_and_has_no_shelf_latch() {
         assert!(!place_in_taskbar(0, 672, 1280, 720, 100, 114, 1.0, 400).fits);

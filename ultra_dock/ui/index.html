@@ -23,7 +23,7 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .strip{position:absolute;left:0;bottom:0;height:100%;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .strip::-webkit-scrollbar{display:none}
 .strip .grp,.strip .win,.strip .more{max-height:100%}
-.strip > .group[data-cat="__menu"]{position:sticky;right:0;z-index:3;background:#24262df5;border-radius:6px}
+.strip > .group[data-cat="__menu"]{position:sticky;right:0;z-index:3;background:transparent}
 /* Small screens: the strip never grows past the taskbar's free space (max-width is set from the measured room).
    An open folder or menu that needs more room hides the other folders until it closes, and scrolls with the wheel. */
 .strip.focus > .group:not(.keep){display:none}
@@ -81,9 +81,9 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .wt.active{color:var(--ink);font-weight:600}
 .pick.dense .wt{max-width:104px;padding:0 7px}
 @media (prefers-reduced-motion:reduce){.pick{animation:none}}
-.more{width:28px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-3);transition:background .12s,color .12s}
+.more{width:40px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-2);transition:background .12s,color .12s}
 .more:hover{background:var(--hover);color:var(--ink-2)}
-.more svg{width:14px;height:14px;transition:transform .3s var(--ease)}
+.more svg{width:24px;height:24px}
 .more[aria-expanded=true] svg{transform:rotate(180deg)}
 .more{position:relative}
 .more .udot{position:absolute;right:5px;top:10px;width:7px;height:7px;border-radius:50%;background:var(--bar-active);box-shadow:0 0 0 2px rgba(0,0,0,.25);animation:upulse 2.4s var(--ease) infinite}
@@ -163,7 +163,7 @@ if (view === "survey") {
 /* ---------------- Taskbar organizer ---------------- */
 const icons = new Map();          // exe path -> data url
 let state = { windows: [], organize: true, order: [] }, open = null, sig = "", closeTimer = 0;
-const CHEV = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>';
+const CHEV = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
 
 function iconFor(exe, hwnd){
   if (icons.has(exe)) return icons.get(exe);
@@ -267,7 +267,7 @@ function render(){
   }).join("");
   shownHwnds = [...shown];
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
-  const menu = `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
+  const menu = `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
   const popup = $("dock-menu");
   popup.hidden = open !== "__menu";
   popup.style.width = Math.min(520, room()) + "px";

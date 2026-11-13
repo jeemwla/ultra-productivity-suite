@@ -11,7 +11,7 @@
 /// Collapsed widths in CSS pixels, matching ultra_dock/ui/index.html (.win, .grp, .more and strip padding).
 pub const APP_W: f64 = 40.0;
 pub const FOLDER_W: f64 = 44.0;
-pub const MENU_W: f64 = 28.0;
+pub const MENU_W: f64 = 40.0;
 pub const SLACK_W: f64 = 6.0;
 pub const MAX_PER_FOLDER: usize = 6;
 pub const MORE_LABEL: &str = "More apps";
