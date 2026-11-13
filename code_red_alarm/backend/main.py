@@ -57,6 +57,20 @@ def init_db():
             label TEXT NOT NULL, state TEXT NOT NULL, duration_sec INTEGER NOT NULL,
             remaining_sec REAL NOT NULL, deadline REAL, revision INTEGER NOT NULL)''')
         conn.execute("INSERT OR IGNORE INTO countdown VALUES (1, '', 'Timer', 'idle', 300, 300, NULL, 0)")
+        conn.execute('''CREATE TABLE IF NOT EXISTS timers (
+            id TEXT PRIMARY KEY, label TEXT NOT NULL, state TEXT NOT NULL, duration_sec INTEGER NOT NULL,
+            remaining_sec REAL NOT NULL, deadline REAL, created_at REAL NOT NULL,
+            code_red INTEGER NOT NULL DEFAULT 0, custom_phrase TEXT NOT NULL DEFAULT '',
+            ring_duration_sec INTEGER NOT NULL DEFAULT 60)''')
+        conn.execute("CREATE TABLE IF NOT EXISTS timer_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL)")
+        conn.execute("INSERT OR IGNORE INTO timer_meta VALUES (1, 0)")
+        # Earlier versions kept one countdown; carry a running or paused one over once, then leave that row unused.
+        old = conn.execute("SELECT run_id, label, state, duration_sec, remaining_sec, deadline FROM countdown WHERE id = 1").fetchone()
+        if old and old[0] and old[2] in ("running", "paused"):
+            conn.execute("INSERT OR IGNORE INTO timers (id, label, state, duration_sec, remaining_sec, deadline, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                         (old[0], old[1], old[2], old[3], old[4], old[5], time.time()))
+            conn.execute("UPDATE countdown SET state = 'migrated', deadline = NULL WHERE id = 1")
+            conn.execute("UPDATE timer_meta SET revision = revision + 1 WHERE id = 1")
         conn.commit()
 
 
@@ -82,13 +96,20 @@ class DismissRequest(BaseModel):
     math_answer: Optional[int] = None
 
 
-class TimerStart(BaseModel):
+MAX_TIMERS = 20
+
+
+class TimerCreate(BaseModel):
     duration_sec: int = Field(..., ge=1, le=86400, strict=True)
     label: str = Field("Timer", max_length=80)
+    start: bool = True
+    code_red: bool = False
+    custom_phrase: str = Field("", max_length=120)
+    ring_duration_sec: int = Field(60, ge=10, le=600, strict=True)
 
 
 class TimerAction(BaseModel):
-    run_id: str
+    seconds: int = Field(60, ge=1, le=3600, strict=True)
 
 
 def alarm_delivery_enabled():
@@ -97,41 +118,74 @@ def alarm_delivery_enabled():
 
 
 def _timer_payload(row, now):
+    """One timer as the page sees it. The Code Red phrase stays on the server until the timer rings."""
     result = dict(row)
-    result["sampled_at"] = now
-    result["edition"] = os.getenv("ULTRASUITE_EDITION", "Public")
-    result["delivery_enabled"] = alarm_delivery_enabled()
+    result["code_red"] = bool(result["code_red"])
+    result.pop("custom_phrase", None)
     result["remaining_sec"] = max(0.0, row["deadline"] - now) if row["state"] == "running" else row["remaining_sec"]
     return result
 
 
+def _timers_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _bump(conn):
+    conn.execute("UPDATE timer_meta SET revision = revision + 1 WHERE id = 1")
+
+
 def timer_snapshot():
-    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row
-        return _timer_payload(conn.execute("SELECT * FROM countdown WHERE id = 1").fetchone(), time.time())
+    """Every timer plus the delivery metadata the page needs before it lets anything ring."""
+    now = time.time()
+    with contextlib.closing(_timers_db()) as conn:
+        # Keep rows and their revision in one read snapshot, even if another request changes a timer.
+        conn.execute("BEGIN")
+        rows = conn.execute("SELECT * FROM timers ORDER BY created_at, rowid").fetchall()
+        revision = conn.execute("SELECT revision FROM timer_meta WHERE id = 1").fetchone()[0]
+    return {"timers": [_timer_payload(r, now) for r in rows], "revision": revision, "sampled_at": now,
+            "edition": os.getenv("ULTRASUITE_EDITION", "Public"), "delivery_enabled": alarm_delivery_enabled(),
+            "max_timers": MAX_TIMERS}
+
+
+def timer_summary(snapshot=None):
+    """Small status for the Ultra Suite hub and the Dock: how many timers run and which finishes first."""
+    timers = (snapshot or timer_snapshot())["timers"]
+    running = [t for t in timers if t["state"] == "running"]
+    first = min(running, key=lambda t: t["remaining_sec"], default=None)
+    return {"count": len(timers), "running": len(running), "paused": sum(t["state"] == "paused" for t in timers),
+            "next_in_sec": math.ceil(first["remaining_sec"]) if first else None,
+            "next_label": first["label"] if first else None}
 
 
 def claim_due_timer():
-    """Durably finish a due timer before audio. An alarm already ringing takes priority."""
+    """Durably finish the first due timer before audio. An alarm already ringing takes priority (the scheduler only
+    calls this while idle). Timers that finished longer ago than the alarm catch-up window become expired silently."""
     if not alarm_delivery_enabled():
         return None
-    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row
+    from .clock import CATCH_UP
+    with contextlib.closing(_timers_db()) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT * FROM countdown WHERE id = 1").fetchone()
         now = time.time()
-        if row["state"] != "running" or row["deadline"] > now:
-            return None
-        # Use the alarm engine's existing catch-up bound after sleep/restart.
-        from .clock import CATCH_UP
-        expired = now - row["deadline"] > CATCH_UP.total_seconds()
-        conn.execute("UPDATE countdown SET state = ?, remaining_sec = 0, deadline = NULL, revision = revision + 1 WHERE id = 1",
-                     ("expired" if expired else "finished",))
+        due = conn.execute("SELECT * FROM timers WHERE state = 'running' AND deadline <= ? ORDER BY deadline, created_at, rowid", (now,)).fetchall()
+        claimed = None
+        for row in due:
+            expired = now - row["deadline"] > CATCH_UP.total_seconds()
+            if not expired and claimed is not None:
+                continue  # rings after the current one is stopped
+            conn.execute("UPDATE timers SET state = ?, remaining_sec = 0, deadline = NULL WHERE id = ?",
+                         ("expired" if expired else "finished", row["id"]))
+            if not expired:
+                claimed = row
+        if due:
+            _bump(conn)
         conn.commit()
-        if expired:
-            return None
-        return {"id": row["run_id"], "label": row["label"] + " finished", "is_timer": True,
-                "code_red": False, "math_mission_difficulty": 0, "ring_duration_sec": 60}
+    if claimed is None:
+        return None
+    return {"id": claimed["id"], "timer_id": claimed["id"], "label": claimed["label"] + " finished", "is_timer": True,
+            "code_red": bool(claimed["code_red"]), "custom_phrase": claimed["custom_phrase"],
+            "math_mission_difficulty": 0, "ring_duration_sec": int(claimed["ring_duration_sec"])}
 
 
 class ActiveRingingState:
@@ -163,7 +217,7 @@ async def broadcast_state():
 
     payload = {
         "type": "RING_STATE",
-        "timer": timer_snapshot(),
+        "timers": timer_snapshot(),
         "is_ringing": ring_state.is_ringing,
         "alarm": ring_state.alarm,
         "remaining_sec": remaining_sec,
@@ -338,7 +392,8 @@ async def serve_ui():
 @app.get("/api/ring")
 async def ring_status():
     """Tiny status for the desktop app: is anything ringing right now?"""
-    return {"is_ringing": ring_state.is_ringing, "alarm": (ring_state.alarm or {}).get("label")}
+    return {"is_ringing": ring_state.is_ringing, "alarm": (ring_state.alarm or {}).get("label"),
+            "is_timer": bool((ring_state.alarm or {}).get("is_timer")), "timers": timer_summary()}
 
 
 @app.get("/api/alarms/history")
@@ -355,9 +410,9 @@ async def next_alarm():
     up a minute early and the alarm still rings."""
     now = local_now()
     times = [t for t in (next_ring(a, now) for a in fetch_all_alarms()) if t]
-    timer = timer_snapshot()
-    if timer["state"] == "running":
-        times.append(now + datetime.timedelta(seconds=math.ceil(timer["remaining_sec"])))
+    due = timer_summary()["next_in_sec"]
+    if due is not None:
+        times.append(now + datetime.timedelta(seconds=due))
     if not times:
         return {"in_sec": None}
     at = min(times)
@@ -369,53 +424,118 @@ async def list_alarms():
     return {"alarms": fetch_all_alarms()}
 
 
-@app.get("/api/timer")
-async def get_timer():
+@app.get("/api/timers")
+async def get_timers():
     return timer_snapshot()
 
 
-@app.post("/api/timer/start")
-async def start_timer(payload: TimerStart):
+def _need_delivery():
     if not alarm_delivery_enabled():
-        raise HTTPException(403, "Timers are disabled in this edition.")
-    if ring_state.is_ringing and (ring_state.alarm or {}).get("is_timer"):
-        raise HTTPException(409, "Stop the ringing timer before starting another.")
-    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        raise HTTPException(403, "Timers can't ring in this edition.")
+
+
+@app.post("/api/timers")
+async def create_timer(payload: TimerCreate):
+    label = payload.label.strip() or "Timer"
+    phrase = payload.custom_phrase.strip()
+    if payload.code_red and len(phrase) < 4:
+        raise HTTPException(400, "Code Red needs a phrase of at least 4 characters.")
+    if payload.start:
+        _need_delivery()
+    now = time.time()
+    timer_id = "tmr-" + uuid.uuid4().hex[:12]
+    with contextlib.closing(_timers_db()) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        state = conn.execute("SELECT state FROM countdown WHERE id = 1").fetchone()[0]
-        if state in {"running", "paused"}:
-            raise HTTPException(409, "Reset the current timer before starting another.")
-        conn.execute("UPDATE countdown SET run_id = ?, label = ?, state = 'running', duration_sec = ?, remaining_sec = ?, deadline = ?, revision = revision + 1 WHERE id = 1",
-                     ("timer-" + uuid.uuid4().hex, payload.label.strip() or "Timer", payload.duration_sec,
-                      payload.duration_sec, time.time() + payload.duration_sec))
+        if conn.execute("SELECT COUNT(*) FROM timers").fetchone()[0] >= MAX_TIMERS:
+            raise HTTPException(409, f"You can keep up to {MAX_TIMERS} timers. Delete one first.")
+        conn.execute("INSERT INTO timers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (timer_id, label, "running" if payload.start else "idle", payload.duration_sec, payload.duration_sec,
+                      now + payload.duration_sec if payload.start else None, now, int(payload.code_red),
+                      phrase if payload.code_red else "", payload.ring_duration_sec))
+        _bump(conn)
         conn.commit()
-    return timer_snapshot()
+    snap = timer_snapshot()
+    snap["id"] = timer_id
+    return snap
 
 
-@app.post("/api/timer/{action}")
-async def control_timer(action: str, payload: TimerAction):
-    if action not in {"pause", "resume", "reset"}:
+async def _stop_ring_for(timer_id: str, why: str):
+    """Quiet a ringing timer that the person just restarted, reset or deleted. A Code Red timer keeps ringing: only
+    its phrase stops it."""
+    active = ring_state.alarm or {}
+    if not (ring_state.is_ringing and active.get("timer_id") == timer_id) or active.get("code_red"):
+        return
+    log_event(active, "dismissed", why)
+    ring_state.is_ringing = False
+    ring_state.alarm = None
+    ring_state.math_question = None
+    ring_state.math_solution = None
+    try:
+        async with httpx.AsyncClient(timeout=2.5, headers=BRIDGE_HEADERS) as client:
+            await client.post(f"{HOST_AUDIO_BRIDGE_URL}/stop", json={})
+    except Exception:
+        pass
+
+
+@app.post("/api/timers/{timer_id}/{action}")
+async def control_timer(timer_id: str, action: str, payload: Optional[TimerAction] = None):
+    if action not in {"start", "pause", "resume", "reset", "add"}:
         raise HTTPException(404, "Unknown timer action.")
-    if action == "resume" and not alarm_delivery_enabled():
-        raise HTTPException(403, "Timers are disabled in this edition.")
-    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row
+    payload = payload or TimerAction()
+    now = time.time()
+    with contextlib.closing(_timers_db()) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT * FROM countdown WHERE id = 1").fetchone()
-        if payload.run_id != row["run_id"]:
-            raise HTTPException(409, "This timer has changed. Refresh and try again.")
-        remaining = _timer_payload(row, time.time())["remaining_sec"]
-        if action == "reset":
-            state, remaining, deadline = "idle", row["duration_sec"], None
-        elif action == "pause" and row["state"] == "running" and remaining > 0:
+        row = conn.execute("SELECT * FROM timers WHERE id = ?", (timer_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "That timer is gone. Refresh and try again.")
+        state = row["state"]
+        remaining = _timer_payload(row, now)["remaining_sec"]
+        duration = row["duration_sec"]
+        if state == "running" and remaining <= 0 and action != "reset":
+            raise HTTPException(409, "This timer is finishing. Try again in a moment.")
+        if action == "start" and state in ("idle", "finished", "expired"):
+            _need_delivery()
+            state, remaining, deadline = "running", duration, now + duration
+        elif action == "pause" and state == "running":
             state, deadline = "paused", None
-        elif action == "resume" and row["state"] == "paused":
-            state, deadline = "running", time.time() + remaining
+        elif action == "resume" and state == "paused":
+            _need_delivery()
+            state, deadline = "running", now + remaining
+        elif action == "reset":
+            state, remaining, deadline = "idle", duration, None
+        elif action == "add":
+            extra = payload.seconds
+            if state in ("finished", "expired"):  # one more minute after it rang
+                _need_delivery()
+                state, remaining, duration = "running", extra, extra
+            else:
+                if remaining + extra > 86400:
+                    raise HTTPException(400, "A timer can run for up to 24 hours.")
+                if state == "running":
+                    _need_delivery()
+                remaining, duration = remaining + extra, min(86400, duration + extra)
+            deadline = now + remaining if state == "running" else None
         else:
             raise HTTPException(409, "The timer can no longer do that. Refresh and try again.")
-        conn.execute("UPDATE countdown SET state = ?, remaining_sec = ?, deadline = ?, revision = revision + 1 WHERE id = 1",
-                     (state, remaining, deadline))
+        conn.execute("UPDATE timers SET state = ?, remaining_sec = ?, deadline = ?, duration_sec = ? WHERE id = ?",
+                     (state, remaining, deadline, duration, timer_id))
+        _bump(conn)
         conn.commit()
+    if action in ("start", "add", "reset"):
+        await _stop_ring_for(timer_id, f"timer {action} while ringing")
+    return timer_snapshot()
+
+
+@app.delete("/api/timers/{timer_id}")
+async def delete_timer(timer_id: str):
+    with contextlib.closing(_timers_db()) as conn:
+        cur = conn.execute("DELETE FROM timers WHERE id = ?", (timer_id,))
+        if cur.rowcount:
+            _bump(conn)
+        conn.commit()
+    if not cur.rowcount:
+        raise HTTPException(404, "That timer is already gone.")
+    await _stop_ring_for(timer_id, "timer deleted while ringing")
     return timer_snapshot()
 
 

@@ -71,39 +71,107 @@ label.f{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin
 .in:hover{border-color:var(--ink-3)}
 .in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237b8494' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;text-overflow:ellipsis}
-.time-trigger{display:flex;align-items:center;justify-content:space-between;font-variant-numeric:tabular-nums;text-align:left;font-weight:600}
-.time-trigger svg{color:var(--ink-3);flex:none}
-.time-dialog{margin:auto;width:min(360px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:24px;border:1px solid var(--line);border-radius:22px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-lg)}
-.time-dialog::backdrop{background:rgba(10,14,24,.42);backdrop-filter:blur(5px)}
-.picker-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.picker-heading h2{font:600 19px var(--font-display)}
-.picker-caption{font-size:13px;color:var(--ink-2);margin-bottom:20px}
-.time-columns{display:grid;grid-template-columns:1fr 1fr .85fr;gap:10px}
-.wheel-label{text-align:center;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
-.time-wheel{height:220px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent;border:1px solid var(--line);border-radius:14px;padding:88px 6px;background:var(--bg);scroll-padding:80px}
-.wheel-option{display:block;width:100%;height:40px;border:0;border-radius:9px;background:transparent;color:var(--ink-2);font-size:19px;font-variant-numeric:tabular-nums;flex:none}
-.wheel-option:hover{background:var(--surface-2)}
-.wheel-option[aria-selected=true]{background:var(--accent-soft);color:var(--ink);font-weight:700}
-.picker-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
-.timer-body{text-align:center;padding:24px 20px}
-.timer-face{--progress:0%;width:220px;height:220px;margin:0 auto 22px;padding:5px;border-radius:50%;background:conic-gradient(var(--accent) var(--progress),var(--surface-2) 0);display:grid;place-items:center}
-.timer-face-inner{width:100%;height:100%;border-radius:50%;background:var(--surface);display:flex;flex-direction:column;justify-content:center;align-items:center}
-.timer-readout{font:500 clamp(36px,6vw,48px)/1.2 var(--font-display);letter-spacing:-.035em;font-variant-numeric:tabular-nums}
-.timer-status{font-size:13px;color:var(--ink-2);margin-top:8px}
-.timer-presets{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0}
-.timer-preset{padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font-size:13px}
-.timer-preset:hover,.timer-preset[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--ink)}
-.timer-duration{display:flex;justify-content:center;align-items:center;gap:10px;margin:0 auto 18px;max-width:310px}
-.timer-duration label{flex:1;min-width:0;font-size:11px;color:var(--ink-3);letter-spacing:.05em;text-transform:uppercase}
-.timer-duration input{display:block;text-align:center;padding:0 4px;margin-top:5px;font-size:19px;font-variant-numeric:tabular-nums}
-.timer-controls{display:flex;justify-content:center;gap:8px}
-.timer-controls .primary{min-width:140px}
-.timer-note{max-width:360px;margin:16px auto 0;font-size:12px;color:var(--ink-3)}
-.timer-body :disabled{cursor:not-allowed;opacity:.55}
-.tool-nav{display:flex;gap:4px;padding:4px;width:max-content;border:1px solid var(--line);background:var(--surface);border-radius:12px;margin:0 0 20px}
-.tool-nav a{padding:7px 18px;border-radius:8px;text-decoration:none;color:var(--ink-2);font-size:13px;font-weight:600}
-.tool-nav a:hover,.tool-nav a:focus-visible{background:var(--surface-2);color:var(--ink)}
-#timer-card,#h-new{scroll-margin-top:20px}
+.time-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums;text-align:left;font-weight:600}
+.time-trigger svg{color:var(--ink-3);flex:none;transition:color .15s}
+.time-trigger:hover svg,.time-trigger[aria-expanded=true] svg{color:var(--accent)}
+.time-trigger[aria-expanded=true]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.time-trigger .soft{font-weight:500;color:var(--ink-3);margin-left:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Popovers (time and date pickers): anchored under the field on wide screens, a bottom sheet on phones */
+.pop{position:fixed;margin:0;inset:auto;width:min(344px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-lg);transform-origin:top center}
+.pop.above{transform-origin:bottom center}
+.pop[open]{animation:pop-in .2s cubic-bezier(.2,.8,.2,1)}
+.pop.closing{animation:pop-out .14s ease-in forwards}
+.pop::backdrop{background:rgba(10,14,24,.16)}
+.pop.sheet{left:0;right:0;bottom:0;top:auto;width:100%;max-width:none;border-radius:22px 22px 0 0;border-bottom:0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+.pop.sheet::backdrop{background:rgba(10,14,24,.4)}
+.pop.sheet[open]{animation:sheet-in .28s cubic-bezier(.2,.8,.2,1)}
+.pop.sheet.closing{animation:sheet-out .2s ease-in forwards}
+@keyframes pop-in{from{opacity:0;transform:translateY(-6px) scale(.97)}}
+@keyframes pop-out{to{opacity:0;transform:translateY(-4px) scale(.98)}}
+@keyframes sheet-in{from{transform:translateY(100%)}}
+@keyframes sheet-out{to{transform:translateY(100%)}}
+.pop-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pop-h h2{font:600 15px/1.3 var(--font-display)}
+.pop-f{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.mini-toggle{height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font-size:12px;font-weight:600}
+.mini-toggle[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.icon-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);display:inline-grid;place-items:center;font-size:17px;line-height:1}
+.icon-btn:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.tp-typed{width:100%;height:52px;border-radius:12px;border:1px solid var(--line-strong);background:var(--bg);color:var(--ink);text-align:center;font:600 28px/1 var(--font-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;transition:border-color .15s,box-shadow .15s}
+.tp-typed:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tp-typed.bad{border-color:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+.tp-hint{font-size:12px;color:var(--ink-3);text-align:center;margin-top:6px;min-height:18px}
+.tp-hint.bad{color:var(--red-ink)}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.quick button{height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;transition:background .12s,border-color .12s,color .12s,transform .08s}
+.quick button:hover{background:var(--surface-2);color:var(--ink)}
+.quick button:active{transform:scale(.96)}
+.quick button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.quick .sep{flex-basis:100%;height:0}
+
+/* Wheels: scroll, flick or drag a column; it snaps to the middle row */
+.wheels{position:relative;display:flex;justify-content:center;align-items:center;gap:2px;height:200px;margin-top:12px;user-select:none;-webkit-user-select:none}
+.wheel-band{position:absolute;left:0;right:0;top:50%;height:40px;margin-top:-20px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);pointer-events:none;transition:border-color .15s,box-shadow .15s}
+.wheels:has(.wheel:focus-visible) .wheel-band{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.wheel{position:relative;z-index:1;height:200px;width:62px;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;touch-action:pan-y;outline:none;cursor:grab;perspective:500px;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent)}
+.wheel::-webkit-scrollbar{display:none}
+.wheel.free{scroll-snap-type:none;cursor:grabbing}
+.wheel-track{padding:80px 0}
+.wheel-item{height:40px;line-height:40px;text-align:center;scroll-snap-align:center;font:500 22px/40px var(--font-display);font-variant-numeric:tabular-nums;color:var(--ink-3);transform-origin:center;backface-visibility:hidden}
+.wheel-item.on{color:var(--ink);font-weight:650}
+.wheel:focus-visible .wheel-item.on{color:var(--accent)}
+.wheel.narrow{width:56px}
+.wheel-colon{position:relative;z-index:1;font:600 22px/1 var(--font-display);color:var(--ink-3);margin-top:-3px}
+.wheel-unit{position:relative;z-index:1;font-size:12px;font-weight:600;color:var(--ink-3);margin:0 8px 0 -2px;width:22px}
+
+/* Calendar */
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.dp-grid.slide-next{animation:slide-next .22s cubic-bezier(.2,.8,.2,1)}
+.dp-grid.slide-prev{animation:slide-prev .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes slide-next{from{opacity:0;transform:translateX(18px)}}
+@keyframes slide-prev{from{opacity:0;transform:translateX(-18px)}}
+.dp-dow{text-align:center;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--ink-3);padding:4px 0 6px}
+.dp-day{height:38px;border:0;border-radius:10px;background:transparent;color:var(--ink);font-size:13.5px;font-variant-numeric:tabular-nums;transition:background .12s,color .12s}
+.dp-day:hover:not(:disabled){background:var(--surface-2)}
+.dp-day.out{color:var(--ink-3)}
+.dp-day:disabled{color:var(--ink-3);opacity:.4;cursor:default}
+.dp-day[aria-current=date]{box-shadow:inset 0 0 0 1px var(--line-strong);font-weight:700}
+.dp-day[aria-selected=true]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+
+/* Alarm / Timer switch */
+.seg{position:relative;display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;padding:4px;margin:0 0 20px;border:1px solid var(--line);background:var(--surface);border-radius:12px;box-shadow:var(--shadow)}
+.seg-pill{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:8px;background:var(--accent);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.seg[data-active=timer] .seg-pill{transform:translateX(100%)}
+.seg button{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:120px;height:34px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:var(--ink-2);font-size:13.5px;font-weight:600;transition:color .2s}
+.seg button[aria-selected=true]{color:var(--accent-ink)}
+.seg-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--red);color:#fff;font-size:11px;line-height:18px;font-variant-numeric:tabular-nums}
+.panel-in{animation:panel-in .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes panel-in{from{opacity:0;transform:translateY(6px)}}
+
+/* Timers */
+.tmr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.tmr{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:10px;animation:tin .2s ease-out;transition:border-color .2s,background .2s}
+.tmr.finished{border-color:color-mix(in srgb,var(--red) 45%,var(--line));background:var(--red-soft)}
+.tmr-ring{position:relative;width:150px;height:150px}
+.tmr-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.tmr-ring circle{fill:none;stroke-width:7}
+.tmr-ring .trk{stroke:var(--surface-2)}
+.tmr-ring .bar{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:100;transition:stroke .2s}
+.tmr.paused .bar{stroke:var(--amber)}
+.tmr.finished .bar,.tmr.expired .bar{stroke:var(--red)}
+.tmr.idle .bar{stroke:var(--line-strong)}
+.tmr-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.tmr-left{font:600 30px/1.1 var(--font-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.tmr-total{font-size:12px;color:var(--ink-3);margin-top:2px;font-variant-numeric:tabular-nums}
+.tmr-name{font-weight:600;font-size:14px;text-align:center;overflow-wrap:anywhere}
+.tmr-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.tmr-actions .btn{width:100%}
+.tmr.finished .tmr-left{color:var(--red-ink)}
+.tmr-empty{grid-column:1/-1}
+.ring-box .btn.ring-more{margin-top:10px;background:transparent;border-color:rgba(255,149,146,.45);color:#ffd5d3}
 .hint{font-size:12px;color:var(--ink-3);margin-top:6px}
 
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -221,21 +289,25 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   <header class="top">
     <div class="brand">
       <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/></svg></div>
-      <div><h1>Code Red Alarm</h1><p>Alarms and timers, on your schedule</p></div>
+      <div><h1>Code Red Alarm</h1><p>Alarms and timers that ring on your speaker</p></div>
     </div>
     <div class="chips" role="status" aria-live="polite"><span data-theme-slot></span>
       <span class="chip" id="chip-engine"><span class="dot"></span>Connecting…</span>
       <span class="chip" id="chip-speaker"><span class="dot"></span>Speaker: checking…</span>
     </div>
   </header>
-  <nav class="tool-nav" aria-label="Clock tools"><a href="#h-new">Alarms</a><a href="#timer-card">Timer</a></nav>
+  <div class="seg" role="tablist" aria-label="Clock tools" id="tabs" data-active="alarm">
+    <span class="seg-pill" aria-hidden="true"></span>
+    <button type="button" role="tab" id="tab-alarm" aria-controls="panel-alarm" aria-selected="true">Alarm</button>
+    <button type="button" role="tab" id="tab-timer" aria-controls="panel-timer" aria-selected="false" tabindex="-1">Timer<span class="seg-badge" id="timer-badge" hidden></span></button>
+  </div>
 
   <div class="banner bad" id="clock-warn" role="alert" hidden>
     <span aria-hidden="true">⚠</span>
     <div id="clock-warn-text"></div>
   </div>
 
-  <div class="grid">
+  <div class="grid" id="panel-alarm" role="tabpanel" aria-labelledby="tab-alarm">
     <div class="stack">
       <section class="card" aria-labelledby="h-new">
         <div class="clock">
@@ -253,7 +325,7 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
             <div class="field">
               <label class="f" id="time-label" for="time-picker-open">Time</label>
               <input type="hidden" id="f-time" value="07:00" />
-              <button class="in time-trigger" type="button" id="time-picker-open" aria-haspopup="dialog" aria-controls="time-picker" aria-labelledby="time-label time-picker-value"><span id="time-picker-value">7:00 AM</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+              <button class="in time-trigger" type="button" id="time-picker-open" aria-haspopup="dialog" aria-expanded="false" aria-controls="time-picker" aria-labelledby="time-label time-picker-value"><span id="time-picker-value">7:00 AM</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
             </div>
             <div class="field">
               <label class="f" for="f-duration">Rings for</label>
@@ -275,8 +347,9 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
             </div>
           </div>
           <div class="field" id="date-field" hidden>
-            <label class="f" for="f-date">On date</label>
-            <input class="in" type="date" id="f-date" />
+            <label class="f" id="date-label" for="date-picker-open">On date</label>
+            <input type="hidden" id="f-date" value="" />
+            <button class="in time-trigger" type="button" id="date-picker-open" aria-haspopup="dialog" aria-expanded="false" aria-controls="date-picker" aria-labelledby="date-label date-picker-value"><span id="date-picker-value">Choose a date</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button>
             <div class="hint">One-time alarm. It turns itself off after ringing.</div>
           </div>
           <div class="field">
@@ -335,25 +408,67 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
       <div class="card-h"><h2 id="h-list">Alarms</h2><span class="sub" id="count"></span></div>
       <div class="card-b"><div class="list" id="list" aria-live="polite"></div></div>
     </section>
-    <section class="card" aria-labelledby="h-timer" id="timer-card">
-      <div class="card-h"><h2 id="h-timer">Timer</h2><span class="sub">Up to 24 hours</span></div>
-      <div class="timer-body">
-        <div class="timer-face" id="timer-face"><div class="timer-face-inner"><div class="timer-readout" id="timer-readout" role="timer" aria-label="Time remaining">05:00</div><div class="timer-status" id="timer-status" role="status">Connecting…</div></div></div>
-        <div class="timer-presets" role="group" aria-label="Timer presets"><button type="button" class="timer-preset" data-seconds="300" aria-pressed="true">5 min</button><button type="button" class="timer-preset" data-seconds="600" aria-pressed="false">10 min</button><button type="button" class="timer-preset" data-seconds="1500" aria-pressed="false">25 min</button><button type="button" class="timer-preset" data-seconds="2700" aria-pressed="false">45 min</button></div>
-        <div class="timer-duration" role="group" aria-label="Custom timer duration"><label>Hours<input class="in" id="timer-hours" type="number" min="0" max="24" step="1" value="0" inputmode="numeric" /></label><span aria-hidden="true">:</span><label>Minutes<input class="in" id="timer-minutes" type="number" min="0" max="59" step="1" value="5" inputmode="numeric" /></label><span aria-hidden="true">:</span><label>Seconds<input class="in" id="timer-seconds" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" /></label></div>
-        <div class="timer-controls"><button type="button" class="btn primary" id="timer-toggle" disabled>Start timer</button><button type="button" class="btn ghost" id="timer-reset" disabled>Reset</button></div>
-        <p class="timer-note">Keeps counting with this window closed. Uses your chosen alarm speaker. The PC and alarm service need to be available.</p>
-      </div>
-    </section>
+    </div>
+  </div>
+  <div class="grid" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer" hidden>
+    <div class="stack">
+      <section class="card" aria-labelledby="h-new-timer">
+        <div class="card-h"><h2 id="h-new-timer">New timer</h2><span class="sub">Up to 24 hours</span></div>
+        <form class="card-b" id="timer-form" novalidate>
+          <div class="wheels" id="tm-wheels" role="group" aria-label="Timer length"><div class="wheel-band" aria-hidden="true"></div><div id="tm-h"></div><span class="wheel-unit" aria-hidden="true">hr</span><div id="tm-m"></div><span class="wheel-unit" aria-hidden="true">min</span><div id="tm-s"></div><span class="wheel-unit" aria-hidden="true">sec</span></div>
+          <div class="quick" id="tm-presets" role="group" aria-label="Timer presets" style="justify-content:center;margin-bottom:16px"></div>
+          <div class="row2">
+            <div class="field">
+              <label class="f" for="tm-label">Name</label>
+              <input class="in" id="tm-label" maxlength="80" placeholder="Timer" />
+            </div>
+            <div class="field">
+              <label class="f" for="tm-ring">Rings for</label>
+              <select class="in" id="tm-ring">
+                <option value="30">30 seconds</option><option value="60" selected>1 minute</option>
+                <option value="120">2 minutes</option><option value="300">5 minutes</option>
+              </select>
+            </div>
+          </div>
+          <div class="cr" id="tm-cr">
+            <div class="switch-row">
+              <div><div class="t">Code Red</div><div class="s">To stop it, type a phrase exactly. Off unless you turn it on.</div></div>
+              <label class="switch red"><input type="checkbox" id="tm-codered" aria-label="Code Red phrase lock for this timer" /><span></span></label>
+            </div>
+            <div class="phrase">
+              <label class="f" for="tm-phrase">Phrase to type</label>
+              <input class="in" id="tm-phrase" maxlength="120" value="I am up and on it" />
+              <div class="hint">Case-sensitive.</div>
+            </div>
+          </div>
+          <button type="submit" class="btn primary block" id="tm-start" disabled>Start timer</button>
+          <p class="hint" id="tm-note">Rings on your alarm speaker with your Sound settings (Alarm tab), even with this window closed.</p>
+        </form>
+      </section>
+    </div>
+    <div class="stack">
+      <section class="card" aria-labelledby="h-timers">
+        <div class="card-h"><h2 id="h-timers">Timers</h2><span class="sub" id="timer-count"></span></div>
+        <div class="card-b"><div class="tmr-list" id="timer-list"></div></div>
+      </section>
     </div>
   </div>
 </div>
 
-<dialog class="time-dialog" id="time-picker" aria-labelledby="time-picker-title" aria-describedby="time-picker-help">
-  <div class="picker-heading"><h2 id="time-picker-title">Choose a time</h2><button type="button" class="btn ghost sm" id="time-picker-close" aria-label="Close time picker">✕</button></div>
-  <p class="picker-caption" id="time-picker-help">Scroll or use the arrow keys to find your time.</p>
-  <div class="time-columns"><div><div class="wheel-label" id="hour-label">Hour</div><div class="time-wheel" id="picker-hours" role="listbox" tabindex="0" aria-labelledby="hour-label"></div></div><div><div class="wheel-label" id="minute-label">Minute</div><div class="time-wheel" id="picker-minutes" role="listbox" tabindex="0" aria-labelledby="minute-label"></div></div><div><div class="wheel-label" id="period-label">Period</div><div class="time-wheel" id="picker-period" role="listbox" tabindex="0" aria-labelledby="period-label"></div></div></div>
-  <div class="picker-actions"><button type="button" class="btn ghost" id="time-picker-cancel">Cancel</button><button type="button" class="btn primary" id="time-picker-apply">Apply time</button></div>
+<dialog class="pop" id="time-picker" aria-labelledby="tp-title" aria-describedby="tp-hint">
+  <div class="pop-h"><h2 id="tp-title">Alarm time</h2><button type="button" class="mini-toggle" id="tp-24" aria-pressed="false" title="Use a 24-hour clock">24-hour</button></div>
+  <label class="sr" for="tp-typed">Type a time</label>
+  <input class="tp-typed" id="tp-typed" autocomplete="off" spellcheck="false" enterkeyhint="done" />
+  <div class="tp-hint" id="tp-hint" aria-live="polite">Type a time like 6:45 or 7p, or spin the wheels.</div>
+  <div class="wheels" id="tp-wheels" role="group" aria-label="Time"><div class="wheel-band" aria-hidden="true"></div><div id="tp-hour"></div><span class="wheel-colon" aria-hidden="true">:</span><div id="tp-minute"></div><div id="tp-period"></div></div>
+  <div class="quick" id="tp-quick" role="group" aria-label="Quick picks"></div>
+  <div class="pop-f"><button type="button" class="btn ghost" id="tp-cancel">Cancel</button><button type="button" class="btn primary" id="tp-apply">Set time</button></div>
+</dialog>
+<dialog class="pop" id="date-picker" aria-labelledby="dp-title">
+  <div class="pop-h"><h2 id="dp-title" aria-live="polite">Month</h2><div style="display:flex;gap:6px"><button type="button" class="icon-btn" id="dp-prev" aria-label="Previous month">&#8249;</button><button type="button" class="icon-btn" id="dp-next" aria-label="Next month">&#8250;</button></div></div>
+  <div class="dp-grid" id="dp-grid" role="grid" aria-labelledby="dp-title"></div>
+  <div class="quick" id="dp-quick" role="group" aria-label="Quick picks"></div>
+  <div class="pop-f"><button type="button" class="btn ghost" id="dp-cancel">Cancel</button></div>
 </dialog>
 <div class="ring" id="ring" role="alertdialog" aria-modal="true" aria-labelledby="ring-title">
   <div class="ring-box">
@@ -371,6 +486,7 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     <input class="in" id="ring-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Type the phrase above" />
     <div class="err" id="ring-err" role="alert"></div>
     <button type="button" class="btn danger block" id="ring-stop">Stop alarm</button>
+    <button type="button" class="btn block ring-more" id="ring-more" hidden>Add 1 minute</button>
     <div class="meta" id="ring-meta"></div>
   </div>
 </div>
@@ -409,73 +525,212 @@ const pretty = (n) => {
   const m = s.match(/^(?:Speakers|Headphones|Speaker)\s*\((.+)\)$/i);
   return m ? m[1] : s;
 };
-const fmt12 = (hhmm) => { const [h,m] = hhmm.split(":").map(Number); return { t: `${((h+11)%12)+1}:${String(m).padStart(2,"0")}`, ap: h < 12 ? "AM" : "PM" }; };
 
-/* ---------- Time picker ---------- */
+/* ---------- Time format ---------- */
+const pad2 = (n) => String(n).padStart(2,"0");
+const localeUses24 = (() => { try { return /^h2/.test(new Intl.DateTimeFormat(undefined,{hour:"numeric"}).resolvedOptions().hourCycle || ""); } catch { return false; } })();
+let clock24 = store.get("clock24", localeUses24) === true;
+function fmtClock(hhmm, use24 = clock24){
+  const [h,m] = hhmm.split(":").map(Number);
+  return use24 ? {t:`${pad2(h)}:${pad2(m)}`, ap:""} : {t:`${(h+11)%12+1}:${pad2(m)}`, ap:h < 12 ? "AM" : "PM"};
+}
+const clockText = (hhmm, use24 = clock24) => { const f = fmtClock(hhmm, use24); return f.ap ? `${f.t} ${f.ap}` : f.t; };
 function pickerParts(value){
   const [h,m] = value.split(":").map(Number);
-  return {hour: (h + 11) % 12 + 1, minute: m, period: h < 12 ? "AM" : "PM"};
+  return {hour24:h, hour:(h + 11) % 12 + 1, minute:m, period:h < 12 ? "AM" : "PM"};
 }
-function pickerValue(parts){
-  const hour = parts.hour % 12 + (parts.period === "PM" ? 12 : 0);
-  return `${String(hour).padStart(2,"0")}:${String(parts.minute).padStart(2,"0")}`;
+function pickerValue(parts, use24 = false){
+  const hour = use24 ? parts.hour24 : parts.hour % 12 + (parts.period === "PM" ? 12 : 0);
+  return `${pad2(hour)}:${pad2(parts.minute)}`;
 }
-function syncTimePicker(){ const t = fmt12($("f-time").value); $("time-picker-value").textContent = `${t.t} ${t.ap}`; }
-let pickerDraft = pickerParts("07:00");
-const pickerColumns = [
-  {id:"picker-hours", key:"hour", values:Array.from({length:12},(_,i)=>i+1)},
-  {id:"picker-minutes", key:"minute", values:Array.from({length:60},(_,i)=>i)},
-  {id:"picker-period", key:"period", values:["AM","PM"]}
-];
-function selectPicker(column, value, scroll=true){
-  pickerDraft[column.key] = value;
-  const wheel = $(column.id);
-  [...wheel.children].forEach((option,i) => {
-    const selected = column.values[i] === value;
-    option.setAttribute("aria-selected", String(selected));
-    if (selected) {
-      wheel.setAttribute("aria-activedescendant", option.id);
-      if (scroll) option.scrollIntoView({block:"center"});
+/* "7", "730", "7:30p", "7.30 pm", "19:05", "12a", "noon", "midnight" -> "HH:MM"; anything else -> null. */
+function parseTypedTime(text){
+  const s = String(text ?? "").trim().toLowerCase().replace(/\s+/g," ");
+  if (s === "noon") return "12:00";
+  if (s === "midnight") return "00:00";
+  const m = s.match(/^(\d{1,2})(?:[:. h]?(\d{2}))?\s*(a|p|am|pm|a\.m\.|p\.m\.)?$/);
+  if (!m) return null;
+  let h = +m[1]; const min = m[2] === undefined ? 0 : +m[2], ap = m[3] ? m[3][0] : "";
+  if (min > 59) return null;
+  if (ap) { if (h < 1 || h > 12) return null; h = h % 12 + (ap === "p" ? 12 : 0); }
+  else if (h > 23) return null;
+  return `${pad2(h)}:${pad2(min)}`;
+}
+/* The wall-clock time `minutes` from `now`, rounded up to a whole minute so "+5 min" is never less than 5 minutes. */
+function timeAfter(now, minutes){
+  const d = new Date(now.getTime() + minutes * 60000);
+  if (d.getSeconds() || d.getMilliseconds()) d.setMinutes(d.getMinutes() + 1, 0, 0);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/* ---------- Date helpers ---------- */
+const keyOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const fromKey = (k) => { const [y,m,d] = k.split("-").map(Number); return new Date(y, m-1, d); };
+function addDaysKey(k, n){ const d = fromKey(k); d.setDate(d.getDate() + n); return keyOf(d); }
+function addMonthsKey(k, n){
+  const d = fromKey(k), day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return keyOf(d);
+}
+/* 42 day keys (six Monday-first weeks) covering the month of `k`. */
+function monthCells(k){
+  const first = fromKey(k); first.setDate(1);
+  const start = keyOf(first), lead = (first.getDay() + 6) % 7;
+  return Array.from({length:42}, (_, i) => addDaysKey(start, i - lead));
+}
+function dateLabel(k, todayKey){
+  if (!k) return "Choose a date";
+  const text = fromKey(k).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric", ...(k.slice(0,4) !== todayKey.slice(0,4) ? {year:"numeric"} : {})});
+  return k === todayKey ? `Today, ${text}` : (k === addDaysKey(todayKey, 1) ? `Tomorrow, ${text}` : text);
+}
+/* Keep a one-time alarm in the future: keep the chosen date unless that moment already passed today. */
+function nextDateFor(hhmm, dateKey, now){
+  const today = keyOf(now), [h,m] = hhmm.split(":").map(Number);
+  const at = fromKey(dateKey && dateKey >= today ? dateKey : today); at.setHours(h, m, 0, 0);
+  return at > now ? keyOf(at) : addDaysKey(keyOf(at), 1);
+}
+
+/* ---------- Wheel ---------- */
+const WHEEL_ITEM = 40;
+const reduceMotion = () => {
+  const suite = typeof document !== "undefined" && document.documentElement?.dataset?.motion; // the suite's Appearance setting
+  if (suite === "off" || suite === "reduced") return true;
+  try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+};
+const wheelIndex = (scrollTop, count, item = WHEEL_ITEM) => Math.max(0, Math.min(count - 1, Math.round(scrollTop / item)));
+function wheelStep(index, delta, count, loop){
+  const n = index + delta;
+  return loop ? ((n % count) + count) % count : Math.max(0, Math.min(count - 1, n));
+}
+/* Typed digits or letters pick a row: "4" -> 4, "45" -> 45, "p" -> PM. */
+function wheelTyped(buffer, values, format){
+  const b = String(buffer).toLowerCase();
+  if (/^\d+$/.test(b)) return values.findIndex(v => typeof v === "number" && v === +b);
+  return values.findIndex(v => String(format(v)).toLowerCase().startsWith(b));
+}
+/* One scrollable column. Native scrolling gives touch and trackpad momentum, CSS snap lands on a row, a mouse can
+   drag and flick it, the wheel moves one row per notch, and the keys work like a spin button. */
+function createWheel(el, opts){
+  let values = opts.values, index = 0, pending = null, raf = 0, settleTimer = 0, inertia = 0, typed = "", typedAt = 0, drag = null, wheelAcc = 0;
+  el.classList.add("wheel"); if (opts.narrow) el.classList.add("narrow");
+  el.tabIndex = 0; el.setAttribute("role","spinbutton"); el.setAttribute("aria-label", opts.label);
+  const track = document.createElement("div"); track.className = "wheel-track"; el.appendChild(track);
+  const item = (i) => track.children[i];
+  function build(){
+    track.innerHTML = "";
+    values.forEach((v,i) => { const it = document.createElement("div"); it.className = "wheel-item"; it.textContent = opts.format(v); it.dataset.i = String(i); track.appendChild(it); });
+  }
+  function paint(){
+    raf = 0; const top = el.scrollTop || 0;
+    for (let i = 0; i < values.length; i++) {
+      const d = (i * WHEEL_ITEM - top) / WHEEL_ITEM, a = Math.min(Math.abs(d), 3), it = item(i);
+      if (!it || !it.style) continue;
+      if (a >= 3) { if (it.style.opacity !== "0") { it.style.opacity = "0"; } continue; }
+      it.style.transform = `rotateX(${(-d * 20).toFixed(1)}deg) scale(${(1 - a * .07).toFixed(3)})`;
+      it.style.opacity = (1 - a * .24).toFixed(2);
+    }
+  }
+  const schedulePaint = () => { if (!raf && typeof requestAnimationFrame === "function") raf = requestAnimationFrame(paint); };
+  function commit(i, notify = true){
+    i = Math.max(0, Math.min(values.length - 1, i));
+    const changed = i !== index; item(index)?.classList?.remove("on"); index = i; item(i)?.classList?.add("on");
+    const v = values[i];
+    el.setAttribute("aria-valuenow", String(typeof v === "number" ? v : i));
+    el.setAttribute("aria-valuetext", `${opts.format(v)}${opts.unit ? " " + opts.unit : ""}`);
+    el.setAttribute("aria-valuemin", String(typeof values[0] === "number" ? values[0] : 0));
+    el.setAttribute("aria-valuemax", String(typeof values[values.length-1] === "number" ? values[values.length-1] : values.length - 1));
+    if (changed && notify) opts.onChange?.(v);
+  }
+  function scrollToIndex(i, smooth){
+    if (typeof el.scrollTo === "function") el.scrollTo({top:i * WHEEL_ITEM, behavior:smooth && !reduceMotion() ? "smooth" : "auto"});
+    else el.scrollTop = i * WHEEL_ITEM;
+    schedulePaint();
+  }
+  function settle(){
+    if (drag) return;
+    const i = pending ?? wheelIndex(el.scrollTop || 0, values.length); pending = null; commit(i);
+    if (Math.abs((el.scrollTop || 0) - i * WHEEL_ITEM) > 1) scrollToIndex(i, true);
+    setTimeout(() => el.classList.remove("free"), 320);
+  }
+  function move(delta, loop = false){
+    const from = pending ?? index, to = wheelStep(from, delta, values.length, loop && !!opts.loop);
+    if (to === from) return;
+    pending = to; commit(to); scrollToIndex(to, Math.abs(to - from) <= Math.abs(delta));
+    clearTimeout(settleTimer); settleTimer = setTimeout(settle, 300);
+  }
+  el.addEventListener("scroll", () => {
+    schedulePaint();
+    if (pending === null && !inertia) { const i = wheelIndex(el.scrollTop || 0, values.length); if (i !== index) commit(i); }
+    clearTimeout(settleTimer); settleTimer = setTimeout(settle, 140);
+  }, {passive:true});
+  el.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+    if (Math.abs(dy) >= 50) { wheelAcc = 0; move(Math.sign(dy) * Math.max(1, Math.round(Math.abs(dy) / 100))); return; } // a mouse notch: one row
+    wheelAcc += dy; const steps = Math.trunc(wheelAcc / 36); // a trackpad: follow the fingers
+    if (steps) { wheelAcc -= steps * 36; move(steps); }
+  }, {passive:false});
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    if (inertia) cancelAnimationFrame(inertia); inertia = 0; pending = null;
+    drag = {y:e.clientY, top:el.scrollTop, moved:false, samples:[[performance.now(), e.clientY]]};
+    el.setPointerCapture?.(e.pointerId); el.classList.add("free"); e.preventDefault(); el.focus({preventScroll:true});
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y; if (Math.abs(dy) > 3) drag.moved = true;
+    el.scrollTop = drag.top - dy; drag.samples.push([performance.now(), e.clientY]); if (drag.samples.length > 6) drag.samples.shift();
+  });
+  const endDrag = (e) => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (!d.moved) { // a click on a row picks it
+      el.classList.remove("free");
+      const r = el.getBoundingClientRect(), off = Math.round((e.clientY - (r.top + r.height / 2)) / WHEEL_ITEM);
+      if (off) move(off); return;
+    }
+    const [t0,y0] = d.samples[0], [t1,y1] = d.samples[d.samples.length - 1];
+    let v = t1 > t0 ? (y0 - y1) / (t1 - t0) : 0; // px per ms; positive scrolls down
+    if (reduceMotion() || Math.abs(v) < .15 || performance.now() - t1 > 80) { settle(); return; }
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(32, now - last); last = now;
+      const before = el.scrollTop; el.scrollTop += v * dt; v *= Math.pow(.94, dt / 16);
+      if (Math.abs(v) > .04 && el.scrollTop !== before) inertia = requestAnimationFrame(step);
+      else { inertia = 0; settle(); }
+    };
+    inertia = requestAnimationFrame(step);
+  };
+  el.addEventListener("pointerup", endDrag); el.addEventListener("pointercancel", endDrag);
+  el.addEventListener("keydown", (e) => {
+    const big = opts.page || 5, map = {ArrowUp:1, ArrowDown:-1, PageUp:big, PageDown:-big};
+    if (e.key in map) { e.preventDefault(); move(map[e.key], true); return; }
+    if (e.key === "Home" || e.key === "End") { e.preventDefault(); move((e.key === "Home" ? 0 : values.length - 1) - (pending ?? index)); return; }
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && /[0-9a-z]/i.test(e.key)) {
+      const now = performance.now(); typed = (now - typedAt < 1000 ? typed : "") + e.key; typedAt = now;
+      let i = wheelTyped(typed, values, opts.format);
+      if (i < 0) { typed = e.key; i = wheelTyped(typed, values, opts.format); }
+      if (i >= 0) { e.preventDefault(); move(i - (pending ?? index)); }
     }
   });
+  build(); commit(0, false);
+  return {
+    get value(){ return values[pending ?? index]; },
+    set(v, smooth = false){ const i = values.indexOf(v); if (i < 0) return; pending = null; commit(i, false); scrollToIndex(i, smooth); },
+    setValues(next, v){ values = next; build(); index = -1; this.set(next.includes(v) ? v : next[0]); },
+    refresh(){ scrollToIndex(index, false); paint(); },
+    el
+  };
 }
-pickerColumns.forEach(column => {
-  const wheel = $(column.id);
-  column.values.forEach((value,i) => {
-    const option = document.createElement("button");
-    option.type = "button"; option.className = "wheel-option"; option.id = `${column.id}-${i}`;
-    option.tabIndex = -1; option.setAttribute("role","option"); option.setAttribute("aria-selected","false");
-    option.textContent = column.key === "minute" ? String(value).padStart(2,"0") : String(value);
-    option.onclick = () => { selectPicker(column,value); wheel.focus({preventScroll:true}); };
-    wheel.appendChild(option);
-  });
-  wheel.addEventListener("keydown", e => {
-    const last = column.values.length-1, index = column.values.indexOf(pickerDraft[column.key]);
-    const next = {ArrowUp:index-1,ArrowDown:index+1,Home:0,End:last,PageUp:index-5,PageDown:index+5}[e.key];
-    if (next === undefined) return;
-    e.preventDefault(); selectPicker(column,column.values[Math.max(0,Math.min(last,next))]);
-  });
-});
-$("time-picker-open").onclick = () => {
-  pickerDraft = pickerParts($("f-time").value); $("time-picker").showModal();
-  pickerColumns.forEach(column => selectPicker(column,pickerDraft[column.key]));
-  $("picker-hours").focus({preventScroll:true});
-};
-["time-picker-close","time-picker-cancel"].forEach(id => $(id).onclick = () => $("time-picker").close());
-$("time-picker").addEventListener("close", () => $("time-picker-open").focus({preventScroll:true}));
-$("time-picker-apply").onclick = () => {
-  $("f-time").value = pickerValue(pickerDraft); syncTimePicker(); syncDate(); $("time-picker").close();
-};
 
-/* ---------- Countdown timer ---------- */
-let timerData = null, timerReceivedAt = 0, timerBusy = false, deliveryEnabled = false;
+/* ---------- Timer logic ---------- */
+let timerSnap = null, timerReceivedAt = 0, deliveryEnabled = false;
 let deliveryEdition = null, deliveryUnavailable = false;
+const timerBusy = new Set();
 function deliveryNotice(){
   if (deliveryEdition === "Dev") return "Dev: alarm delivery is off";
   if (deliveryEdition) return "Alarm delivery is off";
   return deliveryUnavailable ? "Alarm delivery status unavailable" : "Checking alarm delivery…";
 }
-const timerFields = ["timer-hours","timer-minutes","timer-seconds"];
 function durationFromParts(parts){
   if (!parts.every(v => /^\d+$/.test(String(v)))) throw new Error("Enter whole hours, minutes and seconds.");
   const [h,m,s] = parts.map(Number), total = h*3600 + m*60 + s;
@@ -483,33 +738,36 @@ function durationFromParts(parts){
   return total;
 }
 function timerText(seconds){
-  const total = Math.max(0,Math.ceil(seconds)), h = Math.floor(total/3600), m = Math.floor(total/60)%60, s = total%60;
-  return `${h ? h+":" : ""}${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  const total = Math.max(0, Math.ceil(seconds)), h = Math.floor(total/3600), m = Math.floor(total/60) % 60, s = total % 60;
+  return `${h ? h + ":" : ""}${pad2(m)}:${pad2(s)}`;
 }
-function setTimerDuration(seconds){
-  [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].forEach((n,i)=>$(timerFields[i]).value=String(n));
+function durationText(seconds){
+  const h = Math.floor(seconds/3600), m = Math.floor(seconds/60) % 60, s = seconds % 60;
+  return [h && `${h} hr`, m && `${m} min`, s && `${s} sec`].filter(Boolean).join(" ") || "0 sec";
 }
-function timerRemaining(data, elapsed){ return Math.max(0,data.remaining_sec - (data.state === "running" ? elapsed/1000 : 0)); }
-function renderTimer(){
-  const state = timerData?.state || "idle", active = state === "running" || state === "paused";
-  const fresh = !!timerData && performance.now()-timerReceivedAt < 10000;
-  let selected = 0; try { selected = durationFromParts(timerFields.map(id=>$(id).value)); } catch {}
-  const remaining = active ? timerRemaining(timerData,performance.now()-timerReceivedAt) : (state === "idle" ? selected : 0);
-  $("timer-readout").textContent = timerText(remaining);
-  const status = !fresh ? "Reconnecting…" : (!deliveryEnabled ? "Sound delivery is off in this edition" : ({idle:"Ready",running:remaining > 0 ? "Counting down" : "Finishing…",paused:"Paused",finished:"Time's up",expired:"Finished while unavailable"}[state] || "Ready"));
-  if ($("timer-status").textContent !== status) $("timer-status").textContent = status;
-  $("timer-face").style.setProperty("--progress", `${active ? Math.max(0,Math.min(100,100*(1-remaining/timerData.duration_sec))) : (state === "finished" ? 100 : 0)}%`);
-  $("timer-toggle").textContent = state === "running" ? "Pause" : (state === "paused" ? "Resume" : "Start timer");
-  $("timer-toggle").disabled = timerBusy || !fresh || !deliveryEnabled || (active ? remaining <= 0 : selected < 1);
-  $("timer-reset").disabled = timerBusy || !fresh || state === "idle";
-  timerFields.forEach(id => $(id).disabled = timerBusy || active || !fresh);
-  document.querySelectorAll(".timer-preset").forEach(button => {
-    button.disabled = timerBusy || active || !fresh;
-    button.setAttribute("aria-pressed",String(+button.dataset.seconds === selected));
-  });
+function timerRemaining(t, elapsed){ return Math.max(0, t.remaining_sec - (t.state === "running" ? elapsed/1000 : 0)); }
+const timersFresh = () => !!timerSnap && performance.now() - timerReceivedAt < 10000;
+/* Everything a timer card shows, from one timer, its remaining seconds and the connection state. */
+function timerView(t, remaining, fresh = true, delivery = deliveryEnabled){
+  const state = t.state, busy = timerBusy.has(t.id), off = busy || !fresh;
+  const status = !fresh ? "Reconnecting…" : ({idle:"Ready", running:remaining > 0 ? "Running" : "Finishing…", paused:"Paused", finished:"Time's up", expired:"Finished while the PC was off"}[state] || "Ready");
+  const toggle = state === "running" ? ["pause","Pause"] : state === "paused" ? ["resume","Resume"] : ["start", state === "idle" ? "Start" : "Restart"];
+  const runs = toggle[0] !== "pause"; // start and resume make it ring later
+  return {
+    text: timerText(state === "finished" || state === "expired" ? 0 : remaining),
+    total: `of ${timerText(t.duration_sec)}`,
+    progress: state === "idle" ? 1 : (t.duration_sec ? Math.max(0, Math.min(1, remaining / t.duration_sec)) : 0),
+    status, cls: state,
+    toggleAction: toggle[0], toggleLabel: toggle[1],
+    toggleDisabled: off || (runs && !delivery) || (state === "running" && remaining <= 0),
+    addDisabled: off || (state !== "paused" && state !== "idle" && !delivery) || (state === "running" && remaining <= 0) || (state !== "finished" && state !== "expired" && remaining + 60 > 86400),
+    resetDisabled: off || state === "idle",
+    deleteDisabled: off
+  };
 }
 function applyTimerSnapshot(data){
-  if (timerData && (data.revision < timerData.revision || (data.revision === timerData.revision && data.sampled_at < timerData.sampled_at))) return;
+  if (!data || !Array.isArray(data.timers)) return;
+  if (timerSnap && (data.revision < timerSnap.revision || (data.revision === timerSnap.revision && data.sampled_at < timerSnap.sampled_at))) return;
   // A page bound to Dev cannot be re-enabled by an old Public/legacy response.
   if (deliveryEdition === "Dev" && data.edition !== "Dev") return;
   const wasEnabled = deliveryEnabled, wasEdition = deliveryEdition, wasUnavailable = deliveryUnavailable;
@@ -520,35 +778,319 @@ function applyTimerSnapshot(data){
   $("browser-ring").disabled = !deliveryEnabled; $("unlock").disabled = !deliveryEnabled;
   $("test-sound").disabled = !deliveryEnabled;
   if (!deliveryEnabled) stopBrowserSiren();
-  if (!timerData || timerData.run_id !== data.run_id || (data.state === "idle" && timerData.state !== "idle")) setTimerDuration(data.duration_sec);
-  timerData = data; timerReceivedAt = performance.now(); renderTimer();
+  timerSnap = data; timerReceivedAt = performance.now(); renderTimers();
   if (wasEnabled !== deliveryEnabled || wasEdition !== deliveryEdition || wasUnavailable !== deliveryUnavailable) render();
 }
 async function loadTimer(){
-  try { applyTimerSnapshot(await api("/api/timer")); }
-  catch { if (!deliveryEdition && !deliveryUnavailable) { deliveryUnavailable = true; render(); } $("timer-status").textContent = "Timer unavailable"; }
+  try { applyTimerSnapshot(await api("/api/timers")); }
+  catch { if (!deliveryEdition && !deliveryUnavailable) { deliveryUnavailable = true; render(); } renderTimers(); }
 }
-async function timerCommand(action){
-  if (timerBusy) return;
+async function timerCommand(id, action, body){
+  if (timerBusy.has(id)) return;
   if (!deliveryEnabled && (action === "start" || action === "resume")) return;
-  let body;
-  try { body = action === "start" ? {duration_sec:durationFromParts(timerFields.map(id=>$(id).value))} : {run_id:timerData.run_id}; }
-  catch (err) { toast(err.message,true); return; }
-  timerBusy = true; renderTimer();
-  try { applyTimerSnapshot(await api(`/api/timer/${action}`,{method:"POST",body:JSON.stringify(body)})); }
-  catch (err) { toast(err.message,true); await loadTimer(); }
-  finally { timerBusy = false; renderTimer(); }
+  timerBusy.add(id); renderTimers();
+  try {
+    const path = action === "delete" ? `/api/timers/${encodeURIComponent(id)}` : `/api/timers/${encodeURIComponent(id)}/${action}`;
+    applyTimerSnapshot(await api(path, {method:action === "delete" ? "DELETE" : "POST", ...(body ? {body:JSON.stringify(body)} : {})}));
+  } catch (err) { toast(err.message, true); await loadTimer(); }
+  finally { timerBusy.delete(id); renderTimers(); }
 }
-$("timer-toggle").onclick = () => timerCommand(timerData?.state === "running" ? "pause" : (timerData?.state === "paused" ? "resume" : "start"));
-$("timer-reset").onclick = () => timerCommand("reset");
-timerFields.forEach(id => $(id).addEventListener("input",renderTimer));
-document.querySelectorAll(".timer-preset").forEach(button => button.onclick = async () => {
-  if (timerData && !["running","paused","idle"].includes(timerData.state)) await timerCommand("reset");
-  setTimerDuration(+button.dataset.seconds); renderTimer();
-});
-setInterval(renderTimer,250);
-setInterval(() => { if (!document.hidden && performance.now()-timerReceivedAt > 4000) loadTimer(); },2000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) loadTimer(); });
+async function createTimer(spec){
+  if (!deliveryEnabled || timerBusy.has("new")) return null;
+  timerBusy.add("new");
+  try { const data = await api("/api/timers", {method:"POST", body:JSON.stringify(spec)}); applyTimerSnapshot(data); return data.id; }
+  catch (err) { toast(err.message, true); return null; }
+  finally { timerBusy.delete("new"); renderTimers(); }
+}
+
+/* ---------- Popovers ---------- */
+function placePop(dialog, anchor){
+  const narrow = (() => { try { return matchMedia("(max-width: 640px)").matches; } catch { return false; } })();
+  dialog.classList.toggle("sheet", narrow || !anchor);
+  if (narrow || !anchor) { dialog.style.left = ""; dialog.style.top = ""; return; }
+  let r = anchor.getBoundingClientRect(); const w = dialog.offsetWidth, h = dialog.offsetHeight;
+  if (r.bottom + 8 + h > innerHeight - 12 && r.top - h - 8 < 12) { // no room either side: bring the field up first
+    scrollBy({top:Math.min(r.top - 12, r.bottom + 8 + h - (innerHeight - 12)), behavior:"instant"}); r = anchor.getBoundingClientRect();
+  }
+  const left = Math.max(12, Math.min(r.left, innerWidth - w - 12));
+  let top = r.bottom + 8; const above = top + h > innerHeight - 12 && r.top - h - 8 >= 12;
+  if (above) top = r.top - h - 8; else top = Math.max(12, Math.min(top, innerHeight - h - 12));
+  dialog.style.left = `${left}px`; dialog.style.top = `${top}px`; dialog.classList.toggle("above", above);
+}
+function openPop(dialog, anchor){
+  dialog.classList.remove("closing"); dialog._anchor = anchor;
+  if (!dialog.open) dialog.showModal();
+  placePop(dialog, anchor); anchor?.setAttribute("aria-expanded", "true");
+}
+function closePop(dialog){
+  if (!dialog.open || dialog.classList.contains("closing")) return;
+  const done = () => { if (!dialog.classList.contains("closing")) return; dialog.classList.remove("closing"); dialog.close(); };
+  if (reduceMotion()) { dialog.classList.add("closing"); done(); return; }
+  dialog.classList.add("closing"); dialog.addEventListener("animationend", done, {once:true}); setTimeout(done, 260);
+}
+function wirePop(dialog){
+  dialog.addEventListener("cancel", (e) => { e.preventDefault(); closePop(dialog); });
+  dialog.addEventListener("close", () => { dialog._anchor?.setAttribute("aria-expanded", "false"); dialog._anchor?.focus({preventScroll:true}); });
+  dialog.addEventListener("pointerdown", (e) => { // a press outside the panel (on the backdrop) closes it
+    if (e.target !== dialog) return;
+    const r = dialog.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closePop(dialog);
+  });
+}
+addEventListener("resize", () => document.querySelectorAll("dialog.pop[open]").forEach(d => placePop(d, d._anchor)));
+
+/* ---------- Time picker ---------- */
+let tpDraft = "07:00", tpWheels = null, dateAuto = true;
+/* The date a one-time alarm at `hhmm` would use: the person's own pick, or the next time that clock time comes up. */
+const onceDate = (hhmm, now = engineNow()) => nextDateFor(hhmm, dateAuto ? "" : $("f-date").value, now);
+function syncTimePicker(){ $("time-picker-value").textContent = clockText($("f-time").value); }
+function tpRead(){
+  const w = tpWheels, minute = w.minute.value;
+  return clock24 ? pickerValue({hour24:w.hour.value, minute}, true) : pickerValue({hour:w.hour.value, minute, period:w.period.value});
+}
+function tpShow(value, smooth){
+  tpDraft = value; const p = pickerParts(value);
+  tpWheels.hour.set(clock24 ? p.hour24 : p.hour, smooth); tpWheels.minute.set(p.minute, smooth); tpWheels.period.set(p.period, smooth);
+  if (document.activeElement !== $("tp-typed")) $("tp-typed").value = clockText(value);
+  tpQuickState();
+}
+function tpFromWheels(){ tpDraft = tpRead(); if (document.activeElement !== $("tp-typed")) { $("tp-typed").value = clockText(tpDraft); $("tp-typed").classList.remove("bad"); } tpHint(); tpQuickState(); }
+function tpHint(){
+  const once = !selectedDays().length, now = engineNow(), day = once ? onceDate(tpDraft, now) : null;
+  let text = "Type a time like 6:45 or 7p, or spin the wheels.";
+  if (once) { const at = fromKey(day); const [h,m] = tpDraft.split(":").map(Number); at.setHours(h, m, 0, 0); text = `${dateLabel(day, keyOf(now)).split(",")[0]}, ${inText(at, now)}`; }
+  $("tp-hint").textContent = text; $("tp-hint").classList.remove("bad");
+}
+const TP_QUICK = [{add:5}, {add:15}, {add:30}, {add:60}, {sep:true}, {at:"06:00"}, {at:"06:30"}, {at:"07:00"}, {at:"08:00"}];
+function tpQuickLabels(){
+  $("tp-quick").innerHTML = TP_QUICK.map(q => q.sep ? `<span class="sep" aria-hidden="true"></span>`
+    : q.add ? `<button type="button" data-add="${q.add}" aria-label="${q.add < 60 ? q.add + " minutes" : "1 hour"} from now">+${q.add < 60 ? q.add + " min" : "1 hr"}</button>`
+    : `<button type="button" data-at="${q.at}" aria-pressed="false">${clockText(q.at)}</button>`).join("");
+}
+function tpQuickState(){ $("tp-quick").querySelectorAll("[data-at]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.at === tpDraft))); }
+function tpHours(){ return clock24 ? Array.from({length:24}, (_, i) => i) : Array.from({length:12}, (_, i) => i + 1); }
+function tpSet24(on){
+  clock24 = on; store.set("clock24", on); $("tp-24").setAttribute("aria-pressed", String(on));
+  const p = pickerParts(tpDraft); tpWheels.hour.setValues(tpHours(), on ? p.hour24 : p.hour);
+  $("tp-period").hidden = on; tpShow(tpDraft, false); tpQuickLabels(); tpQuickState();
+  syncTimePicker(); render(); refreshClock();
+}
+function initTimePicker(){
+  tpWheels = {
+    hour: createWheel($("tp-hour"), {label:"Hour", values:tpHours(), format:v => clock24 ? pad2(v) : String(v), loop:true, page:3, onChange:tpFromWheels}),
+    minute: createWheel($("tp-minute"), {label:"Minute", values:Array.from({length:60}, (_, i) => i), format:pad2, loop:true, page:10, onChange:tpFromWheels}),
+    period: createWheel($("tp-period"), {label:"AM or PM", values:["AM","PM"], format:String, narrow:true, onChange:tpFromWheels})
+  };
+  $("tp-period").hidden = clock24; $("tp-24").setAttribute("aria-pressed", String(clock24)); tpQuickLabels();
+  wirePop($("time-picker"));
+  $("time-picker-open").onclick = () => {
+    openPop($("time-picker"), $("time-picker-open"));
+    tpShow($("f-time").value, false); Object.values(tpWheels).forEach(w => w.refresh()); tpHint();
+    $("tp-typed").classList.remove("bad"); $("tp-hour").focus({preventScroll:true});
+  };
+  $("tp-24").onclick = () => tpSet24(!clock24);
+  $("tp-typed").addEventListener("input", () => {
+    const v = parseTypedTime($("tp-typed").value), empty = !$("tp-typed").value.trim();
+    $("tp-typed").classList.toggle("bad", !v && !empty);
+    if (v) { tpShow(v, true); tpHint(); $("tp-hint").textContent = `${clockText(v)} · ${$("tp-hint").textContent}`; }
+    else if (!empty) { $("tp-hint").textContent = "Try 7:30, 730p or 19:30."; $("tp-hint").classList.add("bad"); }
+  });
+  $("tp-typed").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("tp-apply").click(); } });
+  $("tp-typed").addEventListener("blur", () => { if (parseTypedTime($("tp-typed").value) || !$("tp-typed").value.trim()) { $("tp-typed").value = clockText(tpDraft); $("tp-typed").classList.remove("bad"); } });
+  $("tp-quick").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const v = b.dataset.add ? timeAfter(engineNow(), +b.dataset.add) : b.dataset.at;
+    if (b.dataset.add) dateAuto = true;
+    tpShow(v, true); tpHint();
+  });
+  $("tp-cancel").onclick = () => closePop($("time-picker"));
+  $("tp-apply").onclick = () => {
+    const typed = parseTypedTime($("tp-typed").value);
+    if (document.activeElement === $("tp-typed") && typed) tpDraft = typed;
+    $("f-time").value = tpDraft; syncTimePicker();
+    if (!selectedDays().length) $("f-date").value = onceDate(tpDraft);
+    syncDate(); closePop($("time-picker"));
+  };
+}
+
+/* ---------- Date picker ---------- */
+let dpMonth = null, dpFocus = null;
+function syncDateLabel(){ $("date-picker-value").textContent = dateLabel($("f-date").value, keyOf(engineNow())); }
+function dpRender(dir){
+  const today = keyOf(engineNow()), chosen = $("f-date").value, cells = monthCells(dpMonth), month = fromKey(dpMonth).getMonth();
+  $("dp-title").textContent = fromKey(dpMonth).toLocaleDateString(undefined, {month:"long", year:"numeric"});
+  const dows = DAYS.map(d => `<div class="dp-dow" role="columnheader" aria-label="${d}">${d.slice(0,2)}</div>`).join("");
+  const weeks = [];
+  for (let w = 0; w < 6; w++) weeks.push(`<div role="row" style="display:contents">${cells.slice(w*7, w*7+7).map(k => {
+    const d = fromKey(k), label = d.toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric", year:"numeric"});
+    return `<button type="button" role="gridcell" class="dp-day${d.getMonth() !== month ? " out" : ""}" data-key="${k}" tabindex="${k === dpFocus ? 0 : -1}" aria-label="${label}${k === today ? ", today" : ""}" aria-selected="${k === chosen}" ${k === today ? 'aria-current="date"' : ""} ${k < today ? "disabled" : ""}>${d.getDate()}</button>`;
+  }).join("")}</div>`);
+  const grid = $("dp-grid");
+  grid.innerHTML = `<div role="row" style="display:contents">${dows}</div>${weeks.join("")}`;
+  grid.classList.remove("slide-next","slide-prev");
+  if (dir) { void grid.offsetWidth; grid.classList.add(dir > 0 ? "slide-next" : "slide-prev"); }
+  $("dp-prev").disabled = dpMonth.slice(0,7) <= today.slice(0,7);
+}
+function dpGo(key, focus = true){
+  const today = keyOf(engineNow()); if (key < today) key = today;
+  const dir = key.slice(0,7) === dpMonth.slice(0,7) ? 0 : (key > dpMonth ? 1 : -1);
+  dpFocus = key; if (dir) dpMonth = key;
+  dpRender(dir);
+  if (focus) $("dp-grid").querySelector(`[data-key="${key}"]`)?.focus({preventScroll:true});
+}
+function dpPick(key){ $("f-date").value = key; dateAuto = false; syncDateLabel(); closePop($("date-picker")); }
+function initDatePicker(){
+  wirePop($("date-picker"));
+  $("date-picker-open").onclick = () => {
+    const today = keyOf(engineNow()), chosen = $("f-date").value >= today ? $("f-date").value : today;
+    dpMonth = chosen; dpFocus = chosen; dpRender(0);
+    openPop($("date-picker"), $("date-picker-open"));
+    $("dp-grid").querySelector(`[data-key="${chosen}"]`)?.focus({preventScroll:true});
+  };
+  $("dp-prev").onclick = () => dpGo(addMonthsKey(dpFocus, -1), false);
+  $("dp-next").onclick = () => dpGo(addMonthsKey(dpFocus, 1), false);
+  $("dp-grid").addEventListener("click", (e) => { const b = e.target.closest("[data-key]"); if (b && !b.disabled) dpPick(b.dataset.key); });
+  $("dp-grid").addEventListener("keydown", (e) => {
+    const k = dpFocus, dow = (fromKey(k).getDay() + 6) % 7;
+    const next = {ArrowLeft:addDaysKey(k,-1), ArrowRight:addDaysKey(k,1), ArrowUp:addDaysKey(k,-7), ArrowDown:addDaysKey(k,7),
+      Home:addDaysKey(k,-dow), End:addDaysKey(k,6-dow), PageUp:addMonthsKey(k,e.shiftKey ? -12 : -1), PageDown:addMonthsKey(k,e.shiftKey ? 12 : 1)}[e.key];
+    if (next) { e.preventDefault(); dpGo(next); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (k >= keyOf(engineNow())) dpPick(k); }
+  });
+  const quick = [["Today",0],["Tomorrow",1],["+2 days",2],["+1 week",7]];
+  $("dp-quick").innerHTML = quick.map(([t,n]) => `<button type="button" data-days="${n}">${t}</button>`).join("");
+  $("dp-quick").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    dpPick(nextDateFor($("f-time").value, addDaysKey(keyOf(engineNow()), +b.dataset.days), engineNow()));
+  });
+  $("dp-cancel").onclick = () => closePop($("date-picker"));
+}
+
+/* ---------- Timer UI ---------- */
+let tmWheels = null, timerFrame = 0;
+const TM_PRESETS = [60, 180, 300, 600, 900, 1500, 2700, 3600];
+function tmSeconds(){ return tmWheels ? tmWheels.h.value*3600 + tmWheels.m.value*60 + tmWheels.s.value : 0; }
+function tmSet(seconds, smooth){ tmWheels.h.set(Math.floor(seconds/3600), smooth); tmWheels.m.set(Math.floor(seconds/60) % 60, smooth); tmWheels.s.set(seconds % 60, smooth); tmFormState(); }
+function tmFormState(){
+  const total = tmSeconds(), btn = $("tm-start");
+  btn.disabled = total < 1 || total > 86400 || !deliveryEnabled || !timersFresh() || timerBusy.has("new") || (timerSnap?.timers.length || 0) >= (timerSnap?.max_timers || 20);
+  btn.textContent = timerBusy.has("new") ? "Starting…" : (total ? `Start ${durationText(total)} timer` : "Start timer");
+  $("tm-presets").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.seconds === total)));
+  $("tm-note").textContent = !deliveryEnabled ? deliveryNotice() : "Rings on your alarm speaker with your Sound settings (Alarm tab), even with this window closed.";
+}
+function timerCard(t){
+  const el = document.createElement("article");
+  el.className = "tmr"; el.dataset.id = t.id;
+  el.innerHTML = `<div class="tmr-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="54"/><circle class="bar" cx="60" cy="60" r="54" pathLength="100"/></svg>
+    <div class="tmr-mid"><div class="tmr-left" role="timer" aria-live="off"></div><div class="tmr-total"></div></div></div>
+    <div class="tmr-name"></div><span class="tag tmr-state" role="status"></span>
+    <div class="tmr-actions"><button type="button" class="btn sm primary" data-act="toggle"></button><button type="button" class="btn sm" data-act="add">+1 min</button>
+    <button type="button" class="btn sm ghost" data-act="reset">Reset</button><button type="button" class="btn sm ghost" data-act="delete">Delete</button></div>`;
+  return el;
+}
+function paintTimer(el, t, v){
+  const set = (sel, prop, val) => { const n = el.querySelector(sel); if (n[prop] !== val) n[prop] = val; };
+  if (el.dataset.cls !== v.cls) { el.className = `tmr ${v.cls}`; el.dataset.cls = v.cls; }
+  set(".tmr-left", "textContent", v.text); set(".tmr-total", "textContent", v.total); set(".tmr-state", "textContent", v.status);
+  set(".tmr-name", "textContent", t.label + (t.code_red ? " · Code Red" : ""));
+  el.querySelector(".tmr-left").setAttribute("aria-label", `${t.label}: ${v.text} left`);
+  el.querySelector(".bar").style.strokeDashoffset = String((100 * (1 - v.progress)).toFixed(2));
+  const toggle = el.querySelector('[data-act="toggle"]');
+  set('[data-act="toggle"]', "textContent", v.toggleLabel); toggle.dataset.action = v.toggleAction; toggle.disabled = v.toggleDisabled;
+  toggle.setAttribute("aria-label", `${v.toggleLabel} ${t.label}`);
+  el.querySelector('[data-act="add"]').disabled = v.addDisabled; el.querySelector('[data-act="add"]').setAttribute("aria-label", `Add 1 minute to ${t.label}`);
+  el.querySelector('[data-act="reset"]').disabled = v.resetDisabled; el.querySelector('[data-act="reset"]').setAttribute("aria-label", `Reset ${t.label}`);
+  el.querySelector('[data-act="delete"]').disabled = v.deleteDisabled; el.querySelector('[data-act="delete"]').setAttribute("aria-label", `Delete ${t.label}`);
+}
+function renderTimers(){
+  const list = $("timer-list"), timers = timerSnap?.timers || [], fresh = timersFresh(), elapsed = performance.now() - timerReceivedAt;
+  const seen = new Set();
+  timers.forEach((t, i) => {
+    let el = list.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+    if (!el) { el = timerCard(t); list.appendChild(el); }
+    if (list.children[i] !== el) list.insertBefore(el, list.children[i]);
+    paintTimer(el, t, timerView(t, timerRemaining(t, elapsed), fresh)); seen.add(t.id);
+  });
+  [...list.querySelectorAll(".tmr")].forEach(el => { if (!seen.has(el.dataset.id)) el.remove(); });
+  let empty = list.querySelector(".tmr-empty");
+  if (!timers.length && !empty) { empty = document.createElement("div"); empty.className = "empty tmr-empty"; list.appendChild(empty); }
+  if (empty) { if (timers.length) empty.remove(); else empty.innerHTML = !timerSnap ? (deliveryUnavailable ? "<b>Timers unavailable</b>The alarm service isn't answering." : "<b>Loading timers…</b>") : `<b>No timers yet</b>${deliveryEnabled ? "Pick a length on the left and start one. Several can run at once." : deliveryNotice()}`; }
+  const running = timers.filter(t => t.state === "running"), done = timers.filter(t => t.state === "finished").length;
+  $("timer-count").textContent = timers.length ? `${running.length} running${done ? `, ${done} done` : ""}` : "";
+  $("timer-badge").hidden = !running.length; $("timer-badge").textContent = String(running.length);
+  const soon = running.map(t => timerRemaining(t, elapsed)).sort((a,b) => a - b)[0];
+  const title = soon !== undefined && fresh ? `${timerText(soon)} · Code Red Alarm` : "Code Red Alarm";
+  if (document.title !== title) document.title = title;
+  tmFormState();
+}
+function timerLoop(){
+  timerFrame = 0;
+  if (document.hidden) return;
+  const list = $("timer-list"), elapsed = performance.now() - timerReceivedAt, fresh = timersFresh();
+  (timerSnap?.timers || []).forEach(t => {
+    if (t.state !== "running") return;
+    const el = list.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+    if (el) paintTimer(el, t, timerView(t, timerRemaining(t, elapsed), fresh));
+  });
+  if ((timerSnap?.timers || []).some(t => t.state === "running")) timerFrame = requestAnimationFrame(timerLoop);
+}
+function kickTimerLoop(){ if (!timerFrame && !document.hidden) timerFrame = requestAnimationFrame(timerLoop); }
+function initTimers(){
+  const range = (n) => Array.from({length:n}, (_, i) => i);
+  tmWheels = {
+    h: createWheel($("tm-h"), {label:"Hours", unit:"hours", values:range(25), format:String, page:6, onChange:tmFormState}),
+    m: createWheel($("tm-m"), {label:"Minutes", unit:"minutes", values:range(60), format:pad2, loop:true, page:10, onChange:tmFormState}),
+    s: createWheel($("tm-s"), {label:"Seconds", unit:"seconds", values:range(60), format:pad2, loop:true, page:10, onChange:tmFormState})
+  };
+  $("tm-presets").innerHTML = TM_PRESETS.map(s => `<button type="button" data-seconds="${s}" aria-pressed="false">${s < 3600 ? s/60 + " min" : "1 hr"}</button>`).join("");
+  $("tm-presets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) tmSet(+b.dataset.seconds, true); });
+  tmSet(store.get("timerLast", 300), false);
+  $("tm-codered").onchange = () => $("tm-cr").classList.toggle("on", $("tm-codered").checked);
+  $("timer-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const total = tmSeconds(), codeRed = $("tm-codered").checked, phrase = $("tm-phrase").value.trim();
+    if (total < 1 || total > 86400) { toast("Choose a length between 1 second and 24 hours.", true); return; }
+    if (codeRed && phrase.length < 4) { toast("Code Red needs a phrase of at least 4 characters.", true); $("tm-phrase").focus(); return; }
+    unlockAudio();
+    const label = $("tm-label").value.trim() || durationText(total);
+    const id = await createTimer({duration_sec:total, label, code_red:codeRed, custom_phrase:codeRed ? phrase : "", ring_duration_sec:+$("tm-ring").value});
+    if (id) { store.set("timerLast", total); $("tm-label").value = ""; toast(`${label} started`); kickTimerLoop(); }
+  });
+  $("timer-list").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]"), card = b?.closest(".tmr"); if (!b || !card) return;
+    const id = card.dataset.id, t = timerSnap?.timers.find(x => x.id === id); if (!t) return;
+    if (b.dataset.act === "toggle") { if (b.dataset.action !== "pause") unlockAudio(); timerCommand(id, b.dataset.action).then(kickTimerLoop); }
+    else if (b.dataset.act === "add") timerCommand(id, "add", {seconds:60}).then(kickTimerLoop);
+    else if (b.dataset.act === "reset") timerCommand(id, "reset");
+    else if (b.dataset.act === "delete") timerCommand(id, "delete");
+  });
+}
+
+/* ---------- Tabs ---------- */
+function showTab(name, focus){
+  const timer = name === "timer";
+  $("tabs").dataset.active = timer ? "timer" : "alarm";
+  [["tab-alarm","panel-alarm",!timer],["tab-timer","panel-timer",timer]].forEach(([tab, panel, on]) => {
+    $(tab).setAttribute("aria-selected", String(on)); $(tab).tabIndex = on ? 0 : -1;
+    const p = $(panel), was = p.hidden; p.hidden = !on;
+    if (on && was) { p.classList.remove("panel-in"); void p.offsetWidth; p.classList.add("panel-in"); }
+  });
+  if (focus) $(timer ? "tab-timer" : "tab-alarm").focus();
+  store.set("tab", timer ? "timer" : "alarm");
+  if (location.hash !== (timer ? "#timer" : "") && history.replaceState) history.replaceState(null, "", timer ? "#timer" : location.pathname + location.search);
+  if (timer) { Object.values(tmWheels).forEach(w => w.refresh()); kickTimerLoop(); }
+}
+function initTabs(){
+  $("tab-alarm").onclick = () => showTab("alarm"); $("tab-timer").onclick = () => showTab("timer");
+  $("tabs").addEventListener("keydown", (e) => {
+    if (["ArrowLeft","ArrowRight","Home","End"].includes(e.key)) { e.preventDefault(); showTab(e.key === "Home" ? "alarm" : e.key === "End" ? "timer" : ($("tabs").dataset.active === "alarm" ? "timer" : "alarm"), true); }
+  });
+  addEventListener("hashchange", () => showTab(location.hash === "#timer" ? "timer" : "alarm"));
+  showTab(location.hash === "#timer" ? "timer" : (location.hash ? "alarm" : store.get("tab", "alarm")));
+}
+setInterval(() => { if (!document.hidden && performance.now() - timerReceivedAt > 4000) loadTimer(); }, 2000);
+setInterval(() => { if (!document.hidden && !timerFrame) renderTimers(); }, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadTimer(); kickTimerLoop(); } });
 
 /* ---------- Day picker ---------- */
 const daysEl = $("days");
@@ -569,6 +1111,7 @@ function syncDate(){
     t.setHours(h, m, 0, 0); if (t <= now) t.setDate(t.getDate()+1);
     $("f-date").value = t.toLocaleDateString("en-CA");
   }
+  if (typeof syncDateLabel === "function") syncDateLabel();
 }
 document.querySelectorAll(".preset").forEach(p => p.onclick = () => setDays({wk:DAYS.slice(0,5), we:["Sat","Sun"], all:DAYS, none:[]}[p.dataset.p]));
 $("f-codered").onchange = () => $("cr").classList.toggle("on", $("f-codered").checked);
@@ -641,7 +1184,7 @@ function render(){
     return;
   }
   $("list").innerHTML = sorted().map(a => {
-    const t = fmt12(a.time_hhmm);
+    const t = fmtClock(a.time_hhmm);
     const when = a.target_date ? new Date(a.target_date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})
       : (a.weekdays.length === 7 ? "Every day" : a.weekdays.join(" "));
     return `<article class="alarm ${a.enabled ? "" : "off"} ${a.code_red ? "red" : ""} ${a.id === editingId ? "editing" : ""}">
@@ -675,7 +1218,7 @@ function startEdit(a){
   editingId = a.id;
   $("f-label").value = a.label; $("f-time").value = a.time_hhmm; setDuration(a.ring_duration_sec);
   syncTimePicker();
-  $("f-date").value = a.target_date || ""; setDays(a.target_date ? [] : a.weekdays);
+  $("f-date").value = a.target_date || ""; dateAuto = !a.target_date; setDays(a.target_date ? [] : a.weekdays);
   $("f-math").value = String(a.math_mission_difficulty || 0);
   $("f-codered").checked = !!a.code_red; $("cr").classList.toggle("on", !!a.code_red);
   if (a.code_red) $("f-phrase").value = a.custom_phrase || "";
@@ -684,13 +1227,13 @@ function startEdit(a){
   render(); $("h-new").scrollIntoView({behavior: "smooth", block: "center"}); $("f-label").focus({preventScroll: true});
 }
 function endEdit(){
-  editingId = null; $("form").reset(); $("f-date").value = ""; setDays([]);
+  editingId = null; $("form").reset(); $("f-time").value = "07:00"; $("f-date").value = ""; dateAuto = true; setDays([]);
   syncTimePicker();
   $("cr").classList.toggle("on", $("f-codered").checked);
   $("h-new").textContent = "New alarm"; $("save").textContent = "Save alarm"; $("cancel-edit").hidden = true; render();
 }
 $("cancel-edit").onclick = endEdit;
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("time-picker").open && !$("ring").classList.contains("show")) endEdit(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("time-picker").open && !$("date-picker").open && !$("ring").classList.contains("show")) endEdit(); });
 
 $("list").addEventListener("click", async (e) => {
   const t = e.target.closest("[data-test],[data-del],[data-edit]"); if (!t) return;
@@ -719,6 +1262,7 @@ $("form").addEventListener("submit", async (e) => {
   const label = $("f-label").value.trim(), codeRed = $("f-codered").checked, phrase = $("f-phrase").value.trim();
   if (!label) { toast("Give the alarm a name.", true); $("f-label").focus(); return; }
   if (!$("f-time").value) { toast("Pick a time.", true); return; }
+  if (!days.length && dateAuto) { $("f-date").value = onceDate($("f-time").value); syncDateLabel(); }
   if (!days.length && !$("f-date").value) { toast("Pick a day or a date.", true); return; }
   if (codeRed && phrase.length < 4) { toast("Code Red needs a phrase of at least 4 characters.", true); $("f-phrase").focus(); return; }
   const btn = $("save"), editing = editingId; btn.disabled = true; btn.textContent = "Saving…";
@@ -729,8 +1273,7 @@ $("form").addEventListener("submit", async (e) => {
       volume_percent: 100, ring_duration_sec: +$("f-duration").value, math_mission_difficulty: +$("f-math").value })});
     alarms = data.alarms;
     const saved = alarms.find(a => a.id === data.id), n = deliveryEnabled && saved && nextRing(saved);
-    const t = fmt12($("f-time").value);
-    toast(`${deliveryEdition === "Dev" ? "Saved Dev schedule" : (editing ? "Updated" : "Saved")}: ${label} at ${t.t} ${t.ap}${n ? ", rings " + inText(n) : ""}`);
+    toast(`${deliveryEdition === "Dev" ? "Saved Dev schedule" : (editing ? "Updated" : "Saved")}: ${label} at ${clockText($("f-time").value)}${n ? ", rings " + inText(n) : ""}`);
     if (editing) endEdit(); else render();
   } catch (err) { toast(err.message, true); }
   finally { btn.disabled = false; btn.textContent = editingId ? "Save changes" : "Save alarm"; }
@@ -796,10 +1339,10 @@ function startBrowserSiren(){
 function stopBrowserSiren(){ if (sirenTimer) { clearInterval(sirenTimer); sirenTimer = null; } }
 
 /* ---------- Ringing screen ---------- */
-let ringingId = null, needPhrase = false;
+let ringingId = null, needPhrase = false, ringAlarm = null;
 function showRing(msg){
-  if ($("time-picker").open) $("time-picker").close();
-  const a = msg.alarm, test = !!a.is_test;
+  ["time-picker","date-picker"].forEach(id => { if ($(id).open) { $(id).classList.remove("closing"); $(id).close(); } });
+  const a = msg.alarm, test = !!a.is_test; ringAlarm = a;
   needPhrase = !!a.code_red && !test;
   if (ringingId !== a.id) {
     ringingId = a.id; $("ring-input").value = ""; $("ring-math").value = ""; $("ring-err").textContent = "";
@@ -815,6 +1358,7 @@ function showRing(msg){
   const showMath = !!msg.math_question && !test;
   $("ring-math-wrap").hidden = !showMath; $("ring-math-q").textContent = msg.math_question || "";
   $("ring-stop").textContent = needPhrase ? "Check phrase and stop" : (a.is_timer ? "Stop timer" : "Stop alarm");
+  $("ring-more").hidden = !(a.is_timer && a.timer_id && !a.code_red && !test);
   $("ring-meta").textContent = test ? "This is a short preview." : "";
   startBrowserSiren();
 }
@@ -822,6 +1366,12 @@ function hideRing(){ $("ring").classList.remove("show"); ringingId = null; stopB
 ["paste","drop","copy","cut"].forEach(ev => $("ring-input").addEventListener(ev, (e) => { e.preventDefault(); $("ring-err").textContent = "Paste is blocked. Type it."; }));
 $("ring-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ring-stop").click(); });
 $("ring-math").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ring-stop").click(); });
+$("ring-more").onclick = async () => {
+  const b = $("ring-more"), a = ringAlarm; if (!a?.timer_id) return; b.disabled = true;
+  try { applyTimerSnapshot(await api(`/api/timers/${encodeURIComponent(a.timer_id)}/add`, {method:"POST", body:JSON.stringify({seconds:60})})); hideRing(); toast("One more minute"); kickTimerLoop(); }
+  catch (err) { $("ring-err").textContent = err.message; }
+  finally { b.disabled = false; }
+};
 $("ring-stop").onclick = async () => {
   const b = $("ring-stop"); b.disabled = true;
   try {
@@ -847,15 +1397,16 @@ function checkClock(eng){
 }
 
 /* ---------- Live connection ---------- */
-let ws = null, retry = 0;
+let ws = null, retry = 0, lastClock = null;
+function refreshClock(){ if (lastClock) $("clock").textContent = clockText(lastClock); }
 function connect(){
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/ws`);
   ws.onopen = () => { retry = 0; chip("chip-engine", "ok", "Live"); loadAlarms(); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.timer) applyTimerSnapshot(m.timer);
-    if (m.server_time) { const [h,mi] = m.server_time.split(":"); const t = fmt12(`${h}:${mi}`); $("clock").textContent = `${t.t} ${t.ap}`; }
+    if (m.timers) applyTimerSnapshot(m.timers);
+    if (m.server_time) { lastClock = m.server_time.slice(0,5); refreshClock(); }
     if (m.server_iso) {
       const eng = new Date(m.server_iso);
       engineSkew = eng - Date.now();
@@ -870,7 +1421,8 @@ function connect(){
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadAudio(); if (ws && ws.readyState > 1) connect(); } });
 setInterval(() => { if (!document.hidden) loadAlarms(); }, 30000);
 setInterval(loadAudio, 30000);
-syncDate(); syncTimePicker(); loadAlarms(); loadAudio(); loadTimer(); connect();
+initTimePicker(); initDatePicker(); initTimers(); initTabs();
+syncDate(); syncTimePicker(); renderTimers(); loadAlarms(); loadAudio(); loadTimer(); connect();
 </script>
 
 <!-- Feedback (sends to the Ultra Suite team) -->
