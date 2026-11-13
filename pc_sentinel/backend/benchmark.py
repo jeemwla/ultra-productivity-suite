@@ -122,7 +122,9 @@ METRICS = (("single_mbps", "single_spread_pct", True), ("multi_mbps", "multi_spr
 def comparable(before, after):
     """Reasons the two runs can't be compared fairly (empty list when they can)."""
     reasons = []
-    if (before.get("ac") is False) != (after.get("ac") is False):
+    if type(before.get("ac")) is not bool or type(after.get("ac")) is not bool:
+        reasons.append("The power source was not reported for one or both runs. Measure again with a known power source.")
+    elif before["ac"] != after["ac"]:
         reasons.append("One run was on battery power and the other was plugged in.")
     if before.get("threads") and after.get("threads") and before["threads"] != after["threads"]:
         reasons.append("The number of processor threads changed between runs.")

@@ -71,6 +71,7 @@ class Benchmark(unittest.TestCase):
     def test_compare_calls_a_change_real_only_beyond_the_noise(self):
         before = {"single_mbps": 2000, "single_spread_pct": 2, "multi_mbps": 9000, "multi_spread_pct": 15, "wake_us": 40, "wake_spread_pct": 5}
         after = {"single_mbps": 2100, "single_spread_pct": 2, "multi_mbps": 9900, "multi_spread_pct": 5, "wake_us": 20, "wake_spread_pct": 5}
+        before["ac"] = after["ac"] = True
         c = bm.compare(before, after)
         self.assertEqual(c["single_mbps"], {"better_pct": 5.0, "noise_pct": 3.0, "real": True})
         self.assertEqual(c["multi_mbps"]["real"], False, "10% inside a 15% spread is not claimed")
@@ -193,12 +194,24 @@ class BenchmarkFairness(unittest.TestCase):
             self.assertTrue(any(phrase in r for r in c["not_comparable"]), (change, c["not_comparable"]))
         self.assertEqual(bm.compare(self.BASE, after)["not_comparable"], [])
 
-    def test_unknown_context_does_not_block_a_comparison(self):
+    def test_unknown_power_source_blocks_a_comparison(self):
         old = {k: v for k, v in self.BASE.items() if k not in ("ac", "cpu", "background_load_pct")}
+        self.assertTrue(bm.comparable(old, self.BASE))
+        for a in (True, False, None, "missing", 0, 1):
+            for b in (True, False, None, "missing", 0, 1):
+                with self.subTest(before=a, after=b):
+                    result = bm.compare({**self.BASE, "ac": a}, {**self.BASE, "ac": b, "single_mbps": 2600})
+                    valid = type(a) is bool and type(b) is bool and a == b
+                    self.assertEqual(result["single_mbps"]["real"], valid)
+                    self.assertEqual(bool(result["not_comparable"]), not valid)
+
+    def test_unknown_other_context_keeps_existing_behavior(self):
+        old = {k: v for k, v in self.BASE.items() if k not in ("cpu", "background_load_pct")}
         self.assertEqual(bm.comparable(old, self.BASE), [])
 
     def test_run_records_background_load(self):
-        r = bm.run("x", passes=1, cpu_seconds=0.05, wakes=5, load=lambda: 12.5)
+        with patch.object(bm, "cpu_pass", return_value=100), patch.object(bm, "wake_pass", return_value=[10, 20]):
+            r = bm.run("x", passes=1, cpu_seconds=0.05, wakes=5, load=lambda: 12.5)
         self.assertEqual(r["background_load_pct"], 12.5)
 
 
