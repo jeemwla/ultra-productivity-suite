@@ -1,5 +1,9 @@
 //! Per-taskbar render acknowledgements and stable placement, without Windows calls.
 use std::collections::HashSet;
+pub fn switcher_requested(event_pending: bool, visible: bool, _modifier_down: bool) -> bool {
+    // Start, screenshots and ordinary menu shortcuts are not app-switcher sessions.
+    event_pending || visible
+}
 
 /// Physical-pixel popup bounds on the button's monitor, including negative monitor origins.
 pub fn menu_rect(anchor: (i32,i32), work: (i32,i32,i32,i32), wanted: (i32,i32), gap: i32) -> (i32,i32,i32,i32) {
@@ -111,6 +115,17 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn windows_or_alt_key_alone_never_requests_taskbar_restoration() {
+        assert!(!switcher_requested(false,false,true));
+        assert!(switcher_requested(true,false,false));
+        assert!(switcher_requested(false,true,false));
+        let mut pause = SwitcherPause::default();
+        for now in (0..200_000).step_by(20) {
+            let modifier = now % 500 < 200;
+            assert_eq!(pause.update(switcher_requested(false,false,modifier),now),(false,false));
+        }
+    }
     #[test]
     fn transient_menu_is_bounded_on_each_monitors_work_area() {
         for left in [-3840,-1920,0,2560] {

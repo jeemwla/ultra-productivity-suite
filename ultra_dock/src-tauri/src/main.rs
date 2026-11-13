@@ -417,6 +417,7 @@ fn organizer_loop() {
     let mut switcher = dock_surface::SwitcherPause::default();
     let mut hiding_stability = dock_surface::HidingStability::default();
     let mut hidden_now: std::collections::HashSet<isize> = Default::default();
+    let mut listing = dock_safety::StripListing::default();
     // Only one Dock (Public or Dev) may manage the taskbar: see dock_lease.rs. Without the lease nothing is hidden.
     let mut lease = dock_lease::Lease::open(dock_lease::LEASE_NAME);
     let mine = profile().edition();
@@ -467,10 +468,8 @@ fn organizer_loop() {
         // taskbar button back, so hide it again right away (and for a short burst after) instead of 4 s later.
         for _ in 0..35 {
             std::thread::sleep(Duration::from_millis(20));
-            use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_MENU, VK_LWIN, VK_RWIN};
             let event_pending = SWITCHER_RESTORE_REQUESTED.swap(false, Ordering::AcqRel);
-            let switching = event_pending || SWITCHER_VISIBLE.load(Ordering::Acquire)
-                || unsafe { [VK_MENU, VK_LWIN, VK_RWIN].iter().any(|k| GetAsyncKeyState(k.0 as i32) < 0) };
+            let switching = dock_surface::switcher_requested(event_pending, SWITCHER_VISIBLE.load(Ordering::Acquire), false);
             let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
@@ -498,6 +497,7 @@ fn organizer_loop() {
         let cfg = org_config();
         let pins = pinned_apps();
         let wins = enum_app_windows();
+        listing.retain(&wins.iter().map(|(h,_,_)| *h).collect());
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
         let guarded = guard_running();
@@ -531,14 +531,16 @@ fn organizer_loop() {
                 && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
             if hidden { hidden_now.insert(*h); }
             else if on { recovery::restore_window(*h, &tbl); }
+            let offered = !kept && listing.decide(*h, started.elapsed().as_millis() as u64, on, hidden);
             if !kept {
                 let cat = categorize(exe, &cfg);
-                cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone()));
+                if offered { cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone())); }
                 if hidden { hidden_exes.insert(exe.clone()); } else { pending.insert(exe.clone()); }
             }
-            // Presentation is stable while native buttons restore, the switcher opens, or another monitor loads.
-            // Hiding is a separate decision requiring all live surfaces to acknowledge the window.
-            if !kept && ORGANIZE.load(Ordering::Relaxed) {
+            // Brief preflight lets the UI acknowledge replacements before hiding. Failed hides
+            // return to native-only with backoff, rather than retaining permanent duplicate icons.
+            // Pending recovery below always retains access until checked restoration succeeds.
+            if offered {
                 snap.push(WinInfo { hwnd: *h, title: title.clone(), exe: exe.clone(), name: pretty_name(exe),
                                     category: categorize(exe, &cfg), active: *h == fg });
             }
