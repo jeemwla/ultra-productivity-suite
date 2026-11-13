@@ -55,3 +55,28 @@ test('zero and maximum stay reachable with bounded controls',async()=>{
     assert.equal(f.calls.at(-1)[1].cap,expected);
   }
 });
+test('rapid waffle clicks issue one open request and release the gate after completion',async()=>{
+  const strip=fs.readFileSync(path.join(__dirname,'../ultra_dock/ui/index.html'),'utf8');
+  const handler=strip.slice(strip.indexOf('let menuOpening = false;'),strip.indexOf('$("strip").addEventListener("click"'));
+  const calls=[];let finish;
+  const context=vm.createContext({closeAll(){},invoke:async name=>{calls.push(name);await new Promise(resolve=>finish=resolve);}});
+  vm.runInContext(handler,context);
+  const event={target:{closest:selector=>selector==='.grp,.more'?{dataset:{cat:'__menu'}}:null}};
+  const first=context.handleDockClick(event);
+  await context.handleDockClick(event);
+  assert.deepEqual(calls,['show_dock_menu']);
+  finish();await first;
+  const next=context.handleDockClick(event);
+  assert.equal(calls.length,2);finish();await next;
+});
+test('failed app activation keeps its folder open and reports the failure',async()=>{
+  const strip=fs.readFileSync(path.join(__dirname,'../ultra_dock/ui/index.html'),'utf8');
+  const handler=strip.slice(strip.indexOf('let menuOpening = false;'),strip.indexOf('$("strip").addEventListener("click"'));
+  const status={textContent:''};let closes=0;
+  const button={dataset:{h:'42'},classList:{add(){}},hasAttribute:()=>false};
+  const context=vm.createContext({invoke:async()=>false,$:()=>status,setTimeout(){closes++;}});
+  vm.runInContext(handler,context);
+  await context.handleDockClick({target:{closest:s=>s==='.win'?button:null}});
+  assert.equal(closes,0);
+  assert.match(status.textContent,/could not switch/);
+});

@@ -22,9 +22,9 @@ pub fn task_view_surface(path: &str, windows: &str, class: &str) -> bool {
     path == root + "\\explorer.exe"
         && matches!(class, "MultitaskingViewFrame" | "XamlExplorerHostIslandWindow")
 }
-pub fn switcher_requested(event_pending: bool, visible: bool, _modifier_down: bool) -> bool {
-    // Start, screenshots and ordinary menu shortcuts are not app-switcher sessions.
-    event_pending || visible
+pub fn switcher_requested(event_pending: bool, visible: bool, alt_down: bool, _win_down: bool) -> bool {
+    // Alt preflight precedes Windows building its switcher; Start/Win alone must not restore.
+    event_pending || visible || alt_down
 }
 
 /// Physical-pixel popup bounds on the button's monitor, including negative monitor origins.
@@ -64,10 +64,11 @@ pub struct Surface {
     pub shown: bool,
     pub shelf: bool,
     pub room: u32,
+    pub geometry: Option<crate::dock_layout::TaskbarGeom>,
 }
 impl Surface {
     pub fn new(taskbar: isize, hwnd: isize, label: String) -> Self {
-        Self { taskbar, hwnd, label, width: 60, height: 48, rendered: HashSet::new(), rendered_at: None, shown: false, shelf: false, room: 0 }
+        Self { taskbar, hwnd, label, width: 60, height: 48, rendered: HashSet::new(), rendered_at: None, shown: false, shelf: false, room: 0, geometry: None }
     }
     pub fn fresh(&self, now: u64) -> bool {
         self.rendered_at.is_some_and(|at| now.saturating_sub(at) < 5)
@@ -166,14 +167,15 @@ mod tests {
         assert!(!task_view_surface("C:\\Windows\\explorer.exe","C:\\Windows","CabinetWClass"));
     }
     #[test]
-    fn windows_or_alt_key_alone_never_requests_taskbar_restoration() {
-        assert!(!switcher_requested(false,false,true));
-        assert!(switcher_requested(true,false,false));
-        assert!(switcher_requested(false,true,false));
+    fn windows_key_does_not_restore_but_alt_preflights_before_switcher_activation() {
+        assert!(!switcher_requested(false,false,false,true));
+        assert!(switcher_requested(false,false,true,false));
+        assert!(switcher_requested(true,false,false,false));
+        assert!(switcher_requested(false,true,false,false));
         let mut pause = SwitcherPause::default();
         for now in (0..200_000).step_by(20) {
             let modifier = now % 500 < 200;
-            assert_eq!(pause.update(switcher_requested(false,false,modifier),now),(false,false));
+            assert_eq!(pause.update(switcher_requested(false,false,false,modifier),now),(false,false));
         }
     }
     #[test]

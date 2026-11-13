@@ -35,6 +35,42 @@ const DEFAULT_ORG: &str = include_str!("../../config/organizer.json");
 const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
 
 static SURFACES: Mutex<Vec<dock_surface::Surface>> = Mutex::new(Vec::new());
+static DOCK_EVENTS: Mutex<std::collections::VecDeque<Value>> = Mutex::new(std::collections::VecDeque::new());
+fn record_dock_event(event: &str) {
+    if let Ok(mut events) = DOCK_EVENTS.lock() {
+        if events.len() >= 32 { events.pop_front(); }
+        let at = SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
+        static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+        #[cfg(windows)]
+        let foreground = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize };
+        #[cfg(not(windows))]
+        let foreground = 0isize;
+        events.push_back(json!({"at_ms":at,"elapsed_ms":START.get_or_init(Instant::now).elapsed().as_millis(),
+            "foreground_hwnd":foreground,"event":event.chars().take(1024).collect::<String>()}));
+    }
+}
+fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
+    let snapshot = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
+    let surfaces = SURFACES.lock().map(|s| s.clone()).unwrap_or_default();
+    let surfaces: Vec<_> = surfaces.iter().map(|s| json!({
+        "label":s.label,"hwnd":s.hwnd,"taskbar":s.taskbar,"shown":s.shown,"room_css":s.room,
+        "requested_width_css":s.width,"rendered":s.rendered,"rendered_at":s.rendered_at,
+        "geometry":s.geometry,"layout":strip_plan(&snapshot,s.room)
+    })).collect();
+    let windows: Vec<_> = snapshot.iter().map(|w| json!({"hwnd":w.hwnd,"exe":w.exe,"category":w.category,"active":w.active})).collect();
+    let events = DOCK_EVENTS.lock().map(|s| s.clone()).unwrap_or_default();
+    #[cfg(windows)]
+    let foreground = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize };
+    #[cfg(not(windows))]
+    let foreground = 0isize;
+    let value = json!({"version":env!("CARGO_PKG_VERSION"),"edition":profile().edition(),"at":now_secs(),
+        "organize":ORGANIZE.load(Ordering::Acquire),"healthy":HEALTHY.load(Ordering::Acquire),
+        "restoring":RESTORATION_PENDING.load(Ordering::Acquire),"switcher_active":SWITCHER_ACTIVE.load(Ordering::Acquire),
+        "switcher_visible":SWITCHER_VISIBLE.load(Ordering::Acquire),"foreground_hwnd":foreground,"surfaces":surfaces,"windows":windows,
+        "webviews":app.webview_windows().values().map(|w|json!({"label":w.label(),"visible":w.is_visible().ok(),"focused":w.is_focused().ok(),
+            "position":w.outer_position().ok().map(|p|vec![p.x,p.y]),"size":w.inner_size().ok().map(|s|vec![s.width,s.height])})).collect::<Vec<_>>(),"events":events});
+    std::fs::write(appdata("dock_diagnostics.json"),serde_json::to_vec_pretty(&value).map_err(|e|e.to_string())?).map_err(|e|e.to_string())
+}
 static SWITCHER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static SWITCHER_VISIBLE: AtomicBool = AtomicBool::new(false);
 // Latched independently of visibility so a complete short switcher session is never lost between samples.
@@ -469,14 +505,18 @@ fn organizer_loop() {
         for _ in 0..35 {
             std::thread::sleep(Duration::from_millis(20));
             let event_pending = SWITCHER_RESTORE_REQUESTED.swap(false, Ordering::AcqRel);
-            let switching = dock_surface::switcher_requested(event_pending, SWITCHER_VISIBLE.load(Ordering::Acquire), false);
+            use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState,VK_MENU};
+            let switching = dock_surface::switcher_requested(event_pending, SWITCHER_VISIBLE.load(Ordering::Acquire),
+                unsafe { GetAsyncKeyState(VK_MENU.0 as i32) < 0 }, false);
             let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
                 hiding_stability.allow(false, started.elapsed().as_millis() as u64);
                 if restore_for_switcher {
+                    record_dock_event("switcher-restore-requested");
                     RESTORATION_PENDING.store(true, Ordering::Release);
-                    if recovery::restore_all(&tbl).is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                    if recovery::restore_all(&tbl).is_ok() { record_dock_event("restore-complete"); RESTORATION_PENDING.store(false, Ordering::Release); }
+                    else { record_dock_event("restore-failed"); }
                     hidden_now.clear();
                 }
                 continue;
@@ -1006,19 +1046,20 @@ fn strip_plan(wins: &[WinInfo], available: u32) -> Value {
 /// target: a busy or frozen app (a launcher, a game, Docker) once blocked the main thread here forever, which
 /// froze the whole dock while its taskbar buttons were tucked away.
 #[tauri::command]
-fn activate(hwnd: isize) {
+async fn activate(hwnd: isize) -> bool {
     #[cfg(windows)]
-    std::thread::spawn(move || unsafe {
+    return tauri::async_runtime::spawn_blocking(move || unsafe {
         use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_MENU};
         use windows::Win32::UI::WindowsAndMessaging::*;
         let h = HWND(hwnd as _);
         if IsIconic(h).as_bool() { let _ = ShowWindowAsync(h, SW_RESTORE); }
-        // a quick Alt tap lets a background app hand focus to another window (standard Windows rule)
-        keybd_event(VK_MENU.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
-        keybd_event(VK_MENU.0 as u8, 0, KEYEVENTF_KEYUP, 0);
-        let _ = SetForegroundWindow(h);
-    });
+        // The Dock received the user's click. Do not synthesize Alt or disturb native MRU state.
+        let activated = SetForegroundWindow(h).as_bool();
+        record_dock_event(&format!("activate:{hwnd}:{activated}"));
+        activated
+    }).await.unwrap_or(false);
+    #[cfg(not(windows))]
+    false
 }
 
 #[tauri::command]
@@ -1370,7 +1411,8 @@ fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app, false); 
 /// Windows owns the transient menu, so opening it never changes the persistent strip's rectangle.
 #[tauri::command]
 async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || -> tauri::Result<()> {
+    record_dock_event("requested");
+    let result = tauri::async_runtime::spawn_blocking(move || -> tauri::Result<()> {
         #[cfg(windows)]
         struct MenuApartment;
         #[cfg(windows)]
@@ -1387,9 +1429,9 @@ async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), Str
         let Ok(_opening) = OPENING.lock() else { return Ok(()); };
         #[cfg(windows)]
         if let Ok(hwnd) = window.hwnd() {
-            if unsafe { foreground_covers_taskbar_monitor(windows::Win32::Foundation::HWND(hwnd.0)) } { return Ok(()); }
+            if unsafe { foreground_covers_taskbar_monitor(windows::Win32::Foundation::HWND(hwnd.0)) } { record_dock_event("suppressed-fullscreen"); return Ok(()); }
         }
-        if let Some(existing) = app.get_webview_window("dock-menu") { existing.close()?; return Ok(()); }
+        if let Some(existing) = app.get_webview_window("dock-menu") { record_dock_event("reused"); existing.show()?; existing.set_focus()?; return Ok(()); }
         #[cfg(windows)]
         let bounds = {
             let hwnd = window.hwnd()?;
@@ -1424,12 +1466,15 @@ async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), Str
         let closing = popup.clone();
         let mut_focused = std::sync::Arc::new(AtomicBool::new(false));
         popup.on_window_event(move |event| {
-            if matches!(event, WindowEvent::Focused(true)) { mut_focused.store(true,Ordering::Release); }
-            if matches!(event, WindowEvent::Focused(false)) && mut_focused.load(Ordering::Acquire) { let _ = closing.close(); }
+            if matches!(event, WindowEvent::Focused(true)) { record_dock_event("focused"); mut_focused.store(true,Ordering::Release); }
+            if matches!(event, WindowEvent::Focused(false)) && mut_focused.load(Ordering::Acquire) { record_dock_event("blur-close"); let _ = closing.close(); }
         });
         if let Err(error) = popup.show().and_then(|_| popup.set_focus()) { let _ = popup.close(); return Err(error); }
+        record_dock_event("shown");
         Ok(())
-    }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+    }).await.map_err(|e| e.to_string()).and_then(|r| r.map_err(|e|e.to_string()));
+    if let Err(error) = &result { record_dock_event(&format!("error:{error}")); }
+    result
 }
 #[tauri::command]
 fn close_dock_menu(app: AppHandle) {
@@ -1943,7 +1988,7 @@ fn alarm_watch(app: AppHandle) {
                     let _ = w.set_always_on_top(true);  // above everything even if Windows refuses it focus
                     let _ = w.set_focus();
                     #[cfg(windows)]
-                    if let Ok(h) = w.hwnd() { activate(h.0 as isize); }  // the Alt-tap route that also wins focus
+                    if let Ok(h) = w.hwnd() { tauri::async_runtime::spawn(activate(h.0 as isize)); }
                 }
             });
         } else if !now && ringing {
@@ -1968,6 +2013,7 @@ fn alarm_watch(app: AppHandle) {
 fn switcher_events() {
     use windows::Win32::{Foundation::HWND, UI::{Accessibility::*, WindowsAndMessaging::*}};
     unsafe extern "system" fn changed(_: HWINEVENTHOOK, event: u32, _: HWND, _: i32, _: i32, _: u32, _: u32) {
+        record_dock_event(if event == EVENT_SYSTEM_SWITCHSTART { "switch-start" } else { "switch-end" });
         SWITCHER_VISIBLE.store(event == EVENT_SYSTEM_SWITCHSTART, Ordering::Release);
         if event == EVENT_SYSTEM_SWITCHSTART {
             SWITCHER_RESTORE_REQUESTED.store(true, Ordering::Release);
@@ -2130,7 +2176,7 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             let show = dock_surface::strip_visible(tb_visible, fullscreen, position.fits,
                 strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire)));
             if let Ok(mut surfaces) = SURFACES.lock() {
-                if let Some(s) = surfaces.iter_mut().find(|s| s.label == label) { s.shown = show; s.shelf = position.shelf; s.room = available; }
+                if let Some(s) = surfaces.iter_mut().find(|s| s.label == label) { s.shown = show; s.shelf = position.shelf; s.room = available; s.geometry = Some(g.clone()); }
                 AVAIL_CSS.store(surfaces.iter().map(|s| s.room).min().unwrap_or(available), Ordering::Relaxed);
             }
             LAYOUT_CSS.store(available, Ordering::Relaxed);
@@ -2323,6 +2369,11 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn handle_args(app: &AppHandle, args: &[String]) {
     let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
+    if args.iter().any(|a| a == "--dock-diagnostics") {
+        let app = app.clone();
+        std::thread::spawn(move || { std::thread::sleep(Duration::from_millis(700)); if let Err(error) = write_dock_diagnostics(&app) { eprintln!("[dock] diagnostic snapshot: {error}"); } });
+        return;
+    }
     if args.iter().any(|a| a == "--restore-taskbar") {
         set_dock_enabled(false);
         #[cfg(windows)]

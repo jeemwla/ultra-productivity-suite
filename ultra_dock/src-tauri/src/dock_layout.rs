@@ -170,7 +170,7 @@ pub fn settle_room(used: Option<f64>, new: f64, plan_width: f64) -> f64 {
 }
 
 /// Taskbar geometry in physical pixels, read with UI Automation and window rectangles.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct TaskbarGeom {
     pub left: i32,
     pub right: i32,

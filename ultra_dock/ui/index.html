@@ -67,6 +67,8 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .tray.open .win{opacity:1;transform:none;transition:background .12s,opacity .25s var(--ease),transform .3s var(--ease)}
 .win:hover{background:var(--hover)} .win:active{background:var(--press);transform:scale(.94)}
 .win img{width:24px;height:24px;display:block}
+.activation-error{box-shadow:inset 0 0 0 1px #ff847d}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .win .ph{width:24px;height:24px;border-radius:6px}
 .win .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease)}
 .win.active .runbar{width:16px;background:var(--bar-active)}
@@ -124,6 +126,7 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
 </head>
 <body>
 <div class="strip" id="strip"></div>
+<div id="activation-status" class="sr-only" role="status" aria-live="polite"></div>
 <div id="dock-menu" class="dock-menu" hidden role="menu" aria-label="Dock menu"></div>
 <div class="sv" id="survey" hidden>
   <h1>Sorry to see you go</h1>
@@ -322,20 +325,31 @@ function setOpen(cat){
   setTimeout(report, 340); // settle the measured native width after either transition
 }
 
+let menuOpening = false;
+async function activateTarget(hwnd, button){
+  try { if (!invoke || await invoke("activate", { hwnd }) !== false) return true; } catch {}
+  const message = "Windows could not switch to this app. Try again.";
+  button.title = message; button.classList.add("activation-error");
+  $("activation-status").textContent = message;
+  return false;
+}
 async function handleDockClick(e){
   const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), t = e.target.closest(".wt"), a = e.target.closest(".act");
   if (g) {
     if (g.dataset.cat === "__menu" && invoke) {
+      if (menuOpening) return;
+      menuOpening = true;
       closeAll();
       try { await invoke("show_dock_menu"); } catch { await invoke("open_dock_settings"); }
+      finally { menuOpening = false; }
       return;
     }
     setOpen(open === g.dataset.cat ? null : g.dataset.cat); return;
   }
-  if (t) { if (invoke) await invoke("activate", { hwnd: +t.dataset.h }); setTimeout(closeAll, 220); return; }
+  if (t) { if (!await activateTarget(+t.dataset.h,t)) return; setTimeout(closeAll, 220); return; }
   if (w) {
     if (w.hasAttribute("aria-expanded")) { pick = pick === w.dataset.exe ? null : w.dataset.exe; render(); return; }  // several windows: show or hide the list
-    if (invoke) await invoke("activate", { hwnd: +w.dataset.h }); setTimeout(() => setOpen(null), 220); return;
+    if (!await activateTarget(+w.dataset.h,w)) return; setTimeout(() => setOpen(null), 220); return;
   }
   if (a) {
     const k = a.dataset.act;
