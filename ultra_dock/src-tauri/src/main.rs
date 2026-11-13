@@ -1369,6 +1369,18 @@ fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app, false); 
 #[tauri::command]
 async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || -> tauri::Result<()> {
+        #[cfg(windows)]
+        struct MenuApartment;
+        #[cfg(windows)]
+        impl Drop for MenuApartment {
+            fn drop(&mut self) { unsafe { windows::Win32::System::Com::CoUninitialize(); } }
+        }
+        #[cfg(windows)]
+        let _apartment = unsafe {
+            windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED)
+                .ok().map_err(|error| std::io::Error::other(format!("Dock menu apartment: {error}")))?;
+            MenuApartment
+        };
         static OPENING: Mutex<()> = Mutex::new(());
         let Ok(_opening) = OPENING.lock() else { return Ok(()); };
         #[cfg(windows)]
@@ -1390,14 +1402,14 @@ async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), Str
                     let scale = f64::from(GetDpiForWindow(h).max(96)) / 96.0;
                     dock_surface::menu_rect((r.right,r.top),
                         (mi.rcWork.left,mi.rcWork.top,mi.rcWork.right,mi.rcWork.bottom),
-                        ((320.0*scale).round() as i32,(440.0*scale).round() as i32), (8.0*scale).round() as i32)
+                        ((320.0*scale).round() as i32,(500.0*scale).round() as i32), (8.0*scale).round() as i32)
                 } else {
                     return Err(std::io::Error::other("Dock menu anchor is unavailable").into());
                 }
             }
         };
         let popup = WebviewWindowBuilder::new(&app, "dock-menu", WebviewUrl::App("dock_menu.html".into()))
-            .title(format!("{} menu", app_label("dock"))).inner_size(320.0, 440.0)
+            .title(format!("{} menu", app_label("dock"))).inner_size(320.0, 500.0)
             .decorations(false).resizable(false).always_on_top(true).skip_taskbar(true)
             .transparent(true).visible(false).build()?;
         #[cfg(windows)]
