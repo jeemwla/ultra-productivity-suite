@@ -8,7 +8,7 @@ Code Red Alarm. Install it from the [latest release](https://github.com/jeemwla/
 - **Normal buttons stay normal.** Every app you pin to the taskbar keeps its own button with its "open" underline, and so do the apps in the keep list (default: Opera, Opera developer, File Explorer, Discord, Spotify).
 - **Everything else goes into folders** next to your taskbar icons: Games, Chat, AI, Web, Create, Tools, Other. Each folder shows up to four real app icons and a count. Click it and the apps slide open; click an app to bring it forward.
 - **One icon per app.** An app with several windows shows one icon with a count; click it to see its window titles and pick one.
-- A Dock strip is created for each Windows taskbar. When the native gap is too small, the strip moves to a stable shelf just above the taskbar. The shelf stays visible with taskbar auto-hide; full-screen games temporarily return apps to the native taskbar.
+- A Dock strip is created inside each Windows taskbar, within the measured free space. A crowded taskbar keeps native buttons available when a usable strip cannot fit. The notification-area menu still opens Dock settings. Auto-hide and full-screen apps hide the strip; there is no floating fallback. The Dock menu uses a separate native popup, so its labels stay readable without moving the strip.
 - **Safe by design.** A watchdog checks the dock every 2 seconds. If it stops responding, every app goes straight back to the normal taskbar until the dock recovers. On Quit, on uninstall, and after a crash at the next start, every button is put back.
 - **Updates.** A dot on the menu arrow means a new version is out; the menu then has an Update button.
 

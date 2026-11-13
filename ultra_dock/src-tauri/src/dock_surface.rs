@@ -43,29 +43,64 @@ impl SwitcherPause {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Placement { pub x: i32, pub y: i32, pub width: i32, pub height: i32, pub shelf: bool }
+pub struct Placement {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub fits: bool,
+    pub shelf: bool,
+}
 
-/// Insufficient native space latches a shelf above the taskbar. Hiding buttons cannot move the Dock back and
-/// forth between lanes. Only a monitor/taskbar geometry change starts a new placement session.
-pub fn place(left: i32, right: i32, top: i32, bottom: i32, taskbar_top: i32,
-             gap_x: i32, gap_right: i32, scale: f64, requested_w: u32, requested_h: u32,
-             shelf: &mut bool) -> Placement {
+/// A persistent strip follows the native taskbar and yields to full-screen windows.
+pub fn strip_visible(taskbar_visible: bool, fullscreen: bool, fits: bool, requested: bool) -> bool {
+    taskbar_visible && !fullscreen && fits && requested
+}
+
+/// Place the persistent strip in physical taskbar coordinates. Width requests are
+/// CSS pixels; page overflow handles requests larger than the safe native gap.
+/// A usable strip needs 78 CSS pixels (folder 44, menu 28, slack 6). Smaller
+/// requests are raised to that minimum. Unusable spans return zero width and
+/// `fits = false`, so callers must retain native buttons and hide the strip.
+/// Menu heights deliberately have no input here: transient popups cannot resize
+/// or relocate the persistent strip. No placement ever authorizes a shelf.
+pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
+                        gap_x: i32, gap_right: i32, scale: f64,
+                        requested_w: u32) -> Placement {
     let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
-    let pad = (8.0 * scale).round() as i32;
-    let screen_w = (right - left).max(1);
-    let base_h = (48.0 * scale).round() as i32;
-    let width = ((requested_w as f64 * scale).ceil() as i32).clamp(1, (screen_w - 2 * pad).max(1));
-    let height = ((requested_h as f64 * scale).ceil() as i32).clamp(1, (bottom - top - 2 * pad).max(1));
-    if width > gap_right - gap_x || height > base_h { *shelf = true; }
-    let (x, y) = if *shelf {
-        (left + pad, taskbar_top - height - pad)
-    } else { (gap_x, taskbar_top) };
-    Placement { x: x.clamp(left, (right - width).max(left)), y: y.clamp(top, (bottom - height).max(top)), width, height, shelf: *shelf }
+    // Widen before subtraction, including for malformed or extreme rectangles.
+    let end = right.max(left);
+    let x = gap_x.clamp(left, end);
+    let safe_end = gap_right.clamp(left, end).max(x);
+    let span = (i64::from(safe_end) - i64::from(x)).min(i64::from(i32::MAX));
+    let native_height = (i64::from(bottom) - i64::from(top)).clamp(0, i64::from(i32::MAX));
+    let minimum = (78.0 * scale).ceil();
+    let height = native_height.min((48.0 * scale).floor() as i64) as i32;
+    let fits = span as f64 >= minimum && height > 0;
+    let width = if fits {
+        ((f64::from(requested_w) * scale).ceil().max(minimum).min(span as f64)) as i32
+    } else { 0 };
+    Placement { x, y: top, width, height, fits, shelf: false }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hidden_taskbars_and_fullscreen_apps_never_get_an_independent_overlay() {
+        for taskbar in [false, true] {
+            for fullscreen in [false, true] {
+                for fits in [false, true] {
+                    for requested in [false, true] {
+                        assert_eq!(strip_visible(taskbar, fullscreen, fits, requested),
+                            taskbar && !fullscreen && fits && requested);
+                    }
+                }
+            }
+        }
+        assert!(!strip_visible(false, false, true, true), "auto-hide cannot create a floating Dock");
+        assert!(!strip_visible(true, true, true, true), "full-screen apps retain their screen");
+    }
     #[test]
     fn all_screens_must_acknowledge_before_global_hiding() {
         let mut a = Surface::new(1, 11, "taskbar".into());
@@ -90,46 +125,82 @@ mod tests {
         assert_eq!(pause.update(true, 360), (true, true));
     }
     #[test]
-    fn crowded_taskbar_does_not_make_dock_vanish_or_oscillate() {
-        let mut shelf = false;
-        let p = place(0, 1280, 0, 720, 672, 1100, 1120, 1.0, 400, 48, &mut shelf);
-        assert!(p.shelf); assert_eq!(p.width, 400); assert!(p.y + p.height < 672);
-        for gap in [300, 1100, 500, 1100] {
-            assert_eq!(place(0, 1280, 0, 720, 672, gap, 1120, 1.0, 400, 48, &mut shelf), p);
+    fn narrow_gaps_fail_closed_and_exact_minimum_fits_at_all_dpis() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for gap in [0, 14, 70] {
+                let p = place_in_taskbar(0, 1000, 1920, 1100, 100, 100 + gap, scale, 400);
+                assert!(!p.fits);
+                assert_eq!(p.width, 0);
+                assert!(!p.shelf);
+                assert!(p.height >= 0 && p.height <= 100);
+            }
+            let minimum = (78.0_f64 * scale).ceil() as i32;
+            assert!(!place_in_taskbar(0, 0, 1920, 100, 100, 100 + minimum - 1, scale, 400).fits);
+            let p = place_in_taskbar(0, 0, 1920, 100, 100, 100 + minimum, scale, 0);
+            assert!(p.fits);
+            assert_eq!(p.width, minimum);
         }
     }
+
     #[test]
-    fn seven_apps_and_overflow_folder_remain_available_on_two_crowded_taskbars() {
-        let apps: Vec<String> = (0..12).map(|n| format!("app{n}.exe")).collect();
-        let plan = crate::dock_layout::plan_capped(&[("Tools".into(), apps.clone())], f64::INFINITY, Some(7));
-        assert_eq!(plan.items.iter().filter(|i| !i.folder).count(), 7);
-        assert_eq!(plan.items.iter().filter(|i| i.folder).count(), 1);
-        assert!(plan.left_out.is_empty());
-        let mut surfaces = vec![];
-        for (n, width) in [1280, 1920].into_iter().enumerate() {
-            let p = place(0, width, 0, 1080, 1032, width-300, width-280, 1.0, plan.width.ceil() as u32, 48, &mut false);
-            assert!(p.shelf);
-            assert_eq!(p.width, plan.width.ceil() as i32, "cap is not silently compacted away by the small native gap");
-            let mut s = Surface::new(n as isize, 10+n as isize, format!("taskbar-{n}"));
-            s.shown = true; s.rendered_at = Some(1); s.rendered.extend(100..112);
-            surfaces.push(s);
-        }
-        assert_eq!(acknowledged(&surfaces, 2).len(), 12);
-        surfaces[1].shown = false;
-        assert!(acknowledged(&surfaces, 2).is_empty(), "native buttons return if either screen loses its Dock");
+    fn wide_gap_clamps_width_and_has_no_shelf_latch() {
+        assert!(!place_in_taskbar(0, 672, 1280, 720, 100, 114, 1.0, 400).fits);
+        let p = place_in_taskbar(0, 672, 1280, 720, 100, 600, 1.0, 400);
+        assert_eq!(p, Placement { x: 100, y: 672, width: 400, height: 48, fits: true, shelf: false });
+        let overflow = place_in_taskbar(0, 672, 1280, 720, 100, 600, 1.0, u32::MAX);
+        assert_eq!(overflow.width, 500);
+        assert_eq!(overflow.height, 48);
     }
+
     #[test]
-    fn menu_and_strip_stay_inside_every_monitor_at_all_dpis() {
-        for width in [1024,1280,1366,1440,1920,2560,3840] {
-            for scale in [1.0,1.25,1.5,1.75,2.0] {
-                for origin in [-1920,0,2560] {
-                    for wanted in [30,400,700,1800] {
-                        let p = place(origin,origin+width,-400,1040,992,origin+width-300,origin+width-280,scale,wanted,240,&mut false);
-                        assert!(p.x >= origin && p.x+p.width <= origin+width);
-                        assert!(p.y >= -400 && p.y+p.height <= 1040);
+    fn strip_stays_inside_taskbar_and_safe_gap_on_both_monitors() {
+        for origin in [-3840, -1920, 0, 2560] {
+            for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+                for native_height in [0, 1, 32, 48, 72, 120] {
+                    for wanted in [0, 30, 78, 400, 1800, u32::MAX] {
+                        let left = origin;
+                        let right = origin + 1920;
+                        let top = -400;
+                        let bottom = top + native_height;
+                        let p = place_in_taskbar(left, top, right, bottom, left + 100, right - 200, scale, wanted);
+                        assert!(p.x >= left + 100);
+                        assert!(i64::from(p.x) + i64::from(p.width) <= i64::from(right - 200));
+                        assert_eq!(p.y, top);
+                        assert!(p.height >= 0 && p.y + p.height <= bottom);
+                        assert!(f64::from(p.height) <= 48.0 * scale);
+                        assert_eq!(p.fits, native_height > 0);
+                        assert!(!p.shelf);
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn gap_is_intersected_with_native_bounds() {
+        let p = place_in_taskbar(-100, -48, 500, 0, -500, 900, 1.0, 1000);
+        assert_eq!(p, Placement { x: -100, y: -48, width: 600, height: 48, fits: true, shelf: false });
+        for (gap_x, gap_right) in [(600, 900), (-500, -200), (200, 100)] {
+            let p = place_in_taskbar(-100, -48, 500, 0, gap_x, gap_right, 1.0, 400);
+            assert!(!p.fits);
+            assert_eq!(p.width, 0);
+            assert!((-100..=500).contains(&p.x));
+        }
+    }
+
+    #[test]
+    fn invalid_geometry_and_scale_are_safe() {
+        for scale in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+            assert_eq!(place_in_taskbar(0, 0, 500, 48, 0, 500, scale, 100),
+                       place_in_taskbar(0, 0, 500, 48, 0, 500, 1.0, 100));
+        }
+        for (left, top, right, bottom) in [(100, 50, 0, 0), (0, 0, 0, 0),
+                                         (i32::MIN, i32::MIN, i32::MAX, i32::MAX)] {
+            let p = place_in_taskbar(left, top, right, bottom, left, right, 2.0, u32::MAX);
+            assert!(p.width >= 0 && p.height >= 0);
+            assert!(i64::from(p.x) + i64::from(p.width) <= i64::from(right.max(left)));
+            assert!(i64::from(p.y) + i64::from(p.height) <= i64::from(bottom.max(top)));
+            assert!(!p.shelf);
         }
     }
 }

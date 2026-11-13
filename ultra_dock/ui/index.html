@@ -20,8 +20,9 @@ body{font:12px/1 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased
 button{font:inherit;color:inherit;border:0;background:none;cursor:default;outline:none}
 button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 
-.strip{position:absolute;left:0;bottom:0;height:48px;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.strip{position:absolute;left:0;bottom:0;height:100%;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .strip::-webkit-scrollbar{display:none}
+.strip .grp,.strip .win,.strip .more{max-height:100%}
 .strip > .group[data-cat="__menu"]{position:sticky;right:0;z-index:3;background:#24262df5;border-radius:6px}
 /* Small screens: the strip never grows past the taskbar's free space (max-width is set from the measured room).
    An open folder or menu that needs more room hides the other folders until it closes, and scrolls with the wheel. */
@@ -119,7 +120,6 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
 .dock-menu .capctl{grid-column:1 / -1;justify-content:center}
 .dock-menu .menu-note{grid-column:1 / -1;white-space:normal;font-size:12px;line-height:1.4;color:#ddd;max-width:460px;padding:4px}
 @media(max-width:360px){.dock-menu{grid-template-columns:repeat(2,minmax(max-content,1fr));padding:6px;gap:2px}}
-body.shelf .strip{--ink:#fff;--ink-2:#dedfe5;--ink-3:#a5a8b2;background:#24262ded;border:1px solid #6b6f7d;border-radius:10px;color:#fff;padding:0 4px}
 </style>
 </head>
 <body>
@@ -288,13 +288,11 @@ function render(){
 /* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
 function report(){
   if (!invoke) return;
-  const popup = $("dock-menu");
-  const menuWidth = popup.hidden ? 0 : Math.ceil(popup.getBoundingClientRect().width);
-  const menuHeight = popup.hidden ? 0 : Math.ceil(popup.getBoundingClientRect().height) + 56;
-  const full = Math.max(Math.ceil($("strip").scrollWidth) + 8, menuWidth);
+  // Native menus are separate transient surfaces. The persistent strip always stays one taskbar row tall.
+  const full = Math.ceil($("strip").scrollWidth) + 8;
   if (!open && !pick) baseW = full;
   else if (state.layout && state.layout.width) baseW = Math.ceil(state.layout.width);
-  invoke("set_strip_width", { width: Math.min(full, room() + 2), rendered: shownHwnds, base: baseW, height: Math.max(48, menuHeight) });
+  invoke("set_strip_width", { width: Math.min(full, room()), rendered: shownHwnds, base: baseW, height: 48 });
 }
 
 function setOpen(cat){
@@ -326,7 +324,14 @@ function setOpen(cat){
 
 async function handleDockClick(e){
   const g = e.target.closest(".grp,.more"), w = e.target.closest(".win"), t = e.target.closest(".wt"), a = e.target.closest(".act");
-  if (g) { setOpen(open === g.dataset.cat ? null : g.dataset.cat); return; }
+  if (g) {
+    if (g.dataset.cat === "__menu" && invoke) {
+      closeAll();
+      try { await invoke("show_dock_menu"); } catch { await invoke("open_dock_settings"); }
+      return;
+    }
+    setOpen(open === g.dataset.cat ? null : g.dataset.cat); return;
+  }
   if (t) { if (invoke) await invoke("activate", { hwnd: +t.dataset.h }); setTimeout(closeAll, 220); return; }
   if (w) {
     if (w.hasAttribute("aria-expanded")) { pick = pick === w.dataset.exe ? null : w.dataset.exe; render(); return; }  // several windows: show or hide the list
@@ -366,7 +371,6 @@ async function poll(){
     const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
     const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout && s.layout.items, s.avail, s.cap]);
     state = s;
-    document.body.classList.toggle("shelf", !!s.shelf);
     // Commit the signature only after a successful render. Otherwise a transient
     // render exception would prevent retries while polling still looked healthy.
     if (nsig !== sig) { render(); sig = nsig; }

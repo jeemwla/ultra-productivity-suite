@@ -28,14 +28,14 @@ test('rapid folder close cannot be undone by a stale animation frame',()=>{
 });
 
 
-test('an open Dock menu reserves its complete rectangle including the Alarm action',()=>{
+test('a menu cannot resize or lift the persistent taskbar strip',()=>{
  const source=html.slice(html.indexOf('function report(){'),html.indexOf('function setOpen(cat){'));
  const calls=[], popup={hidden:false,getBoundingClientRect:()=>({width:520,height:152})};
  const context=vm.createContext({$:id=>id==='dock-menu'?popup:{scrollWidth:90},invoke:(name,args)=>calls.push({name,args}),Math,room:()=>800});
  vm.runInContext('let open="__menu",pick=null,baseW=90,state={layout:{width:90}},shownHwnds=[42];\n'+source,context);
  context.report();
- assert.equal(calls[0].args.width,520);
- assert.equal(calls[0].args.height,208,'152 px popup plus the bottom strip and gap');
+ assert.equal(calls[0].args.width,98);
+ assert.equal(calls[0].args.height,48,'menus live in an independent native popup');
  assert.deepEqual([...calls[0].args.rendered],[42]);
  popup.hidden=true; context.report();
  assert.equal(calls[1].args.height,48);

@@ -909,9 +909,9 @@ fn get_windows(window: WebviewWindow) -> Value {
     let snapshot = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
     let wins = offered_snapshot(&snapshot, organize, covered, restoring, pending.as_deref());
     let reason = dock_fallback_reason(organize, covered, HEALTHY.load(Ordering::Relaxed), restoring);
-    let layout = strip_plan(&wins);
     let surface = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.label == window.label()).cloned());
     let avail = surface.as_ref().map(|s| s.room).unwrap_or(AVAIL_CSS.load(Ordering::Relaxed));
+    let layout = strip_plan(&wins, avail);
     let shelf = surface.is_some_and(|s| s.shelf);
     let counts = CANDIDATES.lock().map(|v| v.as_ref().map(|c| (c.groups.iter().map(|g| g.1.len()).sum::<usize>(), c.pending.len(), c.hidden_apps)).unwrap_or_default()).unwrap_or_default();
     json!({ "organize": organize, "windows": wins, "order": org_config().order, "fallback_reason": reason,
@@ -919,15 +919,14 @@ fn get_windows(window: WebviewWindow) -> Value {
 }
 
 /// Group the listed windows into the folders and apps the strip shows, sized to the taskbar's free space.
-fn strip_plan(wins: &[WinInfo]) -> Value {
+fn strip_plan(wins: &[WinInfo], available: u32) -> Value {
     let mut groups: Vec<(String, Vec<String>)> = vec![];
     for w in wins {  // already sorted by category order, then name
         let pos = match groups.iter().position(|g| g.0 == w.category) { Some(p) => p, None => { groups.push((w.category.clone(), vec![])); groups.len() - 1 } };
         if !groups[pos].1.contains(&w.exe) { groups[pos].1.push(w.exe.clone()); }
     }
-    let room = LAYOUT_CSS.load(Ordering::Relaxed);
-    let _ = room;
-    let plan = dock_layout::plan_capped(&groups, f64::INFINITY, dock_cap());
+    let room = if available == u32::MAX { f64::INFINITY } else { available as f64 };
+    let plan = dock_layout::plan_capped(&groups, room, dock_cap());
     json!({
         "items": plan.items.iter().map(|i| json!({ "key": i.key, "label": i.label, "folder": i.folder, "exes": i.exes })).collect::<Vec<_>>(),
         "width": plan.width, "compacted": plan.compacted, "over_six": plan.over_six, "left_out": plan.left_out,
@@ -1288,6 +1287,60 @@ fn open_dock_settings_window(app: &AppHandle, edit: bool) {
 
 #[tauri::command]
 fn open_dock_settings(app: AppHandle) { open_dock_settings_window(&app, false); }
+
+/// Windows owns the transient menu, so opening it never changes the persistent strip's rectangle.
+#[tauri::command]
+async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || -> tauri::Result<()> {
+        use tauri::menu::{CheckMenuItem, ContextMenu, Menu, MenuItem, PredefinedMenuItem, Submenu};
+        #[cfg(windows)]
+        if let Ok(hwnd) = window.hwnd() {
+            if unsafe { foreground_covers_taskbar_monitor(windows::Win32::Foundation::HWND(hwnd.0)) } { return Ok(()); }
+        }
+        let menu = Menu::new(&app)?;
+        let organize = MenuItem::with_id(&app, "dockpopup_organize",
+            if ORGANIZE.load(Ordering::Acquire) { "Show all native buttons" } else { "Organize apps" }, true, None::<&str>)?;
+        menu.append(&organize)?;
+        let cap = Submenu::new(&app, "Apps shown individually", true)?;
+        let auto = CheckMenuItem::with_id(&app, "dockpopup_cap_auto", "Automatic", true, dock_cap().is_none(), None::<&str>)?;
+        cap.append(&auto)?;
+        for count in 0..=CAP_MAX {
+            let text = if count == 0 { "None (all in folders)".to_string() } else { format!("{count} apps") };
+            let item = CheckMenuItem::with_id(&app, format!("dockpopup_cap_{count}"), text, true,
+                dock_cap() == Some(count as usize), None::<&str>)?;
+            cap.append(&item)?;
+        }
+        menu.append(&cap)?;
+        menu.append(&PredefinedMenuItem::separator(&app)?)?;
+        for (id, label) in [("sentinel", app_label("sentinel")), ("alarm", app_label("alarm")),
+            ("edit", "Edit folders"), ("settings", "Dock settings"),
+            ("updates", "Updates"), ("quit", "Quit Ultra Suite")] {
+            let item = MenuItem::with_id(&app, format!("dockpopup_{id}"), label, true, None::<&str>)?;
+            menu.append(&item)?;
+        }
+        menu.popup(window.as_ref().window())?;
+        Ok(())
+    }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+}
+
+fn handle_dock_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    let id = event.id().as_ref();
+    if let Some(value) = id.strip_prefix("dockpopup_cap_") {
+        let cap = if value == "auto" { None } else { value.parse::<u32>().ok() };
+        if let Err(error) = set_dock_cap(cap) { eprintln!("[dock] {error}"); open_dock_settings_window(app, false); }
+        return;
+    }
+    match id {
+        "dockpopup_organize" => set_organize(!ORGANIZE.load(Ordering::Acquire)),
+        "dockpopup_sentinel" => open_view(app, "sentinel"),
+        "dockpopup_alarm" => open_view(app, "alarm"),
+        "dockpopup_edit" => open_dock_settings_window(app, true),
+        "dockpopup_settings" => open_dock_settings_window(app, false),
+        "dockpopup_updates" => open_view(app, "hub"),
+        "dockpopup_quit" => quit(app.clone()),
+        _ => {}
+    }
+}
 
 #[tauri::command]
 fn open_dock_editor(app: AppHandle) { open_dock_settings_window(&app, true); }
@@ -1883,8 +1936,6 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
         // Latest UI Automation reading of the taskbar: Start, the native buttons and the notification area
         let mut geom = dock_layout::TaskbarGeom::default();
 
-        let mut shelf = false;
-        let mut geometry_key = (0, 0, 0, 0);
 
         let mut last_uia = Instant::now() - Duration::from_secs(10);
         let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false);
@@ -1952,17 +2003,13 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             }
             let span = dock_layout::free_span(&g);
 
-            let key = (mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom);
-            if key != geometry_key { shelf = false; geometry_key = key; }
-            if !tb_visible { shelf = true; } // auto-hide must not remove the Dock while its shelf is in use
             let report = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.label == label).cloned());
             let Some(report) = report else { break };
-            let position = dock_surface::place(mi.rcMonitor.left, mi.rcMonitor.right, mi.rcMonitor.top, mi.rcMonitor.bottom,
-                r.top, span.x, span.limit, scale, report.width, report.height, &mut shelf);
-            // A shelf uses the screen width rather than guessing how much native room DeleteTab may free.
-            // The same lane stays latched while folders/menus open and native apps enter/leave the taskbar.
-            let available = ((mi.rcMonitor.right - mi.rcMonitor.left) as f64 / scale - 16.0).clamp(1.0, 1800.0) as u32;
-            let show = (tb_visible || shelf) && !fullscreen && strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire));
+            let position = dock_surface::place_in_taskbar(r.left, r.top, r.right, r.bottom,
+                span.x, span.limit, scale, report.width);
+            let available = ((span.limit - span.x).max(0) as f64 / scale).floor().clamp(0.0, 1800.0) as u32;
+            let show = dock_surface::strip_visible(tb_visible, fullscreen, position.fits,
+                strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire)));
             if let Ok(mut surfaces) = SURFACES.lock() {
                 if let Some(s) = surfaces.iter_mut().find(|s| s.label == label) { s.shown = show; s.shelf = position.shelf; s.room = available; }
                 AVAIL_CSS.store(surfaces.iter().map(|s| s.room).min().unwrap_or(available), Ordering::Relaxed);
@@ -2253,7 +2300,8 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_settings_get, dock_settings_save, dock_settings_reset])
+        .on_menu_event(handle_dock_menu)
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {
