@@ -52,7 +52,16 @@ pub enum Infeasible {
 /// Chooses minimum symmetric width, then minimum padding imbalance, then earliest split.
 /// No projection of future native-button removal or obstacle motion is permitted.
 pub fn plan(input: &Input) -> Result<Plan, Infeasible> {
+    plan_reserved(input, 0.0, 0, input.items.len())
+}
+
+/// Constrained split for paired runtime planning: reserve outer padding on BOTH
+/// sides and restrict the split so the final menu item stays on the right.
+pub fn plan_reserved(input: &Input, reserve_css: f64, min_left: usize, max_left: usize) -> Result<Plan, Infeasible> {
     let i = input;
+    if !reserve_css.is_finite() || reserve_css < 0.0 || min_left > max_left || max_left > i.items.len() {
+        return Err(Infeasible::InvalidItems);
+    }
     if i.taskbar.width() <= 0 || i.native.width() <= 0
         || i.native.left < i.taskbar.left || i.native.right > i.taskbar.right
         || i.obstacles.iter().any(|r| r.width() <= 0 || r.left < i.taskbar.left
@@ -72,6 +81,9 @@ pub fn plan(input: &Input) -> Result<Plan, Infeasible> {
     let gap = (i.gap_css * i.scale).ceil();
     if !gap.is_finite() || gap > i.taskbar.width() as f64 { return Err(Infeasible::InvalidGap); }
     let gap = gap as i64;
+    let reserve = (reserve_css * i.scale).ceil();
+    if !reserve.is_finite() || reserve > i.taskbar.width() as f64 { return Err(Infeasible::NoSymmetricSpace); }
+    let reserve = reserve as i64;
     let mut ids = HashSet::new();
     let mut widths = Vec::new();
     let mut total = 0i64;
@@ -98,9 +110,9 @@ pub fn plan(input: &Input) -> Result<Plan, Infeasible> {
     let mut left_width = 0;
     for split in 0..=widths.len() {
         let right_width = total - left_width;
-        let extent = left_width.max(right_width);
+        let extent = left_width.max(right_width).checked_add(reserve).ok_or(Infeasible::InvalidItems)?;
         let candidate = (extent, (left_width - right_width).abs(), split, left_width, right_width);
-        if extent <= capacity && best.as_ref().is_none_or(|b| candidate < *b) { best = Some(candidate); }
+        if split >= min_left && split <= max_left && extent <= capacity && best.as_ref().is_none_or(|b| candidate < *b) { best = Some(candidate); }
         if split < widths.len() { left_width += widths[split]; }
     }
     let Some((extent, _, split, lw, rw)) = best else { return Err(Infeasible::NoSymmetricSpace); };
@@ -211,5 +223,29 @@ mod tests {
             let optimum=(0..=n).map(|k|px[..k].iter().sum::<i64>().max(px[k..].iter().sum::<i64>())).min().unwrap();
             match plan(&i) {Ok(p)=>{verify(&i,&p);assert_eq!(p.left.rect.width(),optimum);assert!(optimum<=capacity);},Err(e)=>{assert_eq!(e,Infeasible::NoSymmetricSpace);assert!(optimum>capacity);}}
         }}}
+    }
+}
+
+#[cfg(test)]
+mod reserved_tests {
+    use super::*;
+    fn input()->Input{Input{
+        taskbar:Rect{left:-1440,right:0},native:Rect{left:-776,right:-665},
+        obstacles:vec![Rect{left:-1440,right:-1340},Rect{left:-100,right:0}],scale:1.25,
+        items:vec![Item{id:"app".into(),width_css:40.},Item{id:"menu".into(),width_css:40.}],
+        requested_center:-720.5,gap_css:2.,generation:1,expected_generation:1,
+        measured_at_ms:100,now_ms:150,max_age_ms:1000}}
+    #[test]fn reserve_padding_keeps_menu_on_right_and_equal_physical_spans(){
+        let i=input();let p=plan_reserved(&i,8.,1,1).unwrap();
+        assert_eq!(p.left.rect.width(),60);assert_eq!(p.right.rect.width(),60);
+        assert_eq!(p.left.outer_padding,10);assert_eq!(p.right.outer_padding,10);
+        assert_eq!(p.left.items[0].id,"app");assert_eq!(p.right.items[0].id,"menu");
+        assert_eq!(p.left.rect.right,-779);assert_eq!(p.right.rect.left,-662);
+        assert_eq!(i64::from(p.left.rect.left)+i64::from(p.right.rect.right),-1441);
+    }
+    #[test]fn split_constraints_and_invalid_reserve_fail_explicitly(){
+        let i=input();assert_eq!(plan_reserved(&i,8.,2,1),Err(Infeasible::InvalidItems));
+        assert_eq!(plan_reserved(&i,f64::NAN,1,1),Err(Infeasible::InvalidItems));
+        assert_eq!(plan_reserved(&i,1000.,1,1),Err(Infeasible::NoSymmetricSpace));
     }
 }

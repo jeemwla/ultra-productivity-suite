@@ -32,7 +32,7 @@ test('a menu cannot resize or lift the persistent taskbar strip',()=>{
  const source=html.slice(html.indexOf('function report(){'),html.indexOf('function setOpen(cat){'));
  const calls=[], popup={hidden:false,getBoundingClientRect:()=>({width:520,height:152})};
  const context=vm.createContext({$:id=>id==='dock-menu'?popup:{scrollWidth:90},invoke:(name,args)=>calls.push({name,args}),Math,room:()=>800});
- vm.runInContext('let open="__menu",pick=null,baseW=90,state={layout:{width:90}},shownHwnds=[42];\n'+source,context);
+ vm.runInContext('let lastDiagnosticEpoch=0,open="__menu",pick=null,baseW=90,state={layout:{width:90}},shownHwnds=[42];\n'+source,context);
  context.report();
  assert.equal(calls[0].args.width,98);
  assert.equal(calls[0].args.height,48,'menus live in an independent native popup');
@@ -40,4 +40,17 @@ test('a menu cannot resize or lift the persistent taskbar strip',()=>{
  popup.hidden=true; context.report();
  assert.equal(calls[1].args.height,48);
  assert.equal(calls[1].args.width,98);
+});
+test('paired strips report the partition generation and diagnostics only once per request',()=>{
+ const source=html.slice(html.indexOf('function report(){'),html.indexOf('function setOpen(cat){'));
+ const calls=[], icon={dataset:{exe:'example.exe'},naturalWidth:128,naturalHeight:128,
+  getBoundingClientRect:()=>({width:24,height:24}),closest:()=>null};
+ const strip={scrollWidth:192,querySelectorAll:()=>[icon]};
+ const context=vm.createContext({$:()=>strip,invoke:(name,args)=>calls.push(args),Math,room:()=>192,window:{devicePixelRatio:2}});
+ vm.runInContext('let lastDiagnosticEpoch=0,open=null,pick=null,baseW=0,shownHwnds=[42],state={diagnostic_epoch:1,layout:{centered:true,generation:"11731673731704996325",width:192}};\n'+source,context);
+ context.report();context.report();
+ assert.equal(calls[0].width,192);assert.equal(calls[0].generation,"11731673731704996325");
+ assert.equal(calls[0].diagnostics.icons[0].width,24);
+ assert.equal(calls[0].diagnostics.dpr,2);
+ assert.equal(calls[1].diagnostics,undefined);
 });

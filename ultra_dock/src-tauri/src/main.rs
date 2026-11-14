@@ -14,8 +14,12 @@ mod recovery;
 mod wake;
 mod dock_safety;
 mod dock_layout;
+mod dock_centered_layout;
 mod dock_settings;
 mod dock_surface;
+mod switcher_barrier;
+mod icon_geometry;
+mod taskbar_geometry;
 mod launch;
 mod edition;
 mod dock_lease;
@@ -35,6 +39,26 @@ const DEFAULT_ORG: &str = include_str!("../../config/organizer.json");
 const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
 
 static SURFACES: Mutex<Vec<dock_surface::Surface>> = Mutex::new(Vec::new());
+static PAIRED_PLANS: Mutex<Option<HashMap<isize,dock_layout::PairedPlan>>> = Mutex::new(None);
+static LAYOUT_RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
+static DIAGNOSTIC_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static ICON_METRICS: Mutex<Option<HashMap<String,Value>>> = Mutex::new(None);
+fn paired_for(taskbar: isize) -> Option<dock_layout::PairedPlan> {
+    PAIRED_PLANS.lock().ok()?.as_ref()?.get(&taskbar).cloned()
+}
+fn generation_json(generation:u64)->Value {json!(generation.to_string())}
+#[cfg(test)]
+mod generation_transport_tests {
+    use super::*;
+    #[test]
+    fn generation_transport_preserves_all_bits_through_javascript() {
+        for generation in [0,9_007_199_254_740_993,11_731_673_731_704_996_325,u64::MAX] {
+            let serialized=serde_json::to_string(&generation_json(generation)).unwrap();
+            let client:Value=serde_json::from_str(&serialized).unwrap();
+            assert_eq!(client.as_str().and_then(|s|s.parse::<u64>().ok()),Some(generation));
+        }
+    }
+}
 static DOCK_EVENTS: Mutex<std::collections::VecDeque<Value>> = Mutex::new(std::collections::VecDeque::new());
 fn record_dock_event(event: &str) {
     if let Ok(mut events) = DOCK_EVENTS.lock() {
@@ -55,10 +79,25 @@ fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
     let surfaces: Vec<_> = surfaces.iter().map(|s| json!({
         "label":s.label,"hwnd":s.hwnd,"taskbar":s.taskbar,"shown":s.shown,"room_css":s.room,
         "requested_width_css":s.width,"rendered":s.rendered,"rendered_at":s.rendered_at,
-        "geometry":s.geometry,"layout":strip_plan(&snapshot,s.room)
+        "expected_generation":s.expected_generation,"rendered_generation":s.rendered_generation,"required":s.required,
+        "geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room))
     })).collect();
     let windows: Vec<_> = snapshot.iter().map(|w| json!({"hwnd":w.hwnd,"exe":w.exe,"category":w.category,"active":w.active})).collect();
     let events = DOCK_EVENTS.lock().map(|s| s.clone()).unwrap_or_default();
+    let icon_metrics = ICON_METRICS.lock().ok().and_then(|m|m.clone()).unwrap_or_default();
+    let mut icons:Vec<_> = ICONS.lock().ok().and_then(|m|m.clone()).unwrap_or_default().into_iter().collect();
+    icons.sort_by(|a,b|a.0.cmp(&b.0));
+    let directory = appdata("dock_icon_diagnostics");
+    let mut icon_files = vec![];
+    if std::fs::create_dir_all(&directory).is_ok() {
+        for (index,((exe,size),url)) in icons.iter().enumerate() {
+            if let Some(data) = url.strip_prefix("data:image/png;base64,").and_then(|s|base64::engine::general_purpose::STANDARD.decode(s).ok()) {
+                let path = directory.join(format!("icon-{index}.png"));
+                if std::fs::write(&path,data).is_ok() { icon_files.push(json!({"exe":exe,"size":size,"path":path})); }
+            }
+        }
+    }
+    let barrier = switcher_barrier::metrics();
     #[cfg(windows)]
     let foreground = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize };
     #[cfg(not(windows))]
@@ -67,6 +106,8 @@ fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
         "organize":ORGANIZE.load(Ordering::Acquire),"healthy":HEALTHY.load(Ordering::Acquire),
         "restoring":RESTORATION_PENDING.load(Ordering::Acquire),"switcher_active":SWITCHER_ACTIVE.load(Ordering::Acquire),
         "switcher_visible":SWITCHER_VISIBLE.load(Ordering::Acquire),"foreground_hwnd":foreground,"surfaces":surfaces,"windows":windows,
+        "diagnostic_epoch":DIAGNOSTIC_EPOCH.load(Ordering::Acquire),"icon_metrics":icon_metrics,"icon_files":icon_files,
+        "switcher_barrier":{"requested":barrier.requested,"acknowledged":barrier.acknowledged,"barriers":barrier.barriers,"timeouts":barrier.timeouts,"hidden":barrier.hidden,"installed":barrier.installed,"faulted":barrier.faulted},
         "webviews":app.webview_windows().values().map(|w|json!({"label":w.label(),"visible":w.is_visible().ok(),"focused":w.is_focused().ok(),
             "position":w.outer_position().ok().map(|p|vec![p.x,p.y]),"size":w.inner_size().ok().map(|s|vec![s.width,s.height])})).collect::<Vec<_>>(),"events":events});
     std::fs::write(appdata("dock_diagnostics.json"),serde_json::to_vec_pretty(&value).map_err(|e|e.to_string())?).map_err(|e|e.to_string())
@@ -93,8 +134,11 @@ static CANDIDATES: Mutex<Option<Candidates>> = Mutex::new(None);
 static UI_RENDERED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static RENDERED_WINDOWS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 fn uptime_secs() -> u64 {
+    uptime_millis() / 1000
+}
+fn uptime_millis() -> u64 {
     static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
-    START.get_or_init(Instant::now).elapsed().as_secs()
+    START.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 static STRIP_HIDDEN: AtomicBool = AtomicBool::new(false);
 static ORGANIZE: AtomicBool = AtomicBool::new(true);
@@ -102,7 +146,7 @@ static ORGANIZE: AtomicBool = AtomicBool::new(true);
 static RESTORATION_PENDING: AtomicBool = AtomicBool::new(true);
 static CORE: Mutex<Option<Child>> = Mutex::new(None);
 static GUARD: Mutex<Option<Child>> = Mutex::new(None);
-static ICONS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+static ICONS: Mutex<Option<HashMap<(String,u32), String>>> = Mutex::new(None);
 static SNAPSHOT: Mutex<Vec<WinInfo>> = Mutex::new(Vec::new());
 static LAUNCHES: launch::Launches = launch::Launches::new();
 static STARTUP_URL: std::sync::OnceLock<tauri::Url> = std::sync::OnceLock::new();
@@ -367,6 +411,23 @@ fn pretty_name(exe: &str) -> String {
 }
 
 // ----------------------------------------------------------------------------- windows of other apps
+fn taskbar_groupable_process(exe: &str) -> bool {
+    let lower = exe.replace('/',"\\").to_ascii_lowercase();
+    const SKIP: [&str;14] = ["\\textinputhost.exe", "\\shellexperiencehost.exe", "\\searchhost.exe", "\\startmenuexperiencehost.exe",
+        "\\lockapp.exe", "\\applicationframehost.exe", "\\systemsettings.exe", "\\ultrasuite-core.exe", "\\shellhost.exe",
+        "\\widgets.exe", "\\crossdeviceresume.exe", "\\ultrasuite-dev-core.exe", "\\ultra suite.exe", "\\ultra suite dev.exe"];
+    !lower.is_empty() && !SKIP.iter().any(|name| lower.ends_with(name))
+}
+#[cfg(test)]
+mod taskbar_family_tests {
+    #[test]
+    fn both_suite_editions_and_alarm_windows_keep_native_buttons() {
+        for exe in ["Ultra Suite.exe","Ultra Suite Dev.exe","ultrasuite-core.exe","ultrasuite-dev-core.exe"] {
+            assert!(!super::taskbar_groupable_process(&format!("C:\\Apps\\{exe}")));
+        }
+        assert!(super::taskbar_groupable_process("C:\\Apps\\Gemini.exe"));
+    }
+}
 #[cfg(windows)]
 fn enum_app_windows() -> Vec<(isize, String, String)> {
     use windows::core::{BOOL, PWSTR};
@@ -400,12 +461,8 @@ fn enum_app_windows() -> Vec<(isize, String, String)> {
             }
             let _ = CloseHandle(ph);
         }
-        let lower = exe.to_lowercase();
-        // Windows' own shell windows, and Store-app frames whose taskbar button can't be moved
-        const SKIP: [&str; 11] = ["\\textinputhost.exe", "\\shellexperiencehost.exe", "\\searchhost.exe", "\\startmenuexperiencehost.exe",
-            "\\lockapp.exe", "\\applicationframehost.exe", "\\systemsettings.exe", "\\ultrasuite-core.exe", "\\shellhost.exe",
-            "\\widgets.exe", "\\crossdeviceresume.exe"];
-        if exe.is_empty() || SKIP.iter().any(|s| lower.ends_with(s)) { return true.into(); }
+        // Shell surfaces and either Suite edition must retain their own native identity and alarm access.
+        if !taskbar_groupable_process(&exe) { return true.into(); }
         out.push((h.0 as isize, title, exe));
         true.into()
     }
@@ -484,7 +541,7 @@ fn organizer_loop() {
                     set_dock_enabled_local(false);
                     l.release_when_restored(|| {
                         let result = recovery::restore_all(&tbl);
-                        if result.is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                        if result.is_ok() { switcher_barrier::acknowledge_restored(); RESTORATION_PENDING.store(false, Ordering::Release); }
                         result
                     });
                 }
@@ -492,7 +549,7 @@ fn organizer_loop() {
                     RESTORATION_PENDING.store(true, Ordering::Release);
                     l.release_when_restored(|| {
                         let result = recovery::restore_all(&tbl);
-                        if result.is_ok() { RESTORATION_PENDING.store(false, Ordering::Release); }
+                        if result.is_ok() { switcher_barrier::acknowledge_restored(); RESTORATION_PENDING.store(false, Ordering::Release); }
                         result
                     });
                 }
@@ -502,12 +559,29 @@ fn organizer_loop() {
         }
         // Between full passes, watch the foreground window: activating a window makes Windows put its hidden
         // taskbar button back, so hide it again right away (and for a short burst after) instead of 4 s later.
-        for _ in 0..35 {
+        for tick in 0..35 {
             std::thread::sleep(Duration::from_millis(20));
+            // Reflow never discards the last representation of a hidden app.
+            // The organizer is the sole owner of checked restore acknowledgements.
+            if tick % 5 == 0 && switcher_barrier::metrics().hidden && !all_taskbars_covered() {
+                LAYOUT_RESTORE_REQUESTED.store(true, Ordering::Release);
+            }
+            if LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) {
+                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
+                RESTORATION_PENDING.store(true, Ordering::Release);
+                if recovery::restore_all(&tbl).is_ok() {
+                    switcher_barrier::acknowledge_restored();
+                    hidden_now.clear();
+                    let prior_unknown = lease.as_ref().is_some_and(|l| l.held() && l.gate.recovery_pending());
+                    RESTORATION_PENDING.store(prior_unknown, Ordering::Release);
+                    LAYOUT_RESTORE_REQUESTED.store(false, Ordering::Release);
+                }
+                continue;
+            }
+            let session = switcher_barrier::session_token();
             let event_pending = SWITCHER_RESTORE_REQUESTED.swap(false, Ordering::AcqRel);
-            use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState,VK_MENU};
-            let switching = dock_surface::switcher_requested(event_pending, SWITCHER_VISIBLE.load(Ordering::Acquire),
-                unsafe { GetAsyncKeyState(VK_MENU.0 as i32) < 0 }, false);
+            let switching = dock_surface::switcher_requested(event_pending || session.pending(), SWITCHER_VISIBLE.load(Ordering::Acquire),
+                switcher_barrier::task_view_session() && unsafe { foreground_is_shell_surface(GetForegroundWindow()) }, false);
             let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
@@ -515,14 +589,23 @@ fn organizer_loop() {
                 if restore_for_switcher {
                     record_dock_event("switcher-restore-requested");
                     RESTORATION_PENDING.store(true, Ordering::Release);
-                    if recovery::restore_all(&tbl).is_ok() { record_dock_event("restore-complete"); RESTORATION_PENDING.store(false, Ordering::Release); }
+                    if recovery::restore_all(&tbl).is_ok() {
+                        switcher_barrier::acknowledge_restored();
+                        let prior_unknown = lease.as_ref().is_some_and(|l| l.held() && l.gate.recovery_pending());
+                        record_dock_event("restore-complete"); RESTORATION_PENDING.store(prior_unknown, Ordering::Release);
+                    }
                     else { record_dock_event("restore-failed"); }
                     hidden_now.clear();
                 }
                 continue;
             }
+            if !switcher_barrier::finish_session_if(session) {
+                hiding_stability.allow(false,started.elapsed().as_millis() as u64);
+                continue;
+            }
             let fast_ready = !SWITCHER_ACTIVE.load(Ordering::Acquire)
                 && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire) && !SWITCHER_VISIBLE.load(Ordering::Acquire)
+                && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && !switcher_barrier::faulted()
                 && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
             if !fast_ready {
                 hiding_stability.allow(false, started.elapsed().as_millis() as u64);
@@ -531,7 +614,10 @@ fn organizer_loop() {
             if !hiding_stability.active(started.elapsed().as_millis() as u64) { continue; }
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
-                recovery::hide_window(h, true, &tbl);
+                if switcher_barrier::begin_hide() && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+                    && !SWITCHER_ACTIVE.load(Ordering::Acquire) && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) {
+                    let _ = recovery::hide_window(h, true, &tbl);
+                }
             }
         }
         let cfg = org_config();
@@ -541,12 +627,15 @@ fn organizer_loop() {
         let fg = unsafe { GetForegroundWindow().0 as isize };
         // the watchdog says the dock is frozen or its strip isn't showing the folders: give every button back
         let guarded = guard_running();
-        let ready = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire) && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
+        let ready = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && !switcher_barrier::faulted()
+            && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire)
+            && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
         let on = hiding_stability.allow(ready, started.elapsed().as_millis() as u64);
         if !on {
             RESTORATION_PENDING.store(true, Ordering::Release);
             match recovery::restore_all(&tbl) {
                 Ok(()) => {
+                    switcher_barrier::acknowledge_restored();
                     let prior_unknown = lease.as_ref().is_some_and(|l| l.held() && l.gate.recovery_pending());
                     RESTORATION_PENDING.store(prior_unknown, Ordering::Release);
                 }
@@ -561,17 +650,31 @@ fn organizer_loop() {
         let mut pending: std::collections::HashSet<String> = Default::default();
         let mut hidden_exes: std::collections::HashSet<String> = Default::default();
         let mut cands: Vec<(usize, String, String, String)> = vec![];
+        let paused = SWITCHER_ACTIVE.load(Ordering::Acquire) || switcher_barrier::session_token().pending();
+        let previously_offered: std::collections::HashSet<_> = SNAPSHOT.lock()
+            .map(|s|s.iter().map(|w|w.hwnd).collect()).unwrap_or_default();
         hidden_now.clear();
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
             // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
             let hidden = on && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+                && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && !switcher_barrier::faulted()
                 && !SWITCHER_VISIBLE.load(Ordering::Acquire) && !SWITCHER_ACTIVE.load(Ordering::Acquire)
                 && ORGANIZE.load(Ordering::Relaxed) && !RESTORATION_PENDING.load(Ordering::Acquire)
-                && !kept && rendered.contains(h) && recovery::hide_window(*h, reapply, &tbl);
+                && !kept && rendered.contains(h) && switcher_barrier::begin_hide()
+                && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire) && !SWITCHER_ACTIVE.load(Ordering::Acquire)
+                && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && recovery::hide_window(*h, reapply, &tbl);
             if hidden { hidden_now.insert(*h); }
             else if on { recovery::restore_window(*h, &tbl); }
-            let offered = !kept && listing.decide(*h, started.elapsed().as_millis() as u64, on, hidden);
+            let presentation = may_organize && guarded && ORGANIZE.load(Ordering::Acquire)
+                && !RESTORATION_PENDING.load(Ordering::Acquire) && !SWITCHER_ACTIVE.load(Ordering::Acquire)
+                && !switcher_barrier::faulted();
+            let offered = !kept && if paused {
+                // Native switching restores buttons, not the user's grouping.
+                // Keep the existing live partition until a normal pass resumes.
+                previously_offered.contains(h)
+            } else { listing.offer(*h, started.elapsed().as_millis() as u64,
+                presentation, on && rendered.contains(h), hidden) };
             if !kept {
                 let cat = categorize(exe, &cfg);
                 if offered { cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone())); }
@@ -689,10 +792,24 @@ fn all_taskbars_covered() -> bool {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
     let bars = native_taskbars();
-    let Ok(surfaces) = SURFACES.lock() else { return false };
-    !bars.is_empty() && bars.iter().all(|tb| surfaces.iter().any(|s| s.taskbar == *tb && s.shown
-        && s.fresh(uptime_secs()) && strip_is_present(HWND(s.hwnd as _))
-        && unsafe { MonitorFromWindow(HWND(s.hwnd as _), MONITOR_DEFAULTTONEAREST) == MonitorFromWindow(HWND(s.taskbar as _), MONITOR_DEFAULTTONEAREST) }))
+    let Ok(surfaces) = SURFACES.lock().map(|s|s.clone()) else { return false };
+    let expected:Vec<_> = bars.iter().map(|tb| {
+        let pair = paired_for(*tb); (*tb,pair.as_ref().map(|p|p.generation).unwrap_or(0),pair.is_some())
+    }).collect();
+    if bars.is_empty() || !dock_surface::topology_matches(&surfaces,&expected) { return false; }
+    surfaces.iter().filter(|s|s.required).all(|s| s.shown && s.fresh(uptime_secs())
+        && s.rendered_generation == s.expected_generation
+        && s.geometry.as_ref().and_then(|g|g.measured_at).is_some_and(|at|uptime_millis().saturating_sub(at) <= dock_layout::PAIRED_GEOMETRY_MAX_AGE_MS)
+        && strip_is_present(HWND(s.hwnd as _)) && surface_inside_taskbar(s)
+        && unsafe { MonitorFromWindow(HWND(s.hwnd as _), MONITOR_DEFAULTTONEAREST) == MonitorFromWindow(HWND(s.taskbar as _), MONITOR_DEFAULTTONEAREST) })
+}
+#[cfg(windows)]
+fn surface_inside_taskbar(surface: &dock_surface::Surface) -> bool {
+    use windows::Win32::{Foundation::{HWND,RECT},UI::WindowsAndMessaging::GetWindowRect};
+    let (mut strip,mut bar) = (RECT::default(),RECT::default());
+    unsafe { GetWindowRect(HWND(surface.hwnd as _),&mut strip).is_ok()
+        && GetWindowRect(HWND(surface.taskbar as _),&mut bar).is_ok()
+        && strip.left >= bar.left && strip.right <= bar.right && strip.top >= bar.top && strip.bottom <= bar.bottom }
 }
 
 #[cfg(windows)]
@@ -1020,10 +1137,22 @@ fn get_windows(window: WebviewWindow) -> Value {
     let reason = dock_fallback_reason(organize, covered, HEALTHY.load(Ordering::Relaxed), restoring);
     let surface = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.label == window.label()).cloned());
     let avail = surface.as_ref().map(|s| s.room).unwrap_or(AVAIL_CSS.load(Ordering::Relaxed));
-    let layout = strip_plan(&wins, avail);
+    let left = window.label().ends_with("-left");
+    let pair = surface.as_ref().and_then(|s|paired_for(s.taskbar));
+    let centered = pair.is_some();
+    let generation = pair.as_ref().map(|p|p.generation).unwrap_or(0);
+    let mut layout = if let Some(pair) = pair.as_ref() {
+        plan_json(if left {&pair.left} else {&pair.right})
+    } else if left { plan_json(&dock_layout::Plan::default()) } else { strip_plan(&wins, avail) };
+    layout["show_menu"] = json!(!left);
+    layout["side"] = json!(if left {"left"} else {"right"});
+    layout["centered"] = json!(centered);
+    layout["generation"] = generation_json(generation);
+    layout["icon_size"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.icon_size_css).unwrap_or(24.0));
+    layout["scale"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).map(|g|g.scale).unwrap_or(1.0));
     let shelf = surface.is_some_and(|s| s.shelf);
     let counts = CANDIDATES.lock().map(|v| v.as_ref().map(|c| (c.groups.iter().map(|g| g.1.len()).sum::<usize>(), c.pending.len(), c.hidden_apps)).unwrap_or_default()).unwrap_or_default();
-    json!({ "organize": organize, "windows": wins, "order": org_config().order, "fallback_reason": reason,
+    json!({ "organize": organize, "windows": wins, "order": org_config().order, "fallback_reason": reason, "diagnostic_epoch":DIAGNOSTIC_EPOCH.load(Ordering::Acquire),
             "layout": layout, "cap": dock_cap(), "shelf": shelf, "managed_apps": counts.0, "native_pending": counts.1, "grouped_apps": counts.2, "avail": if avail == u32::MAX { Value::Null } else { json!(avail) } })
 }
 
@@ -1036,6 +1165,9 @@ fn strip_plan(wins: &[WinInfo], available: u32) -> Value {
     }
     let room = if available == u32::MAX { f64::INFINITY } else { available as f64 };
     let plan = dock_layout::plan_capped(&groups, room, dock_cap());
+    plan_json(&plan)
+}
+fn plan_json(plan: &dock_layout::Plan) -> Value {
     json!({
         "items": plan.items.iter().map(|i| json!({ "key": i.key, "label": i.label, "folder": i.folder, "exes": i.exes })).collect::<Vec<_>>(),
         "width": plan.width, "compacted": plan.compacted, "over_six": plan.over_six, "left_out": plan.left_out,
@@ -1070,21 +1202,30 @@ fn set_organize(on: bool) {
 
 // ----------------------------------------------------------------------------- icons
 #[cfg(windows)]
+struct IconApartment(bool);
+#[cfg(windows)]
+impl IconApartment {
+    fn enter() -> Self { Self(unsafe { windows::Win32::System::Com::CoInitializeEx(None,windows::Win32::System::Com::COINIT_APARTMENTTHREADED).is_ok() }) }
+}
+#[cfg(windows)]
+impl Drop for IconApartment {
+    fn drop(&mut self) { if self.0 { unsafe { windows::Win32::System::Com::CoUninitialize(); } } }
+}
+#[cfg(windows)]
 fn icon_png(target: &str, size: i32) -> Option<Vec<u8>> {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::SIZE;
     use windows::Win32::Graphics::Gdi::*;
-    use windows::Win32::System::Com::*;
     use windows::Win32::UI::Shell::*;
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let _apartment = IconApartment::enter();
         let wide: Vec<u16> = target.encode_utf16().chain(std::iter::once(0)).collect();
         let factory: IShellItemImageFactory = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None).ok()?;
         let hbm = factory.GetImage(SIZE { cx: size, cy: size }, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK).ok()?;
         let mut bmp = BITMAP::default();
         GetObjectW(hbm.into(), std::mem::size_of::<BITMAP>() as i32, Some(&mut bmp as *mut _ as *mut _));
         let (w, h) = (bmp.bmWidth, bmp.bmHeight.abs());
-        if w <= 0 || h <= 0 { let _ = DeleteObject(hbm.into()); return None; }
+        if w <= 0 || h <= 0 || i64::from(w)*i64::from(h) > 4_194_304 { let _ = DeleteObject(hbm.into()); return None; }
         let mut bi = BITMAPINFO::default();
         bi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
         bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = -h; bi.bmiHeader.biPlanes = 1;
@@ -1099,14 +1240,7 @@ fn icon_png(target: &str, size: i32) -> Option<Vec<u8>> {
             let un = |c: u32| if a > 0 { ((c * 255 + a / 2) / a).min(255) as u8 } else { 0 };
             px[0] = un(r); px[1] = un(g); px[2] = un(b); px[3] = a as u8;
         }
-        let mut out = Vec::new();
-        {
-            let mut enc = png::Encoder::new(&mut out, w as u32, h as u32);
-            enc.set_color(png::ColorType::Rgba); enc.set_depth(png::BitDepth::Eight);
-            let mut wr = enc.write_header().ok()?;
-            wr.write_image_data(&buf).ok()?;
-        }
-        Some(out)
+        encode_icon_rgba(w as u32,h as u32,&buf)
     }
 }
 
@@ -1131,26 +1265,47 @@ fn window_icon_png(hwnd: isize) -> Option<Vec<u8>> {
         bi.bmiHeader.biWidth = size; bi.bmiHeader.biHeight = -size; bi.bmiHeader.biPlanes = 1;
         bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB.0;
         let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let dib = CreateDIBSection(Some(mem), &bi, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
+        let dib = match CreateDIBSection(Some(mem), &bi, DIB_RGB_COLORS, &mut bits, None, 0) {
+            Ok(bitmap) => bitmap,
+            Err(_) => { let _ = DeleteDC(mem); ReleaseDC(None,hdc); return None; }
+        };
+        if bits.is_null() { let _ = DeleteObject(dib.into()); let _ = DeleteDC(mem); ReleaseDC(None,hdc); return None; }
+        std::ptr::write_bytes(bits.cast::<u8>(),0,(size*size*4) as usize);
         let old = SelectObject(mem, dib.into());
-        let _ = DrawIconEx(mem, 0, 0, hicon, size, size, 0, None, DI_NORMAL);
+        let drawn = DrawIconEx(mem, 0, 0, hicon, size, size, 0, None, DI_NORMAL).is_ok();
         let buf = std::slice::from_raw_parts(bits as *const u8, (size * size * 4) as usize).to_vec();
+        let any_alpha = buf.chunks(4).any(|p|p[3] != 0);
+        let alpha_mask = if !any_alpha {
+            // Legacy HICONs encode transparency in their AND mask, including opaque black pixels.
+            std::ptr::write_bytes(bits.cast::<u8>(),255,(size*size*4) as usize);
+            if DrawIconEx(mem,0,0,hicon,size,size,0,None,DI_MASK).is_ok() {
+                Some(std::slice::from_raw_parts(bits as *const u8,(size*size*4) as usize)
+                    .chunks(4).map(|pixel|if pixel[0]<128 {255u8} else {0u8}).collect::<Vec<_>>())
+            } else {None}
+        } else {None};
         SelectObject(mem, old);
         let _ = DeleteObject(dib.into());
         let _ = DeleteDC(mem);
         ReleaseDC(None, hdc);
+        if !drawn || (!any_alpha && alpha_mask.is_none()) { return None; }
         let mut rgba = buf;
-        let any_alpha = rgba.chunks(4).any(|p| p[3] != 0);
-        for px in rgba.chunks_mut(4) { px.swap(0, 2); if !any_alpha && (px[0] | px[1] | px[2]) != 0 { px[3] = 255; } }
-        let mut out = Vec::new();
-        {
-            let mut enc = png::Encoder::new(&mut out, size as u32, size as u32);
-            enc.set_color(png::ColorType::Rgba); enc.set_depth(png::BitDepth::Eight);
-            let mut wr = enc.write_header().ok()?;
-            wr.write_image_data(&rgba).ok()?;
+        for (index,px) in rgba.chunks_mut(4).enumerate() {
+            px.swap(0,2);
+            if let Some(mask) = alpha_mask.as_ref() {px[3]=mask[index];}
+            else if px[3]>0 {let alpha=u32::from(px[3]);for channel in &mut px[..3] {*channel=((u32::from(*channel)*255+alpha/2)/alpha).min(255) as u8;}}
         }
-        Some(out)
+        encode_icon_rgba(size as u32,size as u32,&rgba)
     }
+}
+fn encode_icon_rgba(width: u32,height: u32,rgba: &[u8]) -> Option<Vec<u8>> {
+    let canvas = icon_geometry::normalize(width,height,rgba)?;
+    let mut out = vec![];
+    {
+        let mut encoder = png::Encoder::new(&mut out,canvas.edge,canvas.edge);
+        encoder.set_color(png::ColorType::Rgba); encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().ok()?.write_image_data(&canvas.rgba).ok()?;
+    }
+    Some(out)
 }
 
 /// Microsoft Store (MSIX) apps keep their icon in the app package, not in the program file, so the file gives
@@ -1177,33 +1332,44 @@ fn package_aumid(hwnd: isize) -> Option<String> {
 }
 
 #[tauri::command]
-async fn get_icon(target: String, hwnd: Option<isize>) -> Option<String> {
-    if let Some(c) = ICONS.lock().ok().and_then(|m| m.as_ref().and_then(|m| m.get(&target).cloned())) { return Some(c); }
+async fn get_icon(target: String, hwnd: Option<isize>, size: Option<u32>) -> Option<String> {
+    let size = size.unwrap_or(64).clamp(32,256).next_power_of_two();
+    let key = (target.clone(),size);
+    if let Some(c) = ICONS.lock().ok().and_then(|m| m.as_ref().and_then(|m| m.get(&key).cloned())) { return Some(c); }
     let t = target.clone();
     #[cfg(windows)]
     let png = tauri::async_runtime::spawn_blocking(move || {
+        let _apartment = IconApartment::enter();
         let store_app = t.to_lowercase().contains("\\windowsapps\\");
-        let from_package = || hwnd.and_then(package_aumid).and_then(|id| icon_png(&format!("shell:AppsFolder\\{id}"), 64));
+        let from_package = || hwnd.and_then(package_aumid).and_then(|id| icon_png(&format!("shell:AppsFolder\\{id}"), size as i32));
         (if store_app { from_package() } else { None })
-            .or_else(|| icon_png(&expand_env(&t), 64))
+            .or_else(|| icon_png(&expand_env(&t), size as i32))
             .or_else(|| hwnd.and_then(window_icon_png))
     }).await.ok().flatten()?;
     #[cfg(not(windows))]
     let png: Vec<u8> = { let _ = t; return None; };
     let url = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png));
-    if let Ok(mut m) = ICONS.lock() { m.get_or_insert_with(HashMap::new).insert(target, url.clone()); }
+    if let Ok(mut m) = ICONS.lock() { m.get_or_insert_with(HashMap::new).insert(key, url.clone()); }
     Some(url)
 }
 
 #[tauri::command]
-fn set_strip_width(window: WebviewWindow, width: f64, rendered: Option<Vec<isize>>, base: Option<f64>, height: Option<f64>) {
+fn set_strip_width(window: WebviewWindow, width: f64, rendered: Option<Vec<isize>>, base: Option<f64>, height: Option<f64>, generation: Option<String>, diagnostics: Option<Value>) {
     if !width.is_finite() || width < 0.0 { return; }
+    if let Some(metrics) = diagnostics.filter(|d|d["epoch"].as_u64() == Some(DIAGNOSTIC_EPOCH.load(Ordering::Acquire))
+        && d["icons"].as_array().is_some_and(|icons|icons.len() <= 128) && d.to_string().len() <= 32_768) {
+        if let Ok(mut values) = ICON_METRICS.lock() { values.get_or_insert_with(HashMap::new).insert(window.label().to_string(),metrics); }
+    }
+    let generation=generation.as_deref().and_then(|s|s.parse::<u64>().ok());
     if let Ok(mut surfaces) = SURFACES.lock() {
         if let Some(s) = surfaces.iter_mut().find(|s| s.label == window.label()) {
             s.width = width.ceil().clamp(20.0, 1800.0) as u32;
             s.height = height.filter(|h| h.is_finite()).unwrap_or(48.0).ceil().clamp(48.0, 600.0) as u32;
             if let Some(ref ids) = rendered {
-                if ids.len() <= 4096 { s.rendered = ids.iter().copied().collect(); s.rendered_at = Some(uptime_secs()); }
+                if ids.len() <= 4096 && generation == Some(s.expected_generation) {
+                    s.rendered = ids.iter().copied().collect(); s.rendered_at = Some(uptime_secs());
+                    s.rendered_generation = generation.unwrap_or(0);
+                }
             }
         }
     }
@@ -1465,9 +1631,32 @@ async fn show_dock_menu(app: AppHandle, window: WebviewWindow) -> Result<(), Str
         }
         let closing = popup.clone();
         let mut_focused = std::sync::Arc::new(AtomicBool::new(false));
+        let blur_pending = std::sync::Arc::new(AtomicBool::new(false));
         popup.on_window_event(move |event| {
             if matches!(event, WindowEvent::Focused(true)) { record_dock_event("focused"); mut_focused.store(true,Ordering::Release); }
-            if matches!(event, WindowEvent::Focused(false)) && mut_focused.load(Ordering::Acquire) { record_dock_event("blur-close"); let _ = closing.close(); }
+            if matches!(event, WindowEvent::Focused(false)) && mut_focused.load(Ordering::Acquire)
+                && !blur_pending.swap(true,Ordering::AcqRel) {
+                record_dock_event("blur-deferred");
+                let window = closing.clone();
+                let pending = blur_pending.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    std::thread::sleep(Duration::from_millis(80));
+                    let app = window.app_handle().clone();
+                    let reset = pending.clone();
+                    if app.run_on_main_thread(move || {
+                        pending.store(false,Ordering::Release);
+                        #[cfg(windows)]
+                        let foreground = unsafe {
+                            use windows::Win32::{Foundation::HWND,UI::WindowsAndMessaging::{GetForegroundWindow,GetAncestor,GA_ROOT}};
+                            window.hwnd().is_ok_and(|h| GetAncestor(GetForegroundWindow(),GA_ROOT) == HWND(h.0))
+                        };
+                        #[cfg(not(windows))]
+                        let foreground = window.is_focused().unwrap_or(false);
+                        if foreground { record_dock_event("blur-retained"); }
+                        else { record_dock_event("blur-close"); let _ = window.close(); }
+                    }).is_err() { reset.store(false,Ordering::Release); }
+                });
+            }
         });
         if let Err(error) = popup.show().and_then(|_| popup.set_focus()) { let _ = popup.close(); return Err(error); }
         record_dock_event("shown");
@@ -1536,9 +1725,7 @@ fn dock_settings_get() -> Value {
         else if !covered { Some("Waiting for the Dock on each connected screen to finish loading.") }
         else if !HEALTHY.load(Ordering::Relaxed) { Some("The Dock is reconnecting. Native buttons stay available until every screen is ready.") }
         else { None };
-    let snapshot = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
-    let individual_apps = strip_plan(&snapshot, AVAIL_CSS.load(Ordering::Relaxed))["items"].as_array()
-        .map(|items| items.iter().filter(|item| item["folder"] == false).count()).unwrap_or(0);
+    let individual_apps = individual_apps_now();
     json!({ "config": config, "defaults": defaults, "apps": apps, "cap": dock_cap(), "cap_max": CAP_MAX, "individual_apps": individual_apps,
             "dock_on": !STRIP_HIDDEN.load(Ordering::Relaxed), "organize": ORGANIZE.load(Ordering::Relaxed),
             "grouping": covered && HEALTHY.load(Ordering::Relaxed), "note": note, "path": org_path().display().to_string() })
@@ -2023,6 +2210,19 @@ fn switcher_events() {
     unsafe {
         let hook = SetWinEventHook(EVENT_SYSTEM_SWITCHSTART, EVENT_SYSTEM_SWITCHEND, None, Some(changed), 0, 0, WINEVENT_OUTOFCONTEXT);
         if hook.is_invalid() { eprintln!("[dock] Windows switcher observer unavailable; keeping native buttons"); return; }
+        fn request_restore() {
+            RESTORATION_PENDING.store(true,Ordering::Release);
+            SWITCHER_ACTIVE.store(true,Ordering::Release);
+            SWITCHER_RESTORE_REQUESTED.store(true,Ordering::Release);
+        }
+        fn native_fallback() {
+            SWITCHER_EVENTS_READY.store(false,Ordering::Release);
+            request_restore();
+        }
+        let _keyboard = match switcher_barrier::install(request_restore,native_fallback) {
+            Ok(guard) => guard,
+            Err(error) => { eprintln!("[dock] {error}"); let _ = UnhookWinEvent(hook); return; }
+        };
         SWITCHER_EVENTS_READY.store(true, Ordering::Release);
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).0 > 0 { let _ = TranslateMessage(&msg); DispatchMessageW(&msg); }
@@ -2038,7 +2238,7 @@ fn taskbar_tracker(app: AppHandle) {
     use windows::core::w;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, IsWindow};
-    let mut pending: HashMap<isize, String> = HashMap::new();
+    let mut pending: HashMap<(isize,bool), String> = HashMap::new();
     loop {
         let bars = native_taskbars();
         let mut removed = if let Ok(mut surfaces) = SURFACES.lock() {
@@ -2048,57 +2248,104 @@ fn taskbar_tracker(app: AppHandle) {
             surfaces.retain(alive);
             gone
         } else { vec![] };
-        let gone: Vec<_> = pending.keys().filter(|tb| !bars.contains(tb)).copied().collect();
-        for tb in gone { if let Some(label) = pending.remove(&tb) { removed.push(label); } }
+        if let Ok(mut plans) = PAIRED_PLANS.lock() { if let Some(plans)=plans.as_mut() {plans.retain(|tb,_|bars.contains(tb));} }
+        let gone: Vec<_> = pending.keys().filter(|(tb,_)| !bars.contains(tb)).copied().collect();
+        for key in gone { if let Some(label) = pending.remove(&key) { removed.push(label); } }
         for label in removed { if let Some(w) = app.get_webview_window(&label) { let _ = w.destroy(); } }
         for tb in bars {
-            let exists = SURFACES.lock().map(|v| v.iter().any(|s| s.taskbar == tb)).unwrap_or(true);
-            if exists { continue; }
             let primary = unsafe { FindWindowW(w!("Shell_TrayWnd"), None).ok().is_some_and(|h| h.0 as isize == tb) };
-            let label = if primary { "taskbar".to_string() } else { format!("taskbar-{tb:x}") };
-            let win = if let Some(w) = app.get_webview_window(&label) { Some(w) } else {
-                match WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html?view=strip".into()))
-                    .title(app_label("dock")).decorations(false).transparent(true).always_on_top(true).skip_taskbar(true)
-                    .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0).build() {
-                    Ok(w) => Some(w), Err(e) => { eprintln!("[dock] taskbar strip could not open: {e}"); None }
-                }
-            };
-            let Some(win) = win else { continue };
-            pending.insert(tb, label.clone());
-            make_noactivate(&win);
-            let Ok(h) = win.hwnd() else { continue };
-            if !unsafe { IsWindow(Some(HWND(h.0))).as_bool() } { continue; }
-            let register_hwnd = h.0 as isize;
-            let (tx, rx) = std::sync::mpsc::sync_channel(1);
-            if app.run_on_main_thread(move || { let _ = tx.send(dock_lease::register_strip(HWND(register_hwnd as _))); }).is_err()
-                || !rx.recv_timeout(Duration::from_secs(2)).unwrap_or(false) { continue; }
-            if primary { STRIP_HWND.store(h.0 as isize, Ordering::Release); }
-            if let Ok(mut surfaces) = SURFACES.lock() { surfaces.push(dock_surface::Surface::new(tb, h.0 as isize, label.clone())); }
-            pending.remove(&tb);
-            let sh = h.0 as isize;
-            std::thread::spawn(move || taskbar_surface_tracker(label, tb, sh));
+            for left in [false,true] {
+                // Retain an existing inactive sibling for cheap reuse, but create
+                // one only after the geometry adapter has proved a paired fit.
+                if left && paired_for(tb).is_none() {continue;}
+                let exists = SURFACES.lock().map(|v| v.iter().any(|s| s.taskbar == tb && s.label.ends_with("-left")==left)).unwrap_or(true);
+                if exists { continue; }
+                let base = if primary { "taskbar".to_string() } else { format!("taskbar-{tb:x}") };
+                let label = if left {format!("{base}-left")} else {base};
+                let win = if let Some(w) = app.get_webview_window(&label) { Some(w) } else {
+                    match WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html?view=strip".into()))
+                        .title(app_label("dock")).decorations(false).transparent(true).always_on_top(true).skip_taskbar(true)
+                        .resizable(false).shadow(false).focused(false).visible(false).inner_size(60.0, 48.0).build() {
+                        Ok(w) => Some(w), Err(e) => { eprintln!("[dock] taskbar strip could not open: {e}"); None }
+                    }
+                };
+                let Some(win) = win else { continue };
+                pending.insert((tb,left), label.clone());
+                make_noactivate(&win);
+                let Ok(h) = win.hwnd() else { continue };
+                if !unsafe { IsWindow(Some(HWND(h.0))).as_bool() } { continue; }
+                let register_hwnd = h.0 as isize;
+                let (tx, rx) = std::sync::mpsc::sync_channel(1);
+                if app.run_on_main_thread(move || { let _ = tx.send(dock_lease::register_strip(HWND(register_hwnd as _))); }).is_err()
+                    || !rx.recv_timeout(Duration::from_secs(2)).unwrap_or(false) { continue; }
+                if primary && !left { STRIP_HWND.store(h.0 as isize, Ordering::Release); }
+                let mut surface=dock_surface::Surface::new(tb,h.0 as isize,label.clone());
+                if let Some(pair)=paired_for(tb) {surface.required=true;surface.expected_generation=pair.generation;}
+                if let Ok(mut surfaces) = SURFACES.lock() { surfaces.push(surface); }
+                pending.remove(&(tb,left));
+                let sh = h.0 as isize;
+                std::thread::spawn(move || taskbar_surface_tracker(label, tb, sh));
+            }
         }
-        std::thread::sleep(Duration::from_millis(700));
+        std::thread::sleep(Duration::from_millis(350));
     }
 }
-
+/// Commit a new logical partition only after every old hidden native button has
+/// been restored. Reflow preserves that partition as Windows recenters its row.
+#[cfg(windows)]
+fn reconcile_pair(taskbar:isize,g:&dock_layout::TaskbarGeom,
+    source:&mut Option<u64>) -> Option<dock_layout::PairedPlan> {
+    let old=paired_for(taskbar);
+    let groups=CANDIDATES.lock().ok().and_then(|c|c.as_ref().map(|c|c.groups.clone())).unwrap_or_default();
+    let key=(groups,dock_cap());
+    let signature=dock_layout::paired_candidate_signature(&key.0,key.1);
+    let active=ORGANIZE.load(Ordering::Acquire) && !switcher_barrier::faulted();
+    let paused=SWITCHER_ACTIVE.load(Ordering::Acquire) || SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+        || RESTORATION_PENDING.load(Ordering::Acquire) || switcher_barrier::session_token().pending();
+    let candidate=if !active {None}
+        else if old.is_some() && (paused || *source==Some(signature)) {
+            old.as_ref().and_then(|p|dock_layout::reflow_pair(p,g,uptime_millis()))
+        } else if paused {return old.and_then(|p|dock_layout::reflow_pair(&p,g,uptime_millis()))}
+        else {dock_layout::paired_plan(&key.0,g,key.1,uptime_millis())};
+    let generation=|p:&Option<dock_layout::PairedPlan>|p.as_ref().map(|p|p.generation);
+    let changed=generation(&candidate)!=generation(&old);
+    if changed && switcher_barrier::metrics().hidden {
+        LAYOUT_RESTORE_REQUESTED.store(true,Ordering::Release);
+        // Do not place stale spans over newly moved native controls.
+        return old.and_then(|p|dock_layout::reflow_pair(&p,g,uptime_millis()));
+    }
+    if let Ok(mut plans)=PAIRED_PLANS.lock() {
+        let plans=plans.get_or_insert_with(HashMap::new);
+        if let Some(ref plan)=candidate {plans.insert(taskbar,plan.clone());}else{plans.remove(&taskbar);}
+        // Same lock order as publication: plan then surfaces, never the reverse.
+        if let Ok(mut surfaces)=SURFACES.lock() {
+            for surface in surfaces.iter_mut().filter(|s|s.taskbar==taskbar) {
+                let required=candidate.is_some() || !surface.label.ends_with("-left");
+                let expected=generation(&candidate).unwrap_or(0);
+                if surface.required!=required || surface.expected_generation!=expected {
+                    surface.rendered.clear();surface.rendered_at=None;surface.shown=false;
+                }
+                surface.required=required;surface.expected_generation=expected;
+            }
+        }
+    }
+    if !paused {*source=Some(signature);}
+    candidate
+}
 #[cfg(windows)]
 fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
-    use windows::core::w;
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
     use windows::Win32::System::Com::*;
-    use windows::Win32::System::Variant::VARIANT;
     use windows::Win32::UI::Accessibility::*;
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::WindowsAndMessaging::*;
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let uia: Option<IUIAutomation> = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok();
-        // Latest UI Automation reading of the taskbar: Start, the native buttons and the notification area
+        let initialized=CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+        let left=label.ends_with("-left");
+        let uia: Option<IUIAutomation> = if left {None} else {CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()};
         let mut geom = dock_layout::TaskbarGeom::default();
-
-
+        let mut source=None;
         let mut last_uia = Instant::now() - Duration::from_secs(10);
         let mut last = (i32::MIN, i32::MIN, 0u32, 0u32, false, false);
         let shell_clock = Instant::now();
@@ -2112,91 +2359,62 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             if GetWindowRect(tb, &mut r).is_err() { continue; }
             let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
             if !GetMonitorInfoW(MonitorFromWindow(tb, MONITOR_DEFAULTTOPRIMARY), &mut mi).as_bool() { continue; }
-            let dpi = GetDpiForWindow(hwnd);
+            let dpi = GetDpiForWindow(tb);
             let scale = if dpi > 0 { dpi as f64 / 96.0 } else { 1.0 };
-            let mon_bottom = mi.rcMonitor.bottom;
-            let tb_visible = r.top < mon_bottom - 6 && (r.bottom - r.top) > 20;
-            // Full screen means: the window in front covers the whole monitor the taskbar is on. Windows' own
-            // "busy" state can't be used: a full-screen picture on ANY screen (a USB sensor LCD, a second
-            // monitor) sets it, which once hid the dock for good while its folders were still holding apps.
+            let native_height=(r.bottom-r.top).max(0);
+            let visible_height=(r.bottom.min(mi.rcMonitor.bottom)-r.top.max(mi.rcMonitor.top)).max(0);
+            let tb_visible=IsWindowVisible(tb).as_bool() && native_height>0 && visible_height>=native_height/2
+                && r.right-r.left>native_height;
             let fullscreen = foreground_covers_taskbar_monitor(tb);
             let shell_surface = foreground_is_shell_surface(GetForegroundWindow());
-            TB_VISIBLE.store(tb_visible, Ordering::Relaxed);
-            if tb_visible && last_uia.elapsed() > Duration::from_millis(350) {
-                last_uia = Instant::now();
-                if let Some(u) = uia.as_ref() {
-                    let res = (|| -> windows::core::Result<(dock_layout::TaskbarGeom, usize, f64)> {
-                        let el = u.ElementFromHandle(tb)?;
-                        let mut g = dock_layout::TaskbarGeom { left: r.left, right: r.right, scale, ..Default::default() };
-                        let sc = u.CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from("StartButton"))?;
-                        if let Ok(rc) = el.FindFirst(TreeScope_Descendants, &sc).and_then(|e| e.CurrentBoundingRectangle()) {
-                            g.start_left = Some(rc.left); g.start_right = Some(rc.right);
-                        }
-                        // right edge of the last native taskbar button
-                        let (mut n, mut total) = (0usize, 0i64);
-                        let bc = u.CreatePropertyCondition(UIA_ClassNamePropertyId, &VARIANT::from("Taskbar.TaskListButtonAutomationPeer"))?;
-                        if let Ok(arr) = el.FindAll(TreeScope_Descendants, &bc) {
-                            for i in 0..arr.Length().unwrap_or(0) {
-                                if let Ok(rc) = arr.GetElement(i).and_then(|b| b.CurrentBoundingRectangle()) {
-                                    if rc.right - rc.left > 4 {
-                                        g.buttons_right = Some(g.buttons_right.map_or(rc.right, |v| v.max(rc.right)));
-                                        n += 1; total += (rc.right - rc.left) as i64;
-                                    }
-                                }
-                            }
-                        }
-                        // the notification area: "Show hidden icons", tray icons, and the Widgets button when the
-                        // taskbar is left-aligned (it then sits next to the tray)
-                        for id in ["SystemTrayIcon", "NotifyItemIcon", "WidgetsButton"] {
-                            let c = u.CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from(id))?;
-                            if let Ok(rc) = el.FindFirst(TreeScope_Descendants, &c).and_then(|e| e.CurrentBoundingRectangle()) {
-                                if rc.right - rc.left > 2 { g.obstacles.push(rc.left); }
-                            }
-                        }
-                        let avg = if n > 0 { total as f64 / n as f64 } else { 44.0 * scale };
-                        Ok((g, n, avg))
-                    })();
-                    if let Ok((g, _, _)) = res { geom = g; }
+            if !left && tb_visible && last_uia.elapsed() > Duration::from_millis(350) {
+                last_uia=Instant::now();
+                if let Some(u)=uia.as_ref() {
+                    // A failed provider leaves the old timestamp to expire. It
+                    // cannot turn guessed bounds into fresh hide authorization.
+                    if let Ok(measured)=taskbar_geometry::measure(u,tb,r,scale,uptime_millis()) {geom=measured;}
                 }
+            } else if left {
+                // Siblings share one provider reading and physical coordinate frame.
+                if let Some(g)=SURFACES.lock().ok().and_then(|v|v.iter().find(|s|s.taskbar==taskbar && !s.label.ends_with("-left")).and_then(|s|s.geometry.clone())) {geom=g;}
             }
-
-            // The legacy notification-area window is a second, cheap reading of where the tray starts.
-            let mut g = dock_layout::TaskbarGeom { left: r.left, right: r.right, scale, ..geom.clone() };
-            if let Ok(tn) = FindWindowExW(Some(tb), None, w!("TrayNotifyWnd"), None) {
-                let mut tr = RECT::default();
-                if GetWindowRect(tn, &mut tr).is_ok() && tr.right - tr.left > 4 { g.obstacles.push(tr.left); }
-            }
-            let span = dock_layout::free_span(&g);
-
-            let report = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.label == label).cloned());
-            let Some(report) = report else { break };
-            let position = dock_surface::place_in_taskbar(r.left, r.top, r.right, r.bottom,
-                span.x, span.limit, scale, report.width);
-            let available = ((span.limit - span.x).max(0) as f64 / scale).floor().clamp(0.0, 1800.0) as u32;
-            let show = dock_surface::strip_visible(tb_visible, fullscreen, position.fits,
-                strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire), dock_lease::held(), RESTORATION_PENDING.load(Ordering::Acquire)));
-            if let Ok(mut surfaces) = SURFACES.lock() {
-                if let Some(s) = surfaces.iter_mut().find(|s| s.label == label) { s.shown = show; s.shelf = position.shelf; s.room = available; s.geometry = Some(g.clone()); }
-                AVAIL_CSS.store(surfaces.iter().map(|s| s.room).min().unwrap_or(available), Ordering::Relaxed);
+            let g=dock_layout::TaskbarGeom{left:r.left,right:r.right,scale,..geom.clone()};
+            let pair=if left {paired_for(taskbar).and_then(|p|dock_layout::reflow_pair(&p,&g,uptime_millis()))}
+                else {reconcile_pair(taskbar,&g,&mut source)};
+            let report=SURFACES.lock().ok().and_then(|v|v.iter().find(|s|s.label==label).cloned());
+            let Some(report)=report else {break};
+            let paired=paired_for(taskbar).is_some();
+            let span=if let Some(ref p)=pair {if left {p.left_span}else{p.right_span}}
+                else {dock_layout::free_span(&g)};
+            let available=((i64::from(span.limit)-i64::from(span.x)).max(0) as f64/scale).floor().clamp(0.0,1800.0) as u32;
+            let position=if pair.is_some() {
+                dock_surface::Placement{x:span.x,y:r.top,width:(span.limit-span.x).max(0),height:native_height,fits:true,shelf:false}
+            } else {dock_surface::place_in_taskbar(r.left,r.top,r.right,r.bottom,span.x,span.limit,scale,report.width)};
+            let measured=g.measured_at.is_some_and(|at|uptime_millis().saturating_sub(at)<=dock_layout::PAIRED_GEOMETRY_MAX_AGE_MS);
+            let usable=measured && report.required && (!paired || pair.is_some()) && (!left || pair.is_some());
+            let show=usable && dock_surface::strip_visible(tb_visible,fullscreen,position.fits,
+                strip_display_requested(STRIP_HIDDEN.load(Ordering::Acquire),dock_lease::held(),RESTORATION_PENDING.load(Ordering::Acquire)));
+            if report.required && !show && switcher_barrier::metrics().hidden {LAYOUT_RESTORE_REQUESTED.store(true,Ordering::Release);}
+            if let Ok(mut surfaces)=SURFACES.lock() {
+                if let Some(s)=surfaces.iter_mut().find(|s|s.label==label) {s.shown=show;s.shelf=false;s.room=available;s.geometry=Some(g);}
+                let required:Vec<_>=surfaces.iter().filter(|s|s.required).collect();
+                let visible=!required.is_empty() && required.iter().all(|s|s.shown);
+                AVAIL_CSS.store(required.iter().map(|s|s.room).min().unwrap_or(0),Ordering::Relaxed);
+                STRIP_FITS.store(visible,Ordering::Relaxed);STRIP_SHOWN.store(visible,Ordering::Relaxed);
+                TB_VISIBLE.store(tb_visible,Ordering::Relaxed);
             }
             LAYOUT_CSS.store(available, Ordering::Relaxed);
-            STRIP_FITS.store(show, Ordering::Relaxed);
-            STRIP_SHOWN.store(show, Ordering::Relaxed);
-            let (x, y, w, h) = (position.x, position.y, position.width as u32, position.height as u32);
-            // Start promotes Explorer's taskbar in z-order without changing its geometry.
-            // Reassert our non-activating button once on that transition, even at the same bounds.
-            let state = (x, y, w, h, show, shell_surface);
-            let refresh = shell_refresh.update(shell_surface,shell_clock.elapsed().as_millis() as u64);
-            if state == last && !refresh { continue; }
-            last = state;
+            let (x,y,w,h)=(position.x,position.y,position.width as u32,position.height as u32);
+            let state=(x,y,w,h,show,shell_surface);
+            let refresh=shell_refresh.update(shell_surface,shell_clock.elapsed().as_millis() as u64);
+            if state==last && !refresh {continue;}
+            last=state;
             if show {
-                // ASYNCWINDOWPOS: post the move to the window's own thread instead of waiting for it
-                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, w as i32, h as i32,
-                                     SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS);
-            } else {
-                let _ = ShowWindowAsync(hwnd, SW_HIDE);
-            }
+                let _=SetWindowPos(hwnd,Some(HWND_TOPMOST),x,y,w as i32,h as i32,SWP_NOACTIVATE|SWP_SHOWWINDOW|SWP_ASYNCWINDOWPOS);
+            }else{let _=ShowWindowAsync(hwnd,SW_HIDE);}
         }
+        drop(uia);
+        if initialized {CoUninitialize();}
     }
 }
 
@@ -2300,7 +2518,16 @@ fn set_dock_cap(cap: Option<u32>) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn dock_cap_info() -> Value { json!({ "cap": dock_cap() }) }
+fn dock_cap_info() -> Value { json!({ "cap": dock_cap(), "shown":individual_apps_now() }) }
+fn individual_apps_now() -> usize {
+    let taskbar = SURFACES.lock().ok().and_then(|surfaces|surfaces.iter().find(|s|s.label == "taskbar").map(|s|s.taskbar));
+    if let Some(pair) = taskbar.and_then(paired_for) {
+        return pair.left.items.iter().chain(pair.right.items.iter()).filter(|item|!item.folder).count();
+    }
+    let snapshot = SNAPSHOT.lock().map(|s|s.clone()).unwrap_or_default();
+    strip_plan(&snapshot,AVAIL_CSS.load(Ordering::Acquire))["items"].as_array()
+        .map(|items|items.iter().filter(|item|item["folder"] == false).count()).unwrap_or(0)
+}
 
 #[cfg(test)]
 mod cap_tests {
@@ -2370,8 +2597,9 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 fn handle_args(app: &AppHandle, args: &[String]) {
     let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
     if args.iter().any(|a| a == "--dock-diagnostics") {
+        DIAGNOSTIC_EPOCH.fetch_add(1,Ordering::AcqRel);
         let app = app.clone();
-        std::thread::spawn(move || { std::thread::sleep(Duration::from_millis(700)); if let Err(error) = write_dock_diagnostics(&app) { eprintln!("[dock] diagnostic snapshot: {error}"); } });
+        std::thread::spawn(move || { std::thread::sleep(Duration::from_millis(1200)); if let Err(error) = write_dock_diagnostics(&app) { eprintln!("[dock] diagnostic snapshot: {error}"); } });
         return;
     }
     if args.iter().any(|a| a == "--restore-taskbar") {

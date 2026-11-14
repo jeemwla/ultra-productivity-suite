@@ -67,7 +67,7 @@ async function load(){
     if(invoke){
       const [settings,windows,edition] = await Promise.all([invoke('dock_settings_get'),invoke('get_windows'),invoke('edition_info')]);
       cap = settings.cap; maximum = settings.cap_max || 30; organize = settings.organize;
-      shown = windows.layout?.items?.filter(item=>!item.folder).length || 0;
+      shown = settings.individual_apps ?? windows.layout?.items?.filter(item=>!item.folder).length ?? 0;
       $('title').textContent = edition.edition === 'Dev' ? 'Ultra Dock (Dev)' : 'Ultra Dock';
       if(edition.edition === 'Dev') document.querySelectorAll('.apps button').forEach(button=>button.title=button.textContent+' (Dev)');
     }
@@ -78,8 +78,8 @@ render();load();
 if(invoke) setInterval(async()=>{
   if(busy || cap !== null) return;
   try {
-    const windows = await invoke('get_windows');
-    if(!busy && cap === null){ shown = windows.layout?.items?.filter(item=>!item.folder).length || 0; render(); }
+    const info = await invoke('dock_cap_info');
+    if(!busy && cap === null){ shown = info.shown ?? 0; render(); }
   } catch {}
 },700);
 </script></body></html>

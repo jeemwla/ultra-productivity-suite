@@ -65,21 +65,59 @@ pub struct Surface {
     pub shelf: bool,
     pub room: u32,
     pub geometry: Option<crate::dock_layout::TaskbarGeom>,
+    pub expected_generation: u64,
+    pub rendered_generation: u64,
+    pub required: bool,
 }
 impl Surface {
     pub fn new(taskbar: isize, hwnd: isize, label: String) -> Self {
-        Self { taskbar, hwnd, label, width: 60, height: 48, rendered: HashSet::new(), rendered_at: None, shown: false, shelf: false, room: 0, geometry: None }
+        Self { required: !label.ends_with("-left"), expected_generation: 0, rendered_generation: 0, taskbar, hwnd, label, width: 60, height: 48, rendered: HashSet::new(), rendered_at: None, shown: false, shelf: false, room: 0, geometry: None }
     }
     pub fn fresh(&self, now: u64) -> bool {
         self.rendered_at.is_some_and(|at| now.saturating_sub(at) < 5)
     }
 }
 
-/// An app may lose its global native button only after every taskbar renders it.
+/// Verify the complete native-taskbar topology before global acknowledgement.
+/// `expected` entries are (taskbar HWND, expected generation, paired mode).
+/// This checks expected_generation only; caller checks native rectangles,
+/// visibility, freshness and rendered_generation separately.
+/// Optional LEFT surfaces are ignored in fallback while the tracker retires them.
+pub fn topology_matches(surfaces: &[Surface], expected: &[(isize, u64, bool)]) -> bool {
+    if expected.is_empty() { return false; }
+    let mut taskbars = HashSet::new();
+    if expected.iter().any(|&(tb, _, _)| !taskbars.insert(tb))
+        || surfaces.iter().any(|s| !taskbars.contains(&s.taskbar)) { return false; }
+    expected.iter().all(|&(tb, generation, paired)| {
+        if !paired && generation != 0 { return false; }
+        let required: Vec<_> = surfaces.iter().filter(|s| s.taskbar == tb && s.required).collect();
+        let left = required.iter().filter(|s| s.label.ends_with("-left")).count();
+        let right = required.len() - left;
+        right == 1 && left == usize::from(paired)
+            && required.iter().all(|s| s.expected_generation == generation)
+    })
+}
+
+/// Union the required siblings within each physical taskbar, then intersect
+/// across taskbars. Caller must separately verify expected labels exist.
+/// A known taskbar with no required surface, any stale required sibling, or a
+/// mixed/mismatched generation fails closed. Optional surfaces contribute nothing.
 pub fn acknowledged(surfaces: &[Surface], now: u64) -> Vec<isize> {
-    let Some(first) = surfaces.first() else { return vec![] };
-    if surfaces.iter().any(|s| !s.shown || !s.fresh(now)) { return vec![]; }
-    first.rendered.iter().copied().filter(|h| surfaces.iter().all(|s| s.rendered.contains(h))).collect()
+    let mut groups = std::collections::BTreeMap::<isize, Vec<&Surface>>::new();
+    for s in surfaces { groups.entry(s.taskbar).or_default().push(s); }
+    let mut intersection: Option<HashSet<isize>> = None;
+    for siblings in groups.values() {
+        let required: Vec<_> = siblings.iter().copied().filter(|s|s.required).collect();
+        let Some(first) = required.first() else {return vec![]};
+        let generation = first.expected_generation;
+        if required.iter().any(|s| !s.shown || !s.fresh(now)
+            || s.rendered_at.is_some_and(|at|at > now)
+            || s.expected_generation != generation || s.rendered_generation != generation) { return vec![]; }
+        let union: HashSet<_> = required.iter().flat_map(|s|s.rendered.iter().copied()).collect();
+        match &mut intersection {None=>intersection=Some(union),Some(result)=>result.retain(|h|union.contains(h))}
+    }
+    let mut result:Vec<_> = intersection.unwrap_or_default().into_iter().collect();
+    result.sort_unstable();result
 }
 
 #[derive(Default)]
@@ -367,5 +405,76 @@ mod tests {
             assert!(i64::from(p.y) + i64::from(p.height) <= i64::from(bottom.max(top)));
             assert!(!p.shelf);
         }
+    }
+}
+
+#[cfg(test)]
+mod paired_ack_tests {
+    use super::*;
+    fn surface(tb:isize,label:&str,ids:&[isize])->Surface{
+        let mut s=Surface::new(tb,tb*10,label.into());s.required=true;s.shown=true;s.rendered_at=Some(10);
+        s.expected_generation=7;s.rendered_generation=7;s.rendered.extend(ids);s
+    }
+    #[test] fn sibling_union_then_monitor_intersection(){
+        let a=surface(1,"taskbar-left",&[1,2]);let b=surface(1,"taskbar",&[3]);
+        let c=surface(2,"taskbar-2-left",&[1,3]);let d=surface(2,"taskbar-2",&[4]);
+        assert_eq!(acknowledged(&[a,b,c,d],11),vec![1,3]);
+    }
+    #[test] fn missing_generation_and_stale_partial_side_fail_closed(){
+        for mutation in 0..5{
+            let a=surface(1,"taskbar-left",&[1]);let mut b=surface(1,"taskbar",&[2]);
+            match mutation{0=>b.rendered_generation=0,1=>b.expected_generation=8,2=>b.rendered_at=None,3=>b.shown=false,_=>b.rendered_at=Some(12)};
+            assert!(acknowledged(&[a,b],11).is_empty());
+        }
+    }
+    #[test] fn optional_left_is_ignored_and_empty_required_group_rejects(){
+        let optional=Surface::new(1,11,"taskbar-left".into());assert!(!optional.required);
+        assert!(acknowledged(&[optional.clone()],11).is_empty());
+        let right=surface(1,"taskbar",&[5]);assert_eq!(acknowledged(&[optional.clone(),right.clone()],11),vec![5]);
+        let mut other=optional;other.taskbar=2;assert!(acknowledged(&[right,other],11).is_empty());
+    }
+    #[test] fn legacy_zero_generation_and_required_defaults_work(){
+        let mut s=Surface::new(1,11,"taskbar".into());assert!(s.required);assert_eq!(s.expected_generation,0);assert_eq!(s.rendered_generation,0);
+        s.shown=true;s.rendered_at=Some(10);s.rendered.insert(9);assert_eq!(acknowledged(&[s],11),vec![9]);
+    }
+}
+
+#[cfg(test)]
+mod topology_tests {
+    use super::*;
+    fn s(tb:isize,left:bool,generation:u64)->Surface {
+        let mut s=Surface::new(tb,tb*10,if left{format!("taskbar-{tb}-left")}else{format!("taskbar-{tb}")});
+        s.required=true;s.expected_generation=generation;s
+    }
+    #[test] fn paired_requires_exactly_one_required_sibling_of_each_side(){
+        let right=s(1,false,7);let left=s(1,true,7);
+        assert!(!topology_matches(&[right.clone()],&[(1,7,true)]));
+        assert!(!topology_matches(&[left.clone()],&[(1,7,true)]));
+        assert!(topology_matches(&[left.clone(),right.clone()],&[(1,7,true)]));
+        assert!(!topology_matches(&[left,right.clone(),right],&[(1,7,true)]));
+    }
+    #[test] fn missing_native_taskbar_and_unpruned_removed_taskbar_fail(){
+        let right=s(1,false,0);
+        assert!(!topology_matches(&[right.clone()],&[(1,0,false),(2,0,false)]));
+        assert!(!topology_matches(&[right,s(2,false,0)],&[(1,0,false)]));
+        assert!(!topology_matches(&[],&[]));
+        assert!(!topology_matches(&[],&[(1,0,false)]));
+    }
+    #[test] fn generations_must_match_expected_on_both_siblings(){
+        assert!(!topology_matches(&[s(1,true,7),s(1,false,8)],&[(1,7,true)]));
+        assert!(!topology_matches(&[s(1,true,8),s(1,false,8)],&[(1,7,true)]));
+        assert!(!topology_matches(&[s(1,false,7)],&[(1,7,false)]));
+        assert!(!topology_matches(&[s(1,false,7)],&[(1,0,false)]));
+    }
+    #[test] fn fallback_ignores_optional_left_but_rejects_required_left(){
+        let right=s(1,false,0);let mut left=s(1,true,99);left.required=false;
+        assert!(topology_matches(&[right.clone(),left.clone()],&[(1,0,false)]));
+        left.required=true;assert!(!topology_matches(&[right,left],&[(1,0,false)]));
+    }
+    #[test] fn duplicate_expectations_and_optional_replacement_sibling_fail(){
+        assert!(!topology_matches(&[s(1,false,0)],&[(1,0,false),(1,0,false)]));
+        let mut left=s(1,true,7);left.required=false;
+        assert!(!topology_matches(&[left,s(1,false,7)],&[(1,7,true)]));
+        assert!(topology_matches(&[s(1,true,7),s(1,false,7),s(2,false,0)],&[(1,7,true),(2,0,false)]));
     }
 }

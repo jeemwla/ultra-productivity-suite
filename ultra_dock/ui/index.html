@@ -22,6 +22,8 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 
 .strip{position:absolute;left:0;bottom:0;height:100%;display:flex;align-items:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .strip::-webkit-scrollbar{display:none}
+.strip.paired{width:100%;padding:0 4px}
+.strip.paired-right>.group:first-child{margin-left:auto}
 .strip .grp,.strip .win,.strip .more{max-height:100%}
 .strip > .group[data-cat="__menu"]{position:sticky;right:0;z-index:3;background:transparent}
 /* Small screens: the strip never grows past the taskbar's free space (max-width is set from the measured room).
@@ -50,9 +52,9 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .grp.now,.grp.now .folder,.grp.now .collapse-mark{transition:none}
 @media(prefers-reduced-motion:reduce){.grp,.grp .folder,.grp .collapse-mark,.tray,.tray.open .win{transition:none!important}}
 /* Phone-style folder tile: up to 4 real app icons in a 2x2 grid, fully opaque, no overlap */
-.folder{position:relative;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
-  display:grid;grid-template-columns:13px 13px;grid-template-rows:13px 13px;gap:2px;padding:2px;place-content:center}
-.folder img,.folder .ph{width:13px;height:13px;border-radius:3px;display:block}
+.folder{position:relative;width:calc(var(--app-icon-size,24px)*4/3);height:calc(var(--app-icon-size,24px)*4/3);border-radius:8px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+  display:grid;grid-template-columns:repeat(2,calc(var(--app-icon-size,24px)*13/24));grid-template-rows:repeat(2,calc(var(--app-icon-size,24px)*13/24));gap:calc(var(--app-icon-size,24px)/12);padding:calc(var(--app-icon-size,24px)/12);place-content:center}
+.folder img,.folder .ph{width:calc(var(--app-icon-size,24px)*13/24);height:calc(var(--app-icon-size,24px)*13/24);border-radius:3px;display:block}
 .folder.n1{grid-template-columns:24px;grid-template-rows:24px}.folder.n1 img,.folder.n1 .ph{width:24px;height:24px;border-radius:6px}
 .folder .more-n{position:absolute;right:-5px;top:-4px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:#3a3a3a;color:#fff;
   font:600 9.5px/15px var(--font);text-align:center;box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
@@ -66,10 +68,10 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .win{position:relative;width:40px;height:40px;border-radius:4px;display:grid;place-items:center;flex:none;transition:background .12s,transform .15s var(--ease);opacity:0;transform:translateX(-6px)}
 .tray.open .win{opacity:1;transform:none;transition:background .12s,opacity .25s var(--ease),transform .3s var(--ease)}
 .win:hover{background:var(--hover)} .win:active{background:var(--press);transform:scale(.94)}
-.win img{width:24px;height:24px;display:block}
+.win img{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);display:block;object-fit:contain}
 .activation-error{box-shadow:inset 0 0 0 1px #ff847d}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.win .ph{width:24px;height:24px;border-radius:6px}
+.win .ph{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);border-radius:6px}
 .win .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease)}
 .win.active .runbar{width:16px;background:var(--bar-active)}
 /* An app with several windows: one icon, a count, and an inline list of its windows */
@@ -85,7 +87,7 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 @media (prefers-reduced-motion:reduce){.pick{animation:none}}
 .more{width:40px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-2);transition:background .12s,color .12s}
 .more:hover{background:var(--hover);color:var(--ink-2)}
-.more svg{width:24px;height:24px}
+.more svg{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px)}
 .more[aria-expanded=true] svg{transform:rotate(180deg)}
 .more{position:relative}
 .more .udot{position:absolute;right:5px;top:10px;width:7px;height:7px;border-radius:50%;background:var(--bar-active);box-shadow:0 0 0 2px rgba(0,0,0,.25);animation:upulse 2.4s var(--ease) infinite}
@@ -169,12 +171,14 @@ let state = { windows: [], organize: true, order: [] }, open = null, sig = "", c
 const CHEV = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
 
 function iconFor(exe, hwnd){
-  if (icons.has(exe)) return icons.get(exe);
-  icons.set(exe, null);
-  if (invoke) invoke("get_icon", { target: exe, hwnd: hwnd ?? null }).then(u => { if (u) { icons.set(exe, u); document.querySelectorAll(`img[data-exe="${CSS.escape(exe)}"]`).forEach(i => i.src = u);
+  const size = iconRequestSize(), key = `${exe}\u0000${size}`;
+  if (icons.has(key)) return icons.get(key);
+  icons.set(key, null);
+  if (invoke) invoke("get_icon", { target: exe, hwnd: hwnd ?? null, size }).then(u => { if (u) { icons.set(key, u); if (iconRequestSize() !== size) return; document.querySelectorAll(`img[data-exe="${CSS.escape(exe)}"]`).forEach(i => i.src = u);
     document.querySelectorAll(`.ph[data-exe="${CSS.escape(exe)}"]`).forEach(p => { const i = document.createElement("img"); i.dataset.exe = exe; i.src = u; i.alt = ""; p.replaceWith(i); }); } }).catch(() => {});
   return null;
 }
+function iconRequestSize(){ return Math.min(256,Math.max(64,2**Math.ceil(Math.log2((state.layout?.icon_size || 24)*(window.devicePixelRatio || 1))))); }
 const hwndOf = (exe) => (state.windows.find(w => w.exe === exe) || {}).hwnd;
 const img = (exe) => { const u = iconFor(exe, hwndOf(exe)); return u ? `<img data-exe="${esc(exe)}" src="${u}" alt="">` : `<span class="ph" data-exe="${esc(exe)}"></span>`; };
 
@@ -210,7 +214,7 @@ function layoutItems(){
   if (state.layout && Array.isArray(state.layout.items)) return state.layout.items;
   return groups().map(([cat, ws]) => { const exes = [...new Set(ws.map(w => w.exe))]; return { key: cat, label: cat, folder: exes.length > 1, exes }; });
 }
-let shownHwnds = [], baseW = 0;
+let shownHwnds = [], baseW = 0, lastDiagnosticEpoch = 0;
 /* An open folder, menu or window list wider than the free space: show only it until it closes */
 function applyFocus(){
   const s = $("strip");
@@ -250,6 +254,7 @@ async function setCap(c){
   sig = ""; render();
 }
 function render(){
+  $("strip").style.setProperty("--app-icon-size",`${state.layout?.icon_size || 24}px`);
   const activeElement = document.activeElement;
   const focusKey = el => [el.classList.contains("grp") ? "grp" : el.classList.contains("more") ? "more" : el.classList.contains("wt") ? "wt" : el.classList.contains("win") ? "win" : "act",el.dataset.cat,el.dataset.exe,el.dataset.h,el.dataset.act].join("|");
   const oldFocus = $("strip").contains(activeElement) && activeElement.tagName === "BUTTON" ? focusKey(activeElement) : null;
@@ -270,7 +275,7 @@ function render(){
   }).join("");
   shownHwnds = [...shown];
   const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
-  const menu = `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
+  const menu = state.layout?.show_menu === false ? "" : `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
   const popup = $("dock-menu");
   popup.hidden = open !== "__menu";
   popup.style.width = Math.min(520, room()) + "px";
@@ -279,6 +284,8 @@ function render(){
       ${capControl()}<button class="act" data-act="edit">Edit folders</button><button class="act" data-act="settings">Settings</button><button class="act" data-act="quit">Quit</button>
       ${state.fallback_reason ? `<div class="menu-note" role="status">${esc(state.fallback_reason)}</div>` : ""}`;
   $("strip").innerHTML = html + menu;
+  $("strip").classList.toggle("paired",state.layout?.centered === true);
+  $("strip").classList.toggle("paired-right",state.layout?.centered === true && state.layout?.side === "right");
   if (oldFocus && document.hasFocus()) {
     const replacement = [...$("strip").querySelectorAll("button")].find(button => focusKey(button) === oldFocus && !button.closest("[inert]"));
     replacement?.focus({preventScroll:true});
@@ -291,11 +298,20 @@ function render(){
 /* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
 function report(){
   if (!invoke) return;
+  let diagnostics;
+  if ((state.diagnostic_epoch || 0) > lastDiagnosticEpoch) {
+    lastDiagnosticEpoch = state.diagnostic_epoch;
+    diagnostics = { epoch:lastDiagnosticEpoch, dpr:window.devicePixelRatio, viewport:[window.innerWidth,window.innerHeight],
+      icons:[...$("strip").querySelectorAll('.win img,.folder img')].slice(0,128).map(img=>{
+        const box = img.getBoundingClientRect();
+        return {exe:img.dataset.exe,role:img.closest('.folder')?'preview':'app',width:box.width,height:box.height,natural:[img.naturalWidth,img.naturalHeight]};
+      }) };
+  }
   // Native menus are separate transient surfaces. The persistent strip always stays one taskbar row tall.
-  const full = Math.ceil($("strip").scrollWidth) + 8;
+  const full = Math.ceil($("strip").scrollWidth) + (state.layout?.centered ? 0 : 8);
   if (!open && !pick) baseW = full;
   else if (state.layout && state.layout.width) baseW = Math.ceil(state.layout.width);
-  invoke("set_strip_width", { width: Math.min(full, room()), rendered: shownHwnds, base: baseW, height: 48 });
+  invoke("set_strip_width", { width: Math.min(full, room()), rendered: shownHwnds, base: baseW, height: 48, generation: state.layout?.generation ?? 0, diagnostics });
 }
 
 function setOpen(cat){
@@ -383,7 +399,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventD
 async function poll(){
   try {
     const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
-    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout && s.layout.items, s.avail, s.cap]);
+    const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout, s.avail, s.cap]);
     state = s;
     // Commit the signature only after a successful render. Otherwise a transient
     // render exception would prevent retries while polling still looked healthy.

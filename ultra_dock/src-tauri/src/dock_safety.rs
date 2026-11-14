@@ -26,13 +26,31 @@ impl Visibility {
 pub struct StripListing { windows: std::collections::HashMap<isize, Attempt> }
 
 #[derive(Default, Clone, Copy)]
-struct Attempt { first_try: Option<u64>, retry_at: u64, backoff: u64 }
+struct Attempt { first_try: Option<u64>, retry_at: u64, backoff: u64, preparing_since: Option<u64> }
 
 pub const GRACE_MS: u64 = 3_000;
 pub const FIRST_BACKOFF_MS: u64 = 10_000;
 pub const MAX_BACKOFF_MS: u64 = 300_000;
 
 impl StripListing {
+    /// Layout preparation must survive asynchronous sibling creation and acknowledgements.
+    /// It is bounded separately from an actual native-hide attempt, avoiding health/layout feedback.
+    pub fn offer(&mut self, hwnd: isize, now_ms: u64, requested: bool, attempted: bool, native_hidden: bool) -> bool {
+        if !requested {
+            if let Some(a) = self.windows.get_mut(&hwnd) { a.preparing_since = None; a.first_try = None; }
+            return false;
+        }
+        if native_hidden { return self.decide(hwnd,now_ms,true,true); }
+        let a = self.windows.entry(hwnd).or_default();
+        if now_ms < a.retry_at { return false; }
+        let since = *a.preparing_since.get_or_insert(now_ms);
+        if now_ms.saturating_sub(since) >= 8_000 {
+            a.backoff = if a.backoff == 0 { FIRST_BACKOFF_MS } else { (a.backoff * 2).min(MAX_BACKOFF_MS) };
+            a.retry_at = now_ms.saturating_add(a.backoff); a.first_try = None; a.preparing_since = None;
+            return false;
+        }
+        if attempted { self.decide(hwnd,now_ms,true,false) } else { true }
+    }
     pub fn decide(&mut self, hwnd: isize, now_ms: u64, grouping_active: bool, native_hidden: bool) -> bool {
         if !grouping_active { return false; }
         let a = self.windows.entry(hwnd).or_default();
@@ -48,6 +66,7 @@ impl StripListing {
                 a.backoff = if a.backoff == 0 { FIRST_BACKOFF_MS } else { (a.backoff * 2).min(MAX_BACKOFF_MS) };
                 a.retry_at = now_ms + a.backoff;
                 a.first_try = None;
+                a.preparing_since = None;
                 false
             }
         }
@@ -59,6 +78,23 @@ impl StripListing {
 #[cfg(test)]
 mod listing_tests {
     use super::*;
+    #[test]
+    fn preparing_a_new_surface_does_not_destroy_its_own_candidate_layout() {
+        let mut listing = StripListing::default();
+        for now in (0..4_000).step_by(100) { assert!(listing.offer(1,now,true,false,false)); }
+        assert!(listing.offer(1,4_000,true,true,false));
+        assert!(listing.offer(1,4_700,true,true,true));
+        assert!(listing.offer(1,20_000,true,true,true));
+    }
+    #[test]
+    fn unacknowledged_preparation_is_bounded_and_retry_starts_fresh() {
+        let mut listing = StripListing::default();
+        assert!(listing.offer(1,0,true,false,false));
+        assert!(!listing.offer(1,8_000,true,false,false));
+        assert!(!listing.offer(1,17_999,true,false,false));
+        assert!(listing.offer(1,18_000,true,false,false));
+        assert!(listing.offer(1,18_700,true,true,true));
+    }
 
     #[test]
     fn hidden_windows_are_listed_and_native_ones_only_briefly() {

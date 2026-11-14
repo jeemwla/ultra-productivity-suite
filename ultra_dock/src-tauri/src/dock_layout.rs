@@ -172,6 +172,7 @@ pub fn settle_room(used: Option<f64>, new: f64, plan_width: f64) -> f64 {
 /// Taskbar geometry in physical pixels, read with UI Automation and window rectangles.
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct TaskbarGeom {
+    pub icon_size_css: Option<f64>,
     pub left: i32,
     pub right: i32,
     pub start_left: Option<i32>,
@@ -182,6 +183,14 @@ pub struct TaskbarGeom {
     /// chevron, the Widgets button on a left-aligned taskbar. Edges left of Start are ignored.
     pub obstacles: Vec<i32>,
     pub scale: f64,
+    /// Complete physical obstacle extents, including Widgets left of Start.
+    pub obstacle_intervals: Vec<(i32, i32)>,
+    /// Monotonic milliseconds, same clock as paired_plan's `now`.
+    pub measured_at: Option<u64>,
+    pub left_obstacles_complete: bool,
+    /// Caller-validated native alignment capability, never inferred from position.
+    /// Some(true) permits paired planning; false/unknown use safe fallback.
+    pub centered: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -203,6 +212,151 @@ pub fn free_span(g: &TaskbarGeom) -> Span {
     let edge = g.obstacles.iter().copied().filter(|&o| o > floor && o <= g.right).min()
         .unwrap_or(g.right - (480.0 * scale).round() as i32);
     Span { x, limit: (edge - margin).clamp(x, g.right) }
+}
+
+/// Physical allocations include at least 8 CSS pixels of report padding per side.
+/// `Plan.width` is the side's content + 8 CSS pixels; LEFT HAS NO MENU,
+/// right includes MENU_W. Equal physical spans may include additional outer padding.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PairedPlan {
+    pub left: Plan,
+    pub right: Plan,
+    pub left_span: Span,
+    pub right_span: Span,
+    pub generation: u64,
+}
+pub const PAIRED_GEOMETRY_MAX_AGE_MS: u64 = 1_000;
+pub const PAIRED_PADDING_CSS: f64 = 8.0;
+
+/// Shared measured geometry for initial planning and fixed-partition reflow.
+/// The centered planner validates the full obstacle intervals before placement.
+fn paired_input(g: &TaskbarGeom, now: u64, generation: u64) -> Option<crate::dock_centered_layout::Input> {
+    use crate::dock_centered_layout as centered;
+    let at = g.measured_at?;
+    if !g.left_obstacles_complete || at > now || now - at > PAIRED_GEOMETRY_MAX_AGE_MS
+        || !g.scale.is_finite() || g.scale <= 0.0
+        || g.centered != Some(true) { return None; }
+    let nl = g.start_left?;
+    let sr = g.start_right?;
+    let nr = g.buttons_right?.max(sr);
+    if g.left >= g.right || nl < g.left || nl >= sr || nr > g.right { return None; }
+    let native = centered::Rect { left: nl, right: nr };
+    let mut obstacles: Vec<_> = g.obstacle_intervals.iter().map(|&(left,right)| centered::Rect {left,right}).collect();
+    // Legacy right-edge obstacles remain conservative even if no full interval
+    // was supplied for that particular notification-area measurement.
+    for &edge in &g.obstacles {
+        if edge >= nr && edge < g.right { obstacles.push(centered::Rect {left:edge,right:g.right}); }
+    }
+    Some(centered::Input {
+        taskbar:centered::Rect{left:g.left,right:g.right}, native,
+        obstacles,scale:g.scale,items:vec![],
+        requested_center:(f64::from(nl)+f64::from(nr))/2.0,gap_css:2.0,
+        generation,expected_generation:generation,measured_at_ms:at,now_ms:now,
+        max_age_ms:PAIRED_GEOMETRY_MAX_AGE_MS,
+    })
+}
+
+/// Fresh complete centered geometry only. Unknown space never authorizes hiding.
+/// Cap and compaction use the existing planner, followed by contiguous whole-item
+/// partitioning. Both allocations are active: left apps and right apps/menu.
+pub fn paired_plan(groups: &[(String, Vec<String>)], g: &TaskbarGeom, cap: Option<usize>, now: u64) -> Option<PairedPlan> {
+    use crate::dock_centered_layout as centered;
+    let mut input = paired_input(g, now, 1)?;
+    let nl = input.native.left;
+    let nr = input.native.right;
+    let left_edge = input.obstacles.iter().filter(|r|r.right <= nl).map(|r|r.right).max().unwrap_or(g.left);
+    let right_edge = input.obstacles.iter().filter(|r|r.left >= nr).map(|r|r.left).min().unwrap_or(g.right);
+    let gap = (2.0*g.scale).ceil();
+    let capacity = (f64::from(nl)-f64::from(left_edge)-gap)
+        .min(f64::from(right_edge)-f64::from(nr)-gap);
+    if capacity <= 0.0 { return None; }
+    // Legacy plan width includes 6 CSS slack; paired sides replace it with 8 each.
+    let mut budget = 2.0*capacity/g.scale - 2.0*PAIRED_PADDING_CSS + SLACK_W;
+    loop {
+        let whole = plan_capped(groups, budget, cap);
+        if whole.items.is_empty() || !whole.left_out.is_empty() { return None; }
+        let mut items: Vec<_> = whole.items.iter().enumerate().map(|(n,it)|centered::Item {
+            id: n.to_string(), width_css: if it.folder {FOLDER_W} else {APP_W},
+        }).collect();
+        let count = items.len();
+        items.push(centered::Item {id:"menu".into(),width_css:MENU_W});
+        input.items = items;
+        if let Ok(placed) = centered::plan_reserved(&input, PAIRED_PADDING_CSS, 1, count) {
+            let split = placed.left.items.len();
+            let make = |items: Vec<Item>, menu: bool| Plan {
+                width:items.iter().map(|i|if i.folder {FOLDER_W} else {APP_W}).sum::<f64>()
+                    + if menu {MENU_W} else {0.0} + PAIRED_PADDING_CSS,
+                items,compacted:whole.compacted,over_six:whole.over_six,left_out:vec![],
+            };
+            let left = make(whole.items[..split].to_vec(),false);
+            let right = make(whole.items[split..].to_vec(),true);
+            let generation = paired_generation(&left,&right);
+            return Some(PairedPlan {left,right,
+                left_span:Span{x:placed.left.rect.left,limit:placed.left.rect.right},
+                right_span:Span{x:placed.right.rect.left,limit:placed.right.rect.right},generation});
+        }
+        let next = whole.width - 1.0;
+        if next >= budget || next < MENU_W + SLACK_W { return None; }
+        budget = next;
+    }
+}
+
+/// Explicit stable FNV-1a encoding, independent of positions, DPI, clock and HashMap seeds.
+fn paired_generation(left: &Plan, right: &Plan) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    let mut feed = |bytes: &[u8]| { for b in bytes { hash ^= u64::from(*b); hash = hash.wrapping_mul(0x100000001b3); } };
+    for (side,plan) in [(0u8,left),(1u8,right)] {
+        feed(&[side]);feed(&(plan.items.len() as u64).to_le_bytes());
+        for it in &plan.items {
+            feed(&[u8::from(it.folder)]);
+            feed(&(it.key.len() as u64).to_le_bytes());feed(it.key.as_bytes());
+            feed(&(it.exes.len() as u64).to_le_bytes());
+            for exe in &it.exes {feed(&(exe.len() as u64).to_le_bytes());feed(exe.as_bytes());}
+        }
+    }
+    hash.max(1)
+}
+
+/// Reposition an existing pair against a fresh measured native cluster. Retains
+/// both logical plans and their generation exactly, including compacted folders.
+/// Each item and the 8 CSS pixels of outer padding round up separately, as in
+/// paired_plan. No extra room authorizes expansion, repartitioning or hiding.
+/// A changed candidate signature requires initial planning instead of reuse.
+pub fn reflow_pair(old: &PairedPlan, g: &TaskbarGeom, now: u64) -> Option<PairedPlan> {
+    use crate::dock_centered_layout as centered;
+    if old.generation == 0 || old.left.items.is_empty()
+        || !old.left.left_out.is_empty() || !old.right.left_out.is_empty() { return None; }
+    let mut input = paired_input(g, now, old.generation)?;
+    input.items = old.left.items.iter().chain(&old.right.items).enumerate()
+        .map(|(n, it)| centered::Item {
+            id: n.to_string(), width_css: if it.folder { FOLDER_W } else { APP_W },
+        }).collect();
+    input.items.push(centered::Item { id: "menu".into(), width_css: MENU_W });
+    let split = old.left.items.len();
+    let placed = centered::plan_reserved(&input, PAIRED_PADDING_CSS, split, split).ok()?;
+    Some(PairedPlan {
+        left_span: Span { x: placed.left.rect.left, limit: placed.left.rect.right },
+        right_span: Span { x: placed.right.rect.left, limit: placed.right.rect.right },
+        ..old.clone()
+    })
+}
+
+/// Stable identity of the complete ordered candidate and exact cap setting.
+/// Cache this beside a PairedPlan: while it matches, try reflow_pair instead of
+/// replanning after native buttons disappear. Geometry, DPI and time are absent.
+/// This identifies candidate inputs, not a rendered partition generation.
+pub fn paired_candidate_signature(groups: &[(String, Vec<String>)], cap: Option<usize>) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    let mut feed = |bytes: &[u8]| { for b in bytes { hash ^= u64::from(*b); hash = hash.wrapping_mul(0x100000001b3); } };
+    feed(&[u8::from(cap.is_some())]);
+    feed(&(cap.unwrap_or(0) as u64).to_le_bytes());
+    feed(&(groups.len() as u64).to_le_bytes());
+    for (label, exes) in groups {
+        feed(&(label.len() as u64).to_le_bytes());feed(label.as_bytes());
+        feed(&(exes.len() as u64).to_le_bytes());
+        for exe in exes {feed(&(exe.len() as u64).to_le_bytes());feed(exe.as_bytes());}
+    }
+    hash.max(1)
 }
 
 /// Start sits near the middle on a centered taskbar and at the left edge on a left-aligned one.
@@ -435,14 +589,14 @@ mod tests {
         TaskbarGeom { left: 0, right: width, start_left: Some(start_left), start_right: Some(start_right),
             // Windows moves extra buttons into its own overflow menu before they reach the tray
             buttons_right: (buttons > 0).then(|| (start_right + btn * buttons as i32).min(width - tray_w - (12.0 * scale) as i32)),
-            obstacles: vec![width - tray_w, width - tray_w + 32], scale }
+            obstacles: vec![width - tray_w, width - tray_w + 32], scale, ..Default::default() }
     }
 
     #[test]
     fn this_desktop_matches_the_measured_taskbar() {
         // Measured on the owner's 2560 px desktop at 100%: Start 994-1039, last button 1567, chevron 2222.
         let g = TaskbarGeom { left: 0, right: 2560, start_left: Some(994), start_right: Some(1039), buttons_right: Some(1567),
-            obstacles: vec![2222, 2222, 2254], scale: 1.0 };
+            obstacles: vec![2222, 2222, 2254], scale: 1.0, ..Default::default() };
         assert_eq!(free_span(&g), Span { x: 1569, limit: 2214 });
         assert!(is_centered(&g));
     }
@@ -470,7 +624,7 @@ mod tests {
 
     #[test]
     fn missing_tray_reading_falls_back_to_a_safe_margin() {
-        let g = TaskbarGeom { left: 0, right: 1920, start_left: Some(12), start_right: Some(56), buttons_right: Some(400), obstacles: vec![], scale: 1.5 };
+        let g = TaskbarGeom { left: 0, right: 1920, start_left: Some(12), start_right: Some(56), buttons_right: Some(400), obstacles: vec![], scale: 1.5, ..Default::default() };
         assert_eq!(free_span(&g).limit, 1920 - 720 - 12);
         // the Widgets button left of Start on a centered taskbar is ignored
         let c = TaskbarGeom { start_left: Some(900), start_right: Some(966), buttons_right: Some(1100), obstacles: vec![10, 1500], ..g.clone() };
@@ -559,7 +713,7 @@ mod tests {
             let buttons_right = (start_left + row).min(screen - tray - 12.0);
             let g = TaskbarGeom { left: 0, right: screen as i32, start_left: Some(start_left as i32),
                 start_right: Some((start_left + 44.0) as i32), buttons_right: Some(buttons_right as i32),
-                obstacles: vec![(screen - tray) as i32], scale: 1.0 };
+                obstacles: vec![(screen - tray) as i32], scale: 1.0, ..Default::default() };
             let room = free_span(&g).width() as f64;
             let listed: Vec<(String, Vec<String>)> = if healthy { cats.clone() } else { vec![] };
             let rendered: Vec<String> = if new_logic {
@@ -687,5 +841,220 @@ mod tests {
             }
         }
         assert!(cases > 25_000);
+    }
+}
+
+#[cfg(test)]
+mod paired_tests {
+    use super::*;
+    fn geometry(portrait: bool) -> TaskbarGeom {
+        let (left,right,nl,nr,scale)=if portrait {(-1440,0,-776,-665,1.25)} else {(0,2560,1126,1435,1.0)};
+        TaskbarGeom {left,right,start_left:Some(nl),start_right:Some(nl+40),buttons_right:Some(nr),scale,
+            measured_at:Some(100),left_obstacles_complete:true,centered:Some(true),
+            obstacle_intervals:vec![(left,left+100),(right-100,right)],..Default::default()}
+    }
+    fn groups(n:usize)->Vec<(String,Vec<String>)>{vec![("Apps".into(),(0..n).map(|n|format!("app{n}")).collect())]}
+    fn check(g:&TaskbarGeom,p:&PairedPlan){
+        assert!(!p.left.items.is_empty());assert_ne!(p.generation,0);
+        assert_eq!(p.left_span.width(),p.right_span.width());
+        assert_eq!(i64::from(p.left_span.x)+i64::from(p.right_span.limit),i64::from(g.start_left.unwrap())+i64::from(g.buttons_right.unwrap()));
+        assert!(p.left_span.limit<=g.start_left.unwrap()-(2.0*g.scale).ceil() as i32);
+        assert!(p.right_span.x>=g.buttons_right.unwrap()+(2.0*g.scale).ceil() as i32);
+        for span in [p.left_span,p.right_span]{assert!(span.x>=g.left&&span.limit<=g.right);
+            for &(a,b) in &g.obstacle_intervals {assert!(span.limit<=a||span.x>=b);}}
+        for (side,menu,span) in [(&p.left,false,p.left_span),(&p.right,true,p.right_span)]{
+            let content=side.items.iter().map(|i|if i.folder{FOLDER_W}else{APP_W}).sum::<f64>()+if menu{MENU_W}else{0.0};
+            assert_eq!(side.width,content+8.0);assert!(side.width*g.scale<=f64::from(span.width())+0.001);
+        }
+    }
+    #[test] fn measured_primary_and_portrait_are_balanced(){for portrait in [false,true]{let g=geometry(portrait);let p=paired_plan(&groups(10),&g,Some(7),150).unwrap();check(&g,&p);}}
+    #[test] fn generation_survives_translation_and_changes_with_executable_identity(){
+        let g=geometry(false);let p=paired_plan(&groups(10),&g,Some(7),150).unwrap();
+        let mut moved=g.clone();moved.left-=3000;moved.right-=3000;
+        moved.start_left=moved.start_left.map(|x|x-3000);moved.start_right=moved.start_right.map(|x|x-3000);moved.buttons_right=moved.buttons_right.map(|x|x-3000);
+        moved.obstacle_intervals.iter_mut().for_each(|(a,b)|{*a-=3000;*b-=3000;});
+        let q=paired_plan(&groups(10),&moved,Some(7),150).unwrap();assert_eq!(p.generation,q.generation);
+        let mut other=groups(10);other[0].1[0]="replacement".into();assert_ne!(p.generation,paired_plan(&other,&g,Some(7),150).unwrap().generation);
+    }
+    #[test] fn missing_stale_left_aligned_and_menu_only_return_none(){
+        for field in 0..6 {let mut g=geometry(false);match field {0=>g.measured_at=None,1=>g.measured_at=Some(0),2=>g.left_obstacles_complete=false,3=>g.start_left=None,4=>g.buttons_right=None,_=>g.centered=Some(false)};
+            assert!(paired_plan(&groups(4),&g,None,1500).is_none());}
+        assert!(paired_plan(&[],&geometry(false),None,150).is_none());
+        let mut g=geometry(false);g.measured_at=Some(200);assert!(paired_plan(&groups(3),&g,None,150).is_none());
+    }
+    #[test] fn paired_alignment_requires_explicit_capability_not_start_offset(){
+        let mut g=geometry(false);
+        for centered in [None,Some(false)] {g.centered=centered;assert!(paired_plan(&groups(3),&g,None,150).is_none());}
+        g.centered=Some(true);assert!(paired_plan(&groups(3),&g,None,150).is_some());
+        // A caller-validated capability is independent of a fixed Start offset.
+        g.start_left=Some(100);g.start_right=Some(140);g.buttons_right=Some(210);
+        g.obstacle_intervals=vec![(0,10),(2460,2560)];
+        assert!(paired_plan(&groups(1),&g,None,150).is_some());
+        assert_eq!(TaskbarGeom::default().centered,None);
+    }
+    #[test] fn compaction_preserves_existing_order_and_cap_policy(){
+        for portrait in [false,true]{for n in 1..40{for cap in [None,Some(0),Some(7),Some(30)]{
+            let g=geometry(portrait);let p=paired_plan(&groups(n),&g,cap,150).unwrap();check(&g,&p);
+            let exes:Vec<_>=p.left.items.iter().chain(&p.right.items).flat_map(|i|i.exes.iter().cloned()).collect();
+            assert_eq!(exes,groups(n)[0].1);assert!(p.left.items.iter().chain(&p.right.items).filter(|i|!i.folder).count()<=cap.unwrap_or(1).max(1));
+        }}}
+    }
+    #[test] fn obstacles_in_native_or_unsafe_narrow_flanks_reject(){
+        let mut g=geometry(true);g.obstacle_intervals.push((-700,-680));assert!(paired_plan(&groups(5),&g,None,150).is_none());
+        let mut g=geometry(true);g.obstacle_intervals.push((-800,-778));assert!(paired_plan(&groups(5),&g,None,150).is_none());
+    }
+
+    #[test]
+    fn reflow_shrunk_native_keeps_compacted_partition_instead_of_expanding() {
+        let mut g = geometry(false);
+        g.obstacle_intervals = vec![(0, 950), (1611, 2560)];
+        let old = paired_plan(&groups(10), &g, Some(7), 150).unwrap();
+        g.start_left = Some(1206);
+        g.start_right = Some(1246);
+        g.buttons_right = Some(1355);
+        g.measured_at = Some(200);
+        let fresh = paired_plan(&groups(10), &g, Some(7), 200).unwrap();
+        assert_ne!(fresh.left.items.len() + fresh.right.items.len(),
+            old.left.items.len() + old.right.items.len());
+        let moved = reflow_pair(&old, &g, 200).unwrap();
+        check(&g, &moved);
+        assert_eq!(moved.left, old.left);
+        assert_eq!(moved.right, old.right);
+        assert_eq!(moved.generation, old.generation);
+        assert_eq!(moved.left_span.x, old.left_span.x + 80);
+        assert_eq!(moved.right_span.x, old.right_span.x - 80);
+        assert_eq!(reflow_pair(&moved, &g, 200), Some(moved));
+    }
+
+    #[test]
+    fn reflow_recenter_has_exact_symmetric_spans_and_right_only_menu() {
+        let mut g = geometry(false);
+        let old = paired_plan(&groups(3), &g, None, 150).unwrap();
+        g.start_left = Some(1200);
+        g.start_right = Some(1240);
+        g.buttons_right = Some(1360);
+        let moved = reflow_pair(&old, &g, 150).unwrap();
+        assert_eq!(moved.left_span, Span { x: 1146, limit: 1198 });
+        assert_eq!(moved.right_span, Span { x: 1362, limit: 1414 });
+        assert_eq!(moved.left.width, 52.0);
+        assert_eq!(moved.right.width, 48.0);
+        assert_eq!(moved.left, old.left);
+        assert_eq!(moved.right, old.right);
+        assert!(moved.right.items.is_empty());
+        assert_eq!(moved.generation, old.generation);
+    }
+
+    #[test]
+    fn reflow_negative_portrait_rounds_each_item_and_padding_at_new_dpi() {
+        let mut g = geometry(true);
+        let old = paired_plan(&groups(3), &g, None, 150).unwrap();
+        g.start_left = Some(-751);
+        g.start_right = Some(-711);
+        g.buttons_right = Some(-690);
+        g.scale = 1.3;
+        let moved = reflow_pair(&old, &g, 150).unwrap();
+        // ceil(44 * 1.3) + ceil(8 * 1.3) = 58 + 11 = 69.
+        assert_eq!(moved.left_span, Span { x: -823, limit: -754 });
+        assert_eq!(moved.right_span, Span { x: -687, limit: -618 });
+        check(&g, &moved);
+        assert_eq!(moved.left, old.left);
+        assert_eq!(moved.right, old.right);
+        assert_eq!(moved.generation, old.generation);
+    }
+
+    #[test]
+    fn reflow_requires_fresh_complete_explicitly_centered_geometry() {
+        let good = geometry(false);
+        let old = paired_plan(&groups(10), &good, Some(7), 150).unwrap();
+        assert!(reflow_pair(&old, &good, 1100).is_some());
+        assert!(reflow_pair(&old, &good, 1101).is_none());
+        for field in 0..8 {
+            let mut g = good.clone();
+            match field {
+                0 => g.measured_at = None,
+                1 => g.measured_at = Some(151),
+                2 => g.left_obstacles_complete = false,
+                3 => g.centered = None,
+                4 => g.centered = Some(false),
+                5 => g.start_left = None,
+                6 => g.start_right = None,
+                _ => g.buttons_right = None,
+            }
+            assert!(reflow_pair(&old, &g, 150).is_none(), "field {field}");
+        }
+    }
+
+    #[test]
+    fn reflow_rejects_bad_bounds_scale_and_obstacles_without_recompacting() {
+        let good = geometry(false);
+        let old = paired_plan(&groups(10), &good, Some(7), 150).unwrap();
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::MAX] {
+            let mut g = good.clone();
+            g.scale = scale;
+            assert!(reflow_pair(&old, &g, 150).is_none());
+        }
+        for field in 0..8 {
+            let mut g = good.clone();
+            match field {
+                0 => g.left = g.right,
+                1 => g.start_left = Some(-1),
+                2 => g.start_right = g.start_left,
+                3 => g.buttons_right = Some(2561),
+                4 => g.obstacle_intervals.push((1200, 1210)),
+                5 => g.obstacle_intervals.push((-1, 10)),
+                6 => g.obstacle_intervals.push((900, 800)),
+                _ => g.obstacle_intervals.push((1100, 1124)),
+            }
+            assert!(reflow_pair(&old, &g, 150).is_none(), "field {field}");
+        }
+        let mut g = good.clone();
+        g.obstacles.push(1438);
+        assert!(reflow_pair(&old, &g, 150).is_none());
+        g.obstacles = vec![old.right_span.limit];
+        assert!(reflow_pair(&old, &g, 150).is_some());
+        g.obstacles[0] -= 1;
+        assert!(reflow_pair(&old, &g, 150).is_none());
+        assert_eq!(reflow_pair(&old, &good, 150), Some(old.clone()));
+    }
+
+    #[test]
+    fn reflow_does_not_rebalance_a_frozen_asymmetric_item_partition() {
+        let g = geometry(false);
+        let mut old = paired_plan(&groups(10), &g, Some(7), 150).unwrap();
+        let item = old.left.items.pop().unwrap();
+        old.right.items.insert(0, item);
+        old.left.width -= APP_W;
+        old.right.width += APP_W;
+        old.generation = paired_generation(&old.left, &old.right);
+        let moved = reflow_pair(&old, &g, 150).unwrap();
+        check(&g, &moved);
+        assert_eq!(moved.left, old.left);
+        assert_eq!(moved.right, old.right);
+        assert_eq!(moved.generation, old.generation);
+    }
+
+    #[test]
+    fn candidate_signature_tracks_exact_ordered_groups_and_cap() {
+        let source = vec![("Apps".into(), vec!["a".into(), "bc".into()]),
+            ("Tools".into(), vec!["d".into()])];
+        let sig = paired_candidate_signature(&source, Some(7));
+        assert_ne!(sig, 0);
+        assert_eq!(sig, paired_candidate_signature(&source.clone(), Some(7)));
+        for cap in [None, Some(0), Some(6), Some(8)] {
+            assert_ne!(sig, paired_candidate_signature(&source, cap));
+        }
+        for field in 0..5 {
+            let mut changed = source.clone();
+            match field {
+                0 => changed.reverse(),
+                1 => changed[0].1.reverse(),
+                2 => changed[0].0 = "Renamed".into(),
+                3 => changed[0].1 = vec!["ab".into(), "c".into()],
+                _ => changed[1].1.push("extra".into()),
+            }
+            assert_ne!(sig, paired_candidate_signature(&changed, Some(7)), "field {field}");
+        }
+        assert_ne!(paired_candidate_signature(&source, None),
+            paired_candidate_signature(&source, Some(0)));
     }
 }
