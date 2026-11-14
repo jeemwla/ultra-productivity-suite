@@ -41,8 +41,13 @@ const COLLECTOR: &str = env!("ULTRASUITE_COLLECTOR_URL");
 static SURFACES: Mutex<Vec<dock_surface::Surface>> = Mutex::new(Vec::new());
 static PAIRED_PLANS: Mutex<Option<HashMap<isize,dock_layout::PairedPlan>>> = Mutex::new(None);
 static LAYOUT_RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
+static ORGANIZER_READINESS: AtomicU32 = AtomicU32::new(0);
+static ORGANIZER_FAST_STATUS: AtomicU32 = AtomicU32::new(0);
+static WATCHDOG_STATUS: AtomicU32 = AtomicU32::new(0);
+static COVERAGE_FAILURE: Mutex<Option<Value>> = Mutex::new(None);
 static DIAGNOSTIC_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static ICON_METRICS: Mutex<Option<HashMap<String,Value>>> = Mutex::new(None);
+static FRONTEND_ERRORS: Mutex<Option<HashMap<String,String>>> = Mutex::new(None);
 fn paired_for(taskbar: isize) -> Option<dock_layout::PairedPlan> {
     PAIRED_PLANS.lock().ok()?.as_ref()?.get(&taskbar).cloned()
 }
@@ -76,12 +81,23 @@ fn record_dock_event(event: &str) {
 fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
     let snapshot = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
     let surfaces = SURFACES.lock().map(|s| s.clone()).unwrap_or_default();
-    let surfaces: Vec<_> = surfaces.iter().map(|s| json!({
+    let surfaces: Vec<_> = surfaces.iter().map(|s| {
+        #[cfg(windows)]
+        let native = unsafe {
+            use windows::Win32::{Foundation::{HWND,RECT},UI::WindowsAndMessaging::GetWindowRect};
+            let (mut r,mut bar)=(RECT::default(),RECT::default());
+            let _=GetWindowRect(HWND(s.hwnd as _),&mut r);let _=GetWindowRect(HWND(s.taskbar as _),&mut bar);
+            json!({"rect":[r.left,r.top,r.right,r.bottom],"taskbar_rect":[bar.left,bar.top,bar.right,bar.bottom],
+                "present":strip_is_present(HWND(s.hwnd as _)),"inside":surface_inside_taskbar(s),"fresh":s.fresh(uptime_secs())})
+        };
+        #[cfg(not(windows))]
+        let native=Value::Null;
+        json!({
         "label":s.label,"hwnd":s.hwnd,"taskbar":s.taskbar,"shown":s.shown,"room_css":s.room,
         "requested_width_css":s.width,"rendered":s.rendered,"rendered_at":s.rendered_at,
         "expected_generation":s.expected_generation,"rendered_generation":s.rendered_generation,"required":s.required,
-        "geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room))
-    })).collect();
+        "native":native,"geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room))
+    })}).collect();
     let windows: Vec<_> = snapshot.iter().map(|w| json!({"hwnd":w.hwnd,"exe":w.exe,"category":w.category,"active":w.active})).collect();
     let events = DOCK_EVENTS.lock().map(|s| s.clone()).unwrap_or_default();
     let icon_metrics = ICON_METRICS.lock().ok().and_then(|m|m.clone()).unwrap_or_default();
@@ -102,11 +118,17 @@ fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
     let foreground = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize };
     #[cfg(not(windows))]
     let foreground = 0isize;
-    let value = json!({"version":env!("CARGO_PKG_VERSION"),"edition":profile().edition(),"at":now_secs(),
+    #[cfg(windows)]
+    let readiness=json!({"covered":all_taskbars_covered(),"native_taskbars":native_taskbars(),"guard":guard_running(),"uptime_ms":uptime_millis(),"organizer_mask":ORGANIZER_READINESS.load(Ordering::Acquire),"fast_status":ORGANIZER_FAST_STATUS.load(Ordering::Acquire),"watchdog_mask":WATCHDOG_STATUS.load(Ordering::Acquire)});
+    #[cfg(not(windows))]
+    let readiness=Value::Null;
+    let value = json!({"version":env!("CARGO_PKG_VERSION"),"edition":profile().edition(),"at":now_secs(),"readiness":readiness,
         "organize":ORGANIZE.load(Ordering::Acquire),"healthy":HEALTHY.load(Ordering::Acquire),
         "restoring":RESTORATION_PENDING.load(Ordering::Acquire),"switcher_active":SWITCHER_ACTIVE.load(Ordering::Acquire),
         "switcher_visible":SWITCHER_VISIBLE.load(Ordering::Acquire),"foreground_hwnd":foreground,"surfaces":surfaces,"windows":windows,
         "diagnostic_epoch":DIAGNOSTIC_EPOCH.load(Ordering::Acquire),"icon_metrics":icon_metrics,"icon_files":icon_files,
+        "frontend_errors":FRONTEND_ERRORS.lock().ok().and_then(|e|e.clone()).unwrap_or_default(),
+        "coverage_failure":COVERAGE_FAILURE.lock().ok().and_then(|e|e.clone()),
         "switcher_barrier":{"requested":barrier.requested,"acknowledged":barrier.acknowledged,"barriers":barrier.barriers,"timeouts":barrier.timeouts,"hidden":barrier.hidden,"installed":barrier.installed,"faulted":barrier.faulted},
         "webviews":app.webview_windows().values().map(|w|json!({"label":w.label(),"visible":w.is_visible().ok(),"focused":w.is_focused().ok(),
             "position":w.outer_position().ok().map(|p|vec![p.x,p.y]),"size":w.inner_size().ok().map(|s|vec![s.width,s.height])})).collect::<Vec<_>>(),"events":events});
@@ -567,6 +589,7 @@ fn organizer_loop() {
                 LAYOUT_RESTORE_REQUESTED.store(true, Ordering::Release);
             }
             if LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) {
+                ORGANIZER_FAST_STATUS.store(1,Ordering::Relaxed);
                 hiding_stability.allow(false, started.elapsed().as_millis() as u64);
                 RESTORATION_PENDING.store(true, Ordering::Release);
                 if recovery::restore_all(&tbl).is_ok() {
@@ -585,6 +608,7 @@ fn organizer_loop() {
             let (restore_for_switcher, paused) = switcher.update(switching, started.elapsed().as_millis() as u64);
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
+                ORGANIZER_FAST_STATUS.store(2,Ordering::Relaxed);
                 hiding_stability.allow(false, started.elapsed().as_millis() as u64);
                 if restore_for_switcher {
                     record_dock_event("switcher-restore-requested");
@@ -600,6 +624,7 @@ fn organizer_loop() {
                 continue;
             }
             if !switcher_barrier::finish_session_if(session) {
+                ORGANIZER_FAST_STATUS.store(3,Ordering::Relaxed);
                 hiding_stability.allow(false,started.elapsed().as_millis() as u64);
                 continue;
             }
@@ -608,10 +633,14 @@ fn organizer_loop() {
                 && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && !switcher_barrier::faulted()
                 && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
             if !fast_ready {
+                let flags=[SWITCHER_ACTIVE.load(Ordering::Acquire),SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire),SWITCHER_VISIBLE.load(Ordering::Acquire),
+                    LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire),switcher_barrier::faulted(),!may_organize,!ORGANIZE.load(Ordering::Acquire),!HEALTHY.load(Ordering::Acquire),RESTORATION_PENDING.load(Ordering::Acquire)];
+                ORGANIZER_FAST_STATUS.store(4|(flags.iter().enumerate().fold(0,|mask,(i,b)|mask|if *b {1<<i}else{0})<<8),Ordering::Relaxed);
                 hiding_stability.allow(false, started.elapsed().as_millis() as u64);
                 continue;
             }
-            if !hiding_stability.active(started.elapsed().as_millis() as u64) { continue; }
+            if !hiding_stability.active(started.elapsed().as_millis() as u64) { ORGANIZER_FAST_STATUS.store(5,Ordering::Relaxed); continue; }
+            ORGANIZER_FAST_STATUS.store(6,Ordering::Relaxed);
             let fg = unsafe { GetForegroundWindow().0 as isize };
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 if switcher_barrier::begin_hide() && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
@@ -631,6 +660,10 @@ fn organizer_loop() {
             && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire)
             && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
         let on = hiding_stability.allow(ready, started.elapsed().as_millis() as u64);
+        let checks=[may_organize,guarded,SWITCHER_EVENTS_READY.load(Ordering::Acquire),all_taskbars_covered(),
+            !SWITCHER_ACTIVE.load(Ordering::Acquire),HEALTHY.load(Ordering::Acquire),!RESTORATION_PENDING.load(Ordering::Acquire),
+            !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire),!switcher_barrier::faulted(),ready,on];
+        ORGANIZER_READINESS.store(checks.iter().enumerate().fold(0,|bits,(i,ok)|bits|if *ok {1<<i}else{0}),Ordering::Release);
         if !on {
             RESTORATION_PENDING.store(true, Ordering::Release);
             match recovery::restore_all(&tbl) {
@@ -796,12 +829,19 @@ fn all_taskbars_covered() -> bool {
     let expected:Vec<_> = bars.iter().map(|tb| {
         let pair = paired_for(*tb); (*tb,pair.as_ref().map(|p|p.generation).unwrap_or(0),pair.is_some())
     }).collect();
-    if bars.is_empty() || !dock_surface::topology_matches(&surfaces,&expected) { return false; }
-    surfaces.iter().filter(|s|s.required).all(|s| s.shown && s.fresh(uptime_secs())
-        && s.rendered_generation == s.expected_generation
-        && s.geometry.as_ref().and_then(|g|g.measured_at).is_some_and(|at|uptime_millis().saturating_sub(at) <= dock_layout::PAIRED_GEOMETRY_MAX_AGE_MS)
-        && strip_is_present(HWND(s.hwnd as _)) && surface_inside_taskbar(s)
-        && unsafe { MonitorFromWindow(HWND(s.hwnd as _), MONITOR_DEFAULTTONEAREST) == MonitorFromWindow(HWND(s.taskbar as _), MONITOR_DEFAULTTONEAREST) })
+    if bars.is_empty() || !dock_surface::topology_matches(&surfaces,&expected) {
+        if let Ok(mut failure)=COVERAGE_FAILURE.lock() {*failure=Some(json!({"at":uptime_millis(),"reason":"topology"}));} return false;
+    }
+    surfaces.iter().filter(|s|s.required).all(|s| {
+        let checks=[s.shown,s.fresh(uptime_secs()),s.rendered_generation==s.expected_generation,
+            s.geometry.as_ref().and_then(|g|g.measured_at).is_some_and(|at|uptime_millis().saturating_sub(at)<=dock_layout::PAIRED_GEOMETRY_MAX_AGE_MS),
+            strip_is_present(HWND(s.hwnd as _)),surface_inside_taskbar(s),
+            unsafe {MonitorFromWindow(HWND(s.hwnd as _),MONITOR_DEFAULTTONEAREST)==MonitorFromWindow(HWND(s.taskbar as _),MONITOR_DEFAULTTONEAREST)}];
+        if checks.iter().all(|ok|*ok) {true} else {
+            if let Ok(mut failure)=COVERAGE_FAILURE.lock() {*failure=Some(json!({"at":uptime_millis(),"label":s.label,"checks":checks,
+                "geometry":s.geometry,"rendered_at":s.rendered_at,"expected":s.expected_generation,"rendered":s.rendered_generation}));} false
+        }
+    })
 }
 #[cfg(windows)]
 fn surface_inside_taskbar(surface: &dock_surface::Surface) -> bool {
@@ -845,13 +885,17 @@ fn watchdog(app: tauri::AppHandle) {
         let since = if seen == 0 { u64::MAX } else { uptime_secs().saturating_sub(seen - 1) };
         let last_beat = heartbeat.load(Ordering::Acquire);
         let heartbeat_age = (started.elapsed().as_millis() as u64).saturating_sub(last_beat);
-        let ok = dock_safety::Visibility {
+        let visibility = dock_safety::Visibility {
             enabled: ORGANIZE.load(Ordering::Relaxed), guard_ready: guard_running(),
             main_responsive: watchdog_main_responsive(missed, (last_beat != 0).then_some(heartbeat_age)) && SWITCHER_EVENTS_READY.load(Ordering::Acquire),
             strip_visible: STRIP_SHOWN.load(Ordering::Relaxed) && strip_is_present(HWND(h as _)),
             strip_fits: STRIP_FITS.load(Ordering::Relaxed) && !RENDER_OVERFLOW.load(Ordering::Relaxed),
             all_taskbars_covered: all_taskbars_covered(), rendered_age: since,
-        }.may_hide();
+        };
+        let checks=[visibility.enabled,visibility.guard_ready,visibility.main_responsive,visibility.strip_visible,
+            visibility.strip_fits,visibility.all_taskbars_covered,visibility.rendered_age<5];
+        WATCHDOG_STATUS.store(checks.iter().enumerate().fold(0,|mask,(i,b)|mask|if *b {1<<i}else{0}),Ordering::Release);
+        let ok=visibility.may_hide();
         HEALTHY.store(ok, Ordering::Relaxed);
         if missed == 1 || missed == 5 {
             watchdog_diagnostic(missed, heartbeat_age);
@@ -1120,7 +1164,14 @@ mod strip_listing_tests {
 }
 
 #[tauri::command]
-fn get_windows(window: WebviewWindow) -> Value {
+fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
+    if let Ok(mut errors)=FRONTEND_ERRORS.lock() {
+        let errors=errors.get_or_insert_with(HashMap::new);
+        if let Some(error)=frontend_error.filter(|e|e.len()<=1024) {
+            if errors.get(window.label())!=Some(&error) {record_dock_event(&format!("frontend:{}:{error}",window.label()));}
+            errors.insert(window.label().to_string(),error);
+        } else {errors.remove(window.label());}
+    }
     UI_SEEN.store(now_secs(), Ordering::Relaxed);  // polling is diagnostic, not proof of rendering
     #[cfg(windows)]
     let covered = all_taskbars_covered();
@@ -2407,7 +2458,12 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             let (x,y,w,h)=(position.x,position.y,position.width as u32,position.height as u32);
             let state=(x,y,w,h,show,shell_surface);
             let refresh=shell_refresh.update(shell_surface,shell_clock.elapsed().as_millis() as u64);
-            if state==last && !refresh {continue;}
+            let mut actual=RECT::default();
+            let placed=!show || (GetWindowRect(hwnd,&mut actual).is_ok()
+                && position.matches_native_rect((actual.left,actual.top,actual.right,actual.bottom)));
+            // WM_DPICHANGED may apply a suggested resize after our asynchronous
+            // move. Verify physical output, not just the previous request.
+            if state==last && !refresh && placed {continue;}
             last=state;
             if show {
                 let _=SetWindowPos(hwnd,Some(HWND_TOPMOST),x,y,w as i32,h as i32,SWP_NOACTIVATE|SWP_SHOWWINDOW|SWP_ASYNCWINDOWPOS);

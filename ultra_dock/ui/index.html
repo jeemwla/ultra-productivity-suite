@@ -168,6 +168,22 @@ if (view === "survey") {
 /* ---------------- Taskbar organizer ---------------- */
 const icons = new Map();          // exe path -> data url
 let state = { windows: [], organize: true, order: [] }, open = null, sig = "", closeTimer = 0;
+let stripPointerDown = false;
+function beginStripPointer(event){
+  stripPointerDown = true;
+  // A moving native taskbar must not take the release event away from this button.
+  const target = event.target.closest?.("button") || event.currentTarget;
+  target.setPointerCapture(event.pointerId);
+}
+$("strip").addEventListener("pointerdown", beginStripPointer, true);
+function finishStripPointer(){
+  // Keep the target alive through the click dispatched after pointerup.
+  if (stripPointerDown) setTimeout(() => { stripPointerDown = false; poll(); }, 0);
+}
+window.addEventListener("pointerup", finishStripPointer, true);
+window.addEventListener("pointercancel", finishStripPointer, true);
+window.addEventListener("lostpointercapture", finishStripPointer, true);
+window.addEventListener("blur", finishStripPointer);
 const CHEV = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
 
 function iconFor(exe, hwnd){
@@ -301,7 +317,7 @@ function report(){
   let diagnostics;
   if ((state.diagnostic_epoch || 0) > lastDiagnosticEpoch) {
     lastDiagnosticEpoch = state.diagnostic_epoch;
-    diagnostics = { epoch:lastDiagnosticEpoch, dpr:window.devicePixelRatio, viewport:[window.innerWidth,window.innerHeight],
+    diagnostics = { epoch:lastDiagnosticEpoch, generation:state.layout?.generation, dpr:window.devicePixelRatio, viewport:[window.innerWidth,window.innerHeight],
       icons:[...$("strip").querySelectorAll('.win img,.folder img')].slice(0,128).map(img=>{
         const box = img.getBoundingClientRect();
         return {exe:img.dataset.exe,role:img.closest('.folder')?'preview':'app',width:box.width,height:box.height,natural:[img.naturalWidth,img.naturalHeight]};
@@ -397,15 +413,18 @@ $("strip").addEventListener("wheel", e => { const s = $("strip"); if (s.scrollWi
 document.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeAll(); } });
 
 async function poll(){
+  if (stripPointerDown) return;
   try {
-    const s = invoke ? await invoke("get_windows") : { organize: true, order: [], windows: [] };
+    const s = invoke ? await invoke("get_windows", {frontendError:poll.error || null}) : { organize: true, order: [], windows: [] };
+    if (stripPointerDown) return;
     const nsig = JSON.stringify([s.organize, s.fallback_reason, s.windows.map(w => [w.hwnd, w.category, w.active, w.title]), s.layout, s.avail, s.cap]);
     state = s;
     // Commit the signature only after a successful render. Otherwise a transient
     // render exception would prevent retries while polling still looked healthy.
     if (nsig !== sig) { render(); sig = nsig; }
     else report();
-  } catch {}
+    poll.error = null;
+  } catch (error) { poll.error = String(error); }
 }
 /* ---------------- Update dot ----------------
    The core checks GitHub (cached for 6 hours); a dot on the menu chevron says a new version is out. */

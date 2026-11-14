@@ -141,6 +141,13 @@ pub struct Placement {
     pub fits: bool,
     pub shelf: bool,
 }
+#[cfg(windows)]
+impl Placement {
+    pub fn matches_native_rect(&self, (left,top,right,bottom):(i32,i32,i32,i32))->bool {
+        left==self.x && top==self.y && i64::from(right)-i64::from(left)==i64::from(self.width)
+            && i64::from(bottom)-i64::from(top)==i64::from(self.height)
+    }
+}
 
 /// A persistent strip follows the native taskbar and yields to full-screen windows.
 pub fn strip_visible(taskbar_visible: bool, fullscreen: bool, fits: bool, requested: bool) -> bool {
@@ -176,6 +183,14 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn dpi_suggested_resize_must_not_count_as_the_requested_physical_placement() {
+        let wanted=Placement{x:-1016,y:2054,width:210,height:60,fits:true,shelf:false};
+        assert!(!wanted.matches_native_rect((-1016,2054,-753,2129)),"125-percent suggested resize extends outside the measured 60px taskbar");
+        assert!(wanted.matches_native_rect((-1016,2054,-806,2114)));
+        assert!(!wanted.matches_native_rect((-1015,2054,-805,2114)),"moved native controls also require reflow");
+    }
     #[test]
     fn shell_z_order_refresh_is_bounded_and_restarts_on_next_start_open() {
         let mut refresh = ShellRefresh::default();
