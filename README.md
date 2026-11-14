@@ -1,18 +1,20 @@
 # Ultra Suite
 
-Three free Windows utilities: understand your PC, set local alarms, and organize open apps.
+Free Windows utilities for organizing open apps, monitoring your PC, and setting local alarms.
 
 [Download the Windows installer, v2.2.16 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.16/UltraSuite-Setup-2.2.16-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
 
-This is an early release. Dock multi-monitor visibility issues are being repaired. Keep Dock grouping off from the Ultra Suite tray menu if buttons become inaccessible. New fixes on main can be ahead of the downloadable installer.
+The latest public installer is v2.2.16. Source on main and the owner's local Dev edition can contain changes that have not been published. The app descriptions below cover the current source; they do not mean every feature is in that installer.
 
-## Pick what helps you
+This is an early release. Dock recovery and multi-monitor visibility work is active. The [v2.2.16 release notes](https://github.com/jeemwla/ultra-productivity-suite/releases/tag/v2.2.16) state that multi-monitor setups keep native taskbar buttons visible. Dock grouping can be switched off from the Ultra Suite tray menu.
 
-| App | Why use it? | Examples |
-|---|---|---|
-| PC Sentinel | See which apps use resources, whether the PC is running hot, drive health, battery information, and network latency. | Students investigating slow coursework software, creators watching render workloads, gamers checking temperatures, or anyone checking a sluggish laptop. |
-| Code Red Alarm | Schedule alarms locally, choose an audio output, and optionally require a typed phrase or arithmetic to dismiss. | Study breaks, personal routines, and reminders while the Windows session is running. |
-| Ultra Dock | Group open apps to reduce taskbar clutter, with a native-taskbar fallback when the strip cannot safely replace buttons. | People who keep many work, chat, browser, or creative apps open. Multi-monitor grouping remains under development. |
+## The apps
+
+| App | What it does |
+|---|---|
+| Ultra Dock | Organizes running apps into taskbar folders, with per-app grouping settings and native buttons for pinned or kept apps. Includes the suite hub and links to the other app windows. |
+| PC Sentinel | Shows CPU, GPU, memory and process usage, available cooling and drive sensors, battery information, and network measurements. Includes Windows power/display tools and an offline PSU catalog. |
+| Code Red Alarm | Schedules local alarms with a chosen audio output, optional typed-phrase or arithmetic dismissal, and optional volume enforcement. Current source also includes saved countdown timers with pause, resume and reset. |
 
 The apps have separate windows and Start menu entries. Their background services currently share a process. Further process isolation is tracked in the [development roadmap](ROADMAP.md).
 
@@ -20,14 +22,14 @@ The apps have separate windows and Start menu entries. Their background services
 
 1. Download and run the x64 installer above.
 2. Open PC Sentinel, Code Red Alarm, or Ultra Dock from Start.
-3. For temperatures, fans and additional power sensors, use Sentinel's full-sensor setup or install the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). Windows counters provide a smaller set of readings when it is absent.
-4. Open Sentinel’s Settings / Extras gear to choose pages and optional router controls. Router extras are off by default. Dock grouping can be switched off in the Ultra Suite tray menu.
+3. For temperatures, fans and additional power sensors, use Sentinel's sensor setup or install the free [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). Windows counters provide a smaller set of readings when it is absent.
+4. Open Sentinel's [Settings / Extras](docs/SETTINGS.md) to choose pages and optional router controls. Router extras are off by default.
 
 Python, Rust and Docker are not end-user prerequisites for the bundled desktop installer. Windows' WebView2 runtime is needed for the windows; initial [runtime setup](https://v2.tauri.app/distribute/windows-installer/#webview2-installation-options) can require a download.
 
 Uninstall through Windows Settings > Apps. Back up any alarm schedules you need before removing app data.
 
-## What the apps show
+## Features and limits
 
 PC Sentinel includes CPU, GPU and memory readings; grouped process usage; cooling sensors; drive information; network latency; an on-demand speed test; Windows power/display controls; sensor tables; and a diagnostic export. Battery information is shown when a battery is detected. Desktop users can search an offline PSU catalog by brand, wattage, form factor and model, or enter details manually. See the [catalog sources and limitations](docs/PSU_CATALOG.md).
 
@@ -37,15 +39,17 @@ Code Red Alarm starts with no sample alarms. New drafts have no repeat days, Cod
 
 Code Red Alarm runs on the local PC. It needs the PC and alarm service available. Speaker delivery, wake-from-sleep support and foreground behavior need validation on the intended machine. Do not rely on an untested installation for a critical reminder.
 
-Ultra Dock keeps pinned/selected apps on the native taskbar and groups other open apps. Recovery and visibility work is active. A folder should never be the only route to an app unless its replacement is actually available.
+Ultra Dock's source includes category folders, per-app overrides, a managed-app count setting, and checked recovery journals for native taskbar buttons. Taskbar layout and switching behavior need native acceptance on the intended monitor setup. The source's newer recovery and layout changes are not evidence of a newer published installer.
 
-## Development status
+## Public release and Dev edition
 
-Main now includes tested source changes for WebSocket origin checks, conservative drive matching, write-ahead Dock recovery, far-future alarm occurrences, absolute UTC wake deadlines, clearer storage capacity, and stricter Dock visibility gating.
+Desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate from automated tests.
 
-The v2.2.11 installer includes launch recovery, keyboard-accessible Appearance dismissal the optional offline PSU picker, and persistent [Settings / Extras](docs/SETTINGS.md). It is built from this source and packages only an exact list of app files, checked file by file. Installed desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separate checks.
+The Dev edition is for the owner's local testing and is not offered here as a public download. Its app identities, data directories and service ports are separate from Public. Dev disables alarm delivery, wake scheduling, GitHub self-updates and production reporting; Dock grouping defaults to off.
 
-The [roadmap](ROADMAP.md) contains 24 public phases and 288 detailed engineering and acceptance tasks. Candidate features remain proposals. Stress-test parity, universal hardware support and best-in-category claims have not been established.
+Ultra Suite Insights is a maintainer dashboard for collected usage/feedback events and GitHub statistics. Its services load in owner mode or Dev. It is not a fourth consumer app or a requirement for the three public utilities.
+
+The [roadmap](ROADMAP.md) tracks planned work. Roadmap entries are not released features.
 
 ## Appearance and accessibility
 
@@ -59,7 +63,7 @@ Network-dependent features include update checks, optional sensor setup download
 
 Usage reporting is opt-in. Feedback sends the entered message and category with app/version information, Windows version and a random local identifier to the configured maintainer collector. Feedback and reporting are not required to use the local apps. The identifier is pseudonymous; it should not be described as proving anonymity.
 
-Router-specific VPN controls, owner analytics and personal peripherals are optional configuration. They are not general hardware prerequisites.
+Optional device integrations remain available for configured setups. Router-specific VPN controls require separate setup.
 
 ## For developers
 
@@ -69,7 +73,7 @@ Router-specific VPN controls, owner analytics and personal peripherals are optio
 | code_red_alarm/ | Alarm scheduling, audio helper and frontend |
 | ultra_dock/ | Tauri desktop windows, taskbar organizer and installer |
 | core/ | Shared backend startup, themes, local API guard and update routes |
-| insights/ | Optional maintainer dashboard |
+| insights/ | Owner/Dev-only event collector and maintainer dashboard |
 | tests/ | Backend, native-policy and frontend-helper regression tests |
 
 Run backend tests from the repository root:
