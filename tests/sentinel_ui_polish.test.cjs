@@ -127,3 +127,10 @@ test('Later hides an update for three days, and a newer version shows at once',(
  assert.equal(z(later,'2.3.1',1000),false,'a newer version is not hidden');assert.equal(z(null,'2.3.0',1000),false);
  assert.match(html,/\$\("upd-go"\)\.textContent = "Installer started"; return;/);
 });
+test('Overview quick controls always include the active plan',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function quickPlans','let powerCtlBusy'),ctx);const q=vm.runInContext('quickPlans',ctx);
+ const list=Array.from({length:7},(_,i)=>({guid:'g'+i,active:i===6}));
+ assert.equal(q(list).map(p=>p.guid).join(),'g0,g1,g2,g3,g6');
+ list[6].active=false;list[1].active=true;assert.equal(q(list).map(p=>p.guid).join(),'g0,g1,g2,g3,g4');
+ assert.equal(q([]).length,0);
+});

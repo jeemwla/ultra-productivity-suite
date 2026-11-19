@@ -900,19 +900,23 @@ function renderPMode(){ $("pmode-wrap").hidden = !(pmode && pmode.available); if
 $("pmode").addEventListener("click", async (e) => { const b = e.target.closest("[data-pm]"); if (!b || b.getAttribute("aria-pressed") === "true") return;
   try { pmode = await api("/api/power/mode", { method: "POST", body: JSON.stringify({ mode: b.dataset.pm }) }); renderPMode(); toast(`Power mode: ${b.textContent}`); } catch (err) { toast(err.message, true); } });
 const PLAN_DESC = { "ultra suite max performance": "Ultimate plus no core parking and no device power saving (plugged in)", "power saver": "Energy-saving settings", "balanced": "Automatic balancing", "high performance": "Performance-oriented settings", "ultimate performance": "Aggressive performance settings" };
+/* Overview shows five plans; the active one is always among them, even when Windows lists it sixth or later. */
+function quickPlans(list){ const first = list.slice(0, 5), active = list.find(p => p.active); return active && !first.includes(active) ? [...first.slice(0, 4), active] : first; }
+let powerCtlBusy = false;
 function renderPowerCtl(){
   renderPMode();
   if (plans) {
     $("plans").innerHTML = plans.plans.map(p => `<button class="plan" data-g="${p.guid}" aria-pressed="${p.active}"><span class="r"></span><span><b>${esc(p.name)}</b><small>${esc(PLAN_DESC[p.name.toLowerCase()] || "Custom plan")}</small></span></button>`).join("") || `<div class="empty">No power plans reported</div>`;
-    $("qc-plan").innerHTML = plans.plans.slice(0, 5).map(p => `<button data-g="${p.guid}" aria-pressed="${p.active}">${esc(p.name.replace(/ performance$/i, ""))}</button>`).join(""); }
+    $("qc-plan").innerHTML = quickPlans(plans.plans).map(p => `<button data-g="${p.guid}" aria-pressed="${p.active}">${esc(p.name.replace(/ performance$/i, ""))}</button>`).join(""); }
   if (disps) { const seg = (d) => `<div class="seg" data-dev="${esc(d.device)}">${d.rates.map(r => `<button data-hz="${r}" aria-pressed="${r === d.hz}">${r} Hz</button>`).join("")}</div>`;
     $("disps").innerHTML = disps.displays.map((d, i) => `<div class="disp"><div class="h"><b>${esc(d.model || d.name || "Unknown monitor")}${d.primary ? " (main)" : ""} · ${d.width}×${d.height}</b><span class="muted">Display ${i + 1} · ${esc(d.gpu)}</span></div><p class="muted" style="margin-top:6px">${d.identity_status === "multiple_targets" ? `Mirrored targets: ${(d.monitors || []).map(m => esc(m.name || "Unknown monitor")).join(", ")}` : d.model ? "Windows/EDID-reported model" : "Model unavailable; no prediction selected"}</p><div style="margin-top:10px">${seg(d)}</div></div>`).join("") || `<div class="empty">No displays reported</div>`;
-    const p = disps.displays[0]; $("qc-disp").innerHTML = p && p.rates.length > 1 ? `<div class="muted" style="margin-bottom:6px">Main display refresh rate</div>${seg(p)}` : ""; }
+    const p = disps.displays.find(d => d.primary) || disps.displays[0]; $("qc-disp").innerHTML = p && p.rates.length > 1 ? `<div class="muted" style="margin-bottom:6px">Main display refresh rate</div>${seg(p)}` : ""; }
 }
 document.addEventListener("click", async (e) => {
   const g = e.target.closest("[data-g]"), hz = e.target.closest("[data-hz]");
-  if (g && g.getAttribute("aria-pressed") !== "true") { try { plans = await api("/api/power/plans", { method: "POST", body: JSON.stringify({ guid: g.dataset.g }) }); renderPowerCtl(); toast(`Power plan: ${plans.plans.find(p => p.active).name}`); } catch (err) { toast(err.message, true); } }
-  if (hz && hz.getAttribute("aria-pressed") !== "true") { const dev = hz.closest("[data-dev]").dataset.dev; try { disps = await api("/api/display", { method: "POST", body: JSON.stringify({ device: dev, hz: +hz.dataset.hz }) }); renderPowerCtl(); toast(`Refresh rate set to ${hz.dataset.hz} Hz`); } catch (err) { toast(err.message, true); } }
+  if ((g || hz) && powerCtlBusy) return; // one Windows change at a time; fast double clicks used to send several
+  if (g && g.getAttribute("aria-pressed") !== "true") { powerCtlBusy = true; try { plans = await api("/api/power/plans", { method: "POST", body: JSON.stringify({ guid: g.dataset.g }) }); renderPowerCtl(); const on = plans.plans.find(p => p.active); toast(on ? `Power plan: ${on.name}` : "Windows did not report which plan is active."); } catch (err) { toast(err.message, true); } finally { powerCtlBusy = false; } }
+  if (hz && hz.getAttribute("aria-pressed") !== "true") { const dev = hz.closest("[data-dev]").dataset.dev; powerCtlBusy = true; try { disps = await api("/api/display", { method: "POST", body: JSON.stringify({ device: dev, hz: +hz.dataset.hz }) }); renderPowerCtl(); toast(`Refresh rate set to ${hz.dataset.hz} Hz`); } catch (err) { toast(err.message, true); } finally { powerCtlBusy = false; } }
 });
 const validWatts = v => typeof v === "number" && Number.isFinite(v) && v >= 0;
 function powerView(p){
