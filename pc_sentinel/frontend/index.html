@@ -569,7 +569,7 @@ table.wr td .btn{height:30px;padding:0 10px}
       <!-- SYSTEM -->
       <section class="page" id="p-system">
         <div class="grid g2">
-          <section class="card"><div class="ch"><h2>This PC</h2><span class="sub" id="sys-type"></span></div><div class="cb"><div class="kvt" id="sys-kv"></div></div></section>
+          <section class="card"><div class="ch"><h2>This PC</h2><span class="sub" id="sys-type"></span></div><div class="cb"><div class="kvt" id="sys-kv"></div><div class="mt"><button class="btn" type="button" id="sys-copy">Copy details</button></div></div></section>
           <section class="card"><div class="ch"><h2>Sensor source</h2><span class="sub" id="src-sub"></span></div><div class="cb" id="src-body"></div></section>
         </div>
         <div class="grid g2 mt">
@@ -1150,10 +1150,18 @@ $("q").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("q").val
 $("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; b.setAttribute("aria-pressed", String(b.dataset.on === "1")); renderSensors(); };
 
 /* ---------- system ---------- */
+/* Plain-text device details for a support message or a forum post. No computer name, serial numbers or user paths. */
+let sysText = "";
+function systemText(kv, d){ return [`PC Sentinel: ${d.type === "laptop" ? "Laptop" : d.type ? "Desktop" : "PC"}`, ...kv.filter(x => x[1]).map(([k, v]) => `${k}: ${v}`)].join("\n"); }
+async function copyText(text){ try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch {}
+  const t = document.createElement("textarea"); t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0"; document.body.appendChild(t); t.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch {} t.remove(); return ok; } // phones on the local network are not a secure context
+$("sys-copy").onclick = async () => { const ok = sysText && await copyText(sysText); toast(ok ? "Device details copied." : "Copying is blocked here. Select the details and copy them instead.", !ok); };
 function renderSystem(){
   const hw = snap.hardware, d = hw.device || {}, m = hw.monitors || {};
   $("sys-type").textContent = d.type === "laptop" ? "Laptop" : d.type ? "Desktop" : ""; $("sys-type").title = d.form_basis || "";
   const kv = [["Processor", d.cpu], ["Cores / threads", d.cores ? `${d.cores} / ${d.threads}` : null], ["Graphics", (d.gpus || []).join(", ")], ["Memory", hw.summary && hw.summary.ram_total_gb ? `${n0(hw.summary.ram_total_gb)} GB` : null], ["Motherboard", d.board], ["Windows", d.os]];
+  sysText = systemText(kv, d);
   setHtml($("sys-kv"), kv.filter(x => x[1]).map(([k, v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("") || `<span class="muted">Reading…</span>`);
   $("src-sub").textContent = hw.level === "basic" ? "Basic" : hw.level ? "Full" : "";
   setHtml($("src-body"), `<div class="field"><span>Reading sensors from</span><b>${esc(hw.source || "–")}</b></div><div class="field"><span>Sensors found</span><b class="num">${n0(hw.sensor_count)}</b></div>

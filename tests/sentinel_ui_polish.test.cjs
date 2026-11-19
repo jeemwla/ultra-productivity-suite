@@ -171,3 +171,9 @@ test('sensor type filters show how many sensors each type has',()=>{
  assert.equal(JSON.stringify(vm.runInContext('sensorTypeCounts',ctx)(null)),'{}');
  assert.match(html,/id="show-all" aria-pressed="false"/);
 });
+test('copied device details are plain text without the computer name',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function systemText','async function copyText'),ctx);
+ const t=vm.runInContext('systemText',ctx)([['Processor','AMD Ryzen 7'],['Cores / threads','8 / 16'],['Graphics',''],['Windows','Windows 11 Pro']],{type:'desktop',hostname:'SECRET-PC'});
+ assert.equal(t,'PC Sentinel: Desktop\nProcessor: AMD Ryzen 7\nCores / threads: 8 / 16\nWindows: Windows 11 Pro');
+ assert.doesNotMatch(t,/SECRET/);
+});
