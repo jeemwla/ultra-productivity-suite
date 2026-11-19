@@ -77,3 +77,10 @@ test('closed sensor groups are not updated and table cells are not animated',()=
  assert.match(body,/if \(!d\.open\) return;/);assert.doesNotMatch(body,/tween\(/);
  assert.match(html,/function setHtml\(el, html\)\{ if \(el\.dataset\.sig !== html\)/);
 });
+test('Performance charts describe their numbers for screen readers',()=>{
+ const ctx=vm.createContext({});vm.runInContext('const auto=v=>String(Math.round(v*10)/10);'+cut('const CHART_NAMES','function lineChart'),ctx);const l=vm.runInContext('chartLabel',ctx);
+ assert.equal(l('cpu',[],'%'),'Processor load: no readings yet');
+ assert.equal(l('cput',[40,55,50],'°C'),'Processor temperature over the last 1 min: now 50°C, lowest 40°C, highest 55°C');
+ assert.match(l('ram',Array(120).fill(60),'%'),/last 2 min/);
+ for(const k of ['cpu','gpu','ram','cput','gput'])assert.match(html,new RegExp(`data-chart="${k}"><svg [^>]*role="img"`));
+});

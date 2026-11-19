@@ -451,17 +451,17 @@ table.wr td .btn{height:30px;padding:0 10px}
       <section class="page" id="p-performance">
         <section class="card"><div class="ch"><h2 id="pf-cpu-name">Processor</h2><span class="sub" id="pf-cpu-sub"></span></div><div class="cb">
           <div class="legend"><span><i style="background:var(--series)"></i>CPU load %</span><span class="muted">last 2 minutes · hover the graph for any moment</span></div>
-          <div class="chart" data-chart="cpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div>
+          <div class="chart" data-chart="cpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none" role="img"></svg></div>
           <div class="muted" style="margin:14px 0 8px">Every thread, right now</div><div class="threads" id="threads"></div></div></section>
         <div class="grid g2 mt">
           <section class="card"><div class="ch"><h2 id="pf-gpu-name">Graphics</h2><span class="sub" id="pf-gpu-sub"></span></div><div class="cb">
-            <div class="legend"><span><i style="background:var(--series-2)"></i>GPU load %</span></div><div class="chart" data-chart="gpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div></section>
+            <div class="legend"><span><i style="background:var(--series-2)"></i>GPU load %</span></div><div class="chart" data-chart="gpu"><svg viewBox="0 0 800 170" preserveAspectRatio="none" role="img"></svg></div></div></section>
           <section class="card"><div class="ch"><h2>Memory</h2><span class="sub" id="pf-mem-sub"></span></div><div class="cb">
-            <div class="legend"><span><i style="background:var(--good)"></i>Memory in use %</span></div><div class="chart" data-chart="ram"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div></section>
+            <div class="legend"><span><i style="background:var(--good)"></i>Memory in use %</span></div><div class="chart" data-chart="ram"><svg viewBox="0 0 800 170" preserveAspectRatio="none" role="img"></svg></div></div></section>
         </div>
         <section class="card mt" id="pf-temps-card"><div class="ch"><h2>Temperatures</h2><span class="sub">CPU and GPU, °C</span></div><div class="cb">
-          <div class="grid g2" id="pf-temps"><div><div class="legend"><span><i style="background:var(--series)"></i>CPU °C</span></div><div class="chart" data-chart="cput"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div>
-          <div><div class="legend"><span><i style="background:var(--series-2)"></i>GPU °C</span></div><div class="chart" data-chart="gput"><svg viewBox="0 0 800 170" preserveAspectRatio="none"></svg></div></div></div>
+          <div class="grid g2" id="pf-temps"><div><div class="legend"><span><i style="background:var(--series)"></i>CPU °C</span></div><div class="chart" data-chart="cput"><svg viewBox="0 0 800 170" preserveAspectRatio="none" role="img"></svg></div></div>
+          <div><div class="legend"><span><i style="background:var(--series-2)"></i>GPU °C</span></div><div class="chart" data-chart="gput"><svg viewBox="0 0 800 170" preserveAspectRatio="none" role="img"></svg></div></div></div>
           <div class="empty" id="pf-temps-empty" hidden>Temperatures need LibreHardwareMonitor on this PC. Use "Set up full sensors" above.</div></div></section>
       </section>
 
@@ -718,6 +718,10 @@ document.addEventListener("touchend", (e) => { if (tx == null) return; const dx 
 
 /* ---------- charts ---------- */
 const H = { cpu: [], gpu: [], ram: [], pw: [], cput: [], gput: [] }; const HMAX = 120;
+const CHART_NAMES = { cpu: "Processor load", gpu: "Graphics load", ram: "Memory in use", cput: "Processor temperature", gput: "Graphics temperature" };
+function chartLabel(key, vals, u){ const name = CHART_NAMES[key] || "Chart";
+  if (!vals.length) return `${name}: no readings yet`;
+  return `${name} over the last ${Math.max(1, Math.round(vals.length / 60))} min: now ${auto(vals[vals.length - 1])}${u}, lowest ${auto(Math.min(...vals))}${u}, highest ${auto(Math.max(...vals))}${u}`; }
 function lineChart(key, arr, color, fixedMax, unit){
   const svg = document.querySelector(`[data-chart="${key}"] svg`); if (!svg) return;
   const W = 800, Hh = 170, vals = arr.filter(v => v != null), max = fixedMax || Math.max(10, ...vals) * 1.15;
@@ -741,6 +745,7 @@ function lineChart(key, arr, color, fixedMax, unit){
     lab.querySelector("b").textContent = auto(last) + u;
     lab.querySelector("span").textContent = `min ${auto(Math.min(...vals))}${u} · max ${auto(Math.max(...vals))}${u}`;
   }
+  svg.setAttribute("aria-label", chartLabel(key, vals, u)); // screen readers get the numbers the picture shows
 }
 document.addEventListener("mousemove", (e) => {
   const c = e.target.closest(".chart"); document.querySelectorAll(".chart .tip,.chart .cursor").forEach(t => { if (!c || t.parentElement !== c) t.remove(); });
@@ -970,6 +975,8 @@ function renderPerformance(){
   let th = (cpu ? cpu.sensors : []).filter(x => x.type === "Load" && /thread/i.test(x.name));
   if (!th.length) th = (cpu ? cpu.sensors : []).filter(x => x.type === "Load" && /core #|cpu \d+/i.test(x.name) && !/max|total/i.test(x.name));
   const box = $("threads"); if (box.children.length !== th.length) box.innerHTML = th.map((t, i) => `<div class="th"><div class="col"><i style="height:0"></i></div><span>${i + 1}</span></div>`).join("") || `<div class="muted">Per-thread load isn't available.</div>`;
+  if (th.length) { const busy = th.reduce((a, t) => t.value > a.value ? t : a, th[0]), hot = th.filter(t => t.value > 85).length;
+    box.setAttribute("role", "img"); box.setAttribute("aria-label", `${th.length} threads. Busiest ${n0(busy.value)}%${hot ? `, ${hot} above 85%` : ""}.`); }
   th.forEach((t, i) => { const c = box.children[i]; if (!c) return; const bar = c.querySelector("i"); bar.style.height = Math.max(2, Math.min(100, t.value)) + "%"; bar.classList.toggle("hot", t.value > 85); c.title = `${t.name}: ${n0(t.value)}%`; });
 }
 
