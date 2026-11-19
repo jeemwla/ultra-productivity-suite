@@ -1077,6 +1077,13 @@ let hidden = new Set(store.get("hiddenSensors", [])), types = new Set(store.get(
 const ALLT = ["Temperature", "Power", "Load", "Clock", "Fan", "Control", "Voltage", "Current", "Data", "SmallData", "Throughput", "Level", "Timing", "Factor", "Energy", "Other"];
 const TL = { Temperature: "Temps", SmallData: "Memory MB", Throughput: "Network" }, KL = { cpu: "CPU", gpu: "GPU", memory: "Memory", storage: "Drive", motherboard: "Motherboard", network: "Network", battery: "Battery", psu: "Power supply", other: "Other" };
 const SEC = [["Temperature", "Temperatures", "°C"], ["Power", "Power draw", "W"], ["Load", "Usage", "%"], ["Clock", "Clock speeds", "MHz"], ["Fan", "Fan speeds", "RPM"], ["Control", "Fan control", "%"], ["Voltage", "Voltages", "V"], ["Current", "Current", "A"], ["Level", "Levels", "%"], ["Data", "Data", "GB"], ["SmallData", "Memory", "MB"], ["Throughput", "Throughput", ""], ["Timing", "Timings", "ns"], ["Factor", "Factors", ""], ["Energy", "Energy", "mWh"], ["Other", "Other", ""]];
+const setText = (el, v) => { if (el && el.textContent !== v) el.textContent = v; };
+function sensorsEmpty(q, typeCount, groupCount, hiddenCount, showAll){
+  if (!groupCount) return "No sensors are reporting yet. Readings appear here as soon as the sensor source answers.";
+  if (!typeCount) return "Every sensor type is turned off. Choose one or more types above.";
+  if (q) return `No sensors match "${q}". Check the spelling or turn on more sensor types above.`;
+  if (hiddenCount && !showAll) return "Every matching sensor is hidden. Choose Show hidden to see them.";
+  return "No sensors of the chosen types. Turn on more sensor types above."; }
 function renderSensors(){
   const hw = snap.hardware, present = ALLT.filter(t => (hw.groups || []).some(g => g.sensors.some(x => x.type === t))), sig = present.join() + [...types].join();
   if ($("filters").dataset.sig !== sig) { $("filters").dataset.sig = sig; $("filters").innerHTML = present.map(t => `<button class="f" data-t="${t}" aria-pressed="${types.has(t)}">${TL[t] || t}</button>`).join(""); }
@@ -1091,14 +1098,19 @@ function renderSensors(){
       d.innerHTML = `<summary><span><span class="k">${KL[g.kind] || "Other"}</span>${esc(g.name)}</span><span class="c">${rows.length} sensors</span></summary><div class="subgrid">` + SEC.map(([t, title, unit]) => { const list = rows.filter(x => x.type === t); if (!list.length) return "";
         return `<div class="subsec" tabindex="0" role="group" aria-label="${esc(g.name)}: ${esc(title)} readings"><h4>${title}${unit ? ` (${unit})` : ""}<span>${list.length}</span></h4><table><thead><tr><th></th><th>Sensor</th><th class="n">Now</th><th class="n">Min</th><th class="n">Max</th></tr></thead><tbody>
         ${list.map(x => `<tr class="${hidden.has(x.id) ? "hid" : ""}" data-sid="${esc(x.id)}"><td class="cbx"><input type="checkbox" ${hidden.has(x.id) ? "" : "checked"} data-id="${esc(x.id)}" aria-label="Show ${esc(x.name)}"></td><td>${esc(x.name)}</td><td class="n"><b class="nv"></b></td><td class="n mn"></td><td class="n mx"></td></tr>`).join("")}</tbody></table></div>`; }).join("") + `</div>`; }
-    rows.forEach(x => { const tr = d.querySelector(`tr[data-sid="${CSS.escape(x.id)}"]`); if (!tr) return; const f = x.type === "Throughput" ? rate : n1; if (x.type === "Throughput") tr.querySelector(".nv").textContent = rate(x.value); else tween(tr.querySelector(".nv"), x.value, n1, 700);
-      tr.querySelector(".mn").textContent = x.min == null ? "–" : f(+x.min); tr.querySelector(".mx").textContent = x.max == null ? "–" : f(+x.max); }); });
+    // Closed groups are skipped (opening one renders it at once), and table cells are set directly: hundreds of
+    // values animating every second cost real CPU and only blur numbers people are trying to read.
+    if (!d.open) return;
+    rows.forEach(x => { const tr = d.querySelector(`tr[data-sid="${CSS.escape(x.id)}"]`); if (!tr) return; const f = x.type === "Throughput" ? rate : n1;
+      setText(tr.querySelector(".nv"), x.value == null ? "–" : f(+x.value)); setText(tr.querySelector(".mn"), x.min == null ? "–" : f(+x.min)); setText(tr.querySelector(".mx"), x.max == null ? "–" : f(+x.max)); }); });
   $("groups").querySelectorAll("details.grp").forEach(d => { if (!keys.has(d.dataset.key)) d.remove(); });
-  if (!$("groups").children.length) $("groups").innerHTML = `<div class="empty">No sensors match.</div>`; else $("groups").querySelectorAll(".empty").forEach(e => e.remove());
+  if (!$("groups").querySelector("details.grp")) { const msg = sensorsEmpty(q, types.size, (hw.groups || []).length, hidden.size, showAll);
+    if ($("groups").dataset.empty !== msg) { $("groups").dataset.empty = msg; $("groups").innerHTML = `<div class="empty">${esc(msg)}</div>`; } }
+  else { $("groups").dataset.empty = ""; $("groups").querySelectorAll(".empty").forEach(e => e.remove()); }
 }
 $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; types.has(b.dataset.t) ? types.delete(b.dataset.t) : types.add(b.dataset.t); store.set("types", [...types]); renderSensors(); });
 $("groups").addEventListener("change", (e) => { const id = e.target.dataset.id; if (!id) return; e.target.checked ? hidden.delete(id) : hidden.add(id); store.set("hiddenSensors", [...hidden]); renderSensors(); });
-$("groups").addEventListener("toggle", (e) => { const d = e.target; if (!d.dataset || !d.dataset.key || $("q").value) return; const o = new Set(store.get("openGroups", ["cpu", "gpu"])); d.open ? o.add(d.dataset.key) : (o.delete(d.dataset.key), o.delete(d.dataset.key.split(":")[0])); store.set("openGroups", [...o]); }, true);
+$("groups").addEventListener("toggle", (e) => { const d = e.target; if (d.open && d.dataset && d.dataset.key && snap) renderSensors(); if (!d.dataset || !d.dataset.key || $("q").value) return; const o = new Set(store.get("openGroups", ["cpu", "gpu"])); d.open ? o.add(d.dataset.key) : (o.delete(d.dataset.key), o.delete(d.dataset.key.split(":")[0])); store.set("openGroups", [...o]); }, true);
 $("q").addEventListener("input", renderSensors);
 $("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; renderSensors(); };
 
@@ -1107,14 +1119,17 @@ function renderSystem(){
   const hw = snap.hardware, d = hw.device || {}, m = hw.monitors || {};
   $("sys-type").textContent = d.type === "laptop" ? "Laptop" : d.type ? "Desktop" : ""; $("sys-type").title = d.form_basis || "";
   const kv = [["Processor", d.cpu], ["Cores / threads", d.cores ? `${d.cores} / ${d.threads}` : null], ["Graphics", (d.gpus || []).join(", ")], ["Memory", hw.summary && hw.summary.ram_total_gb ? `${n0(hw.summary.ram_total_gb)} GB` : null], ["Motherboard", d.board], ["Windows", d.os]];
-  $("sys-kv").innerHTML = kv.filter(x => x[1]).map(([k, v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("") || `<span class="muted">Reading…</span>`;
+  setHtml($("sys-kv"), kv.filter(x => x[1]).map(([k, v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("") || `<span class="muted">Reading…</span>`);
   $("src-sub").textContent = hw.level === "basic" ? "Basic" : hw.level ? "Full" : "";
-  $("src-body").innerHTML = `<div class="field"><span>Reading sensors from</span><b>${esc(hw.source || "–")}</b></div><div class="field"><span>Sensors found</span><b class="num">${n0(hw.sensor_count)}</b></div>
+  setHtml($("src-body"), `<div class="field"><span>Reading sensors from</span><b>${esc(hw.source || "–")}</b></div><div class="field"><span>Sensors found</span><b class="num">${n0(hw.sensor_count)}</b></div>
     <div class="field"><span>Other monitoring apps running</span><span>${(m.running || []).map(x => `<span class="pill">${esc(x)}</span>`).join(" ") || "none"}</span></div>
-    ${hw.level === "basic" ? `<div class="field"><span>${esc(hw.help || "Install LibreHardwareMonitor for temperatures, fans and power.")}</span><button class="btn primary" data-lhm>Set up</button></div>` : ""}`;
+    ${hw.level === "basic" ? `<div class="field"><span>${esc(hw.help || "Install LibreHardwareMonitor for temperatures, fans and power.")}</span><button class="btn primary" data-lhm>Set up</button></div>` : ""}`);
 }
-async function setupLhm(){ const b = $("lhm-go"); b.disabled = true; b.textContent = "Setting up…"; toast("Installing LibreHardwareMonitor. Windows will ask for permission once.");
-  try { await api("/api/setup/lhm", { method: "POST" }); toast("Done. Full sensors appear in a few seconds."); } catch (e) { toast(e.message, true); } b.disabled = false; b.textContent = "Set up full sensors"; }
+// Rewriting the same markup every second would drop keyboard focus from the buttons inside it.
+function setHtml(el, html){ if (el.dataset.sig !== html) { el.dataset.sig = html; el.innerHTML = html; } }
+let lhmBusy = false;
+async function setupLhm(){ if (lhmBusy) return; lhmBusy = true; const b = $("lhm-go"); b.disabled = true; document.querySelectorAll("[data-lhm]").forEach(x => x.disabled = true); b.textContent = "Setting up…"; toast("Installing LibreHardwareMonitor. Windows will ask for permission once.");
+  try { await api("/api/setup/lhm", { method: "POST" }); toast("Done. Full sensors appear in a few seconds."); } catch (e) { toast(e.message, true); } lhmBusy = false; b.disabled = false; b.textContent = "Set up full sensors"; document.querySelectorAll("[data-lhm]").forEach(x => x.disabled = false); }
 $("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (e.target.closest("[data-lhm]")) setupLhm(); });
 
 /* ---------- battery (laptops) ---------- */

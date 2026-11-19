@@ -64,3 +64,16 @@ test('alert thresholds stay inside each field range and fall back on blanks',()=
  assert.equal(v('9',50,110,90),50);assert.equal(v('900',50,110,90),110);assert.equal(v('85.6',50,110,90),86);
  assert.equal(v('',50,110,90),90);assert.equal(v('abc',50,110,90),90);assert.equal(v(undefined,50,99,92),92);assert.equal(v(95,50,99,92),95);
 });
+test('the Sensors page says why nothing is listed',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function sensorsEmpty','function renderSensors'),ctx);const m=vm.runInContext('sensorsEmpty',ctx);
+ assert.match(m('',6,0,0,false),/No sensors are reporting yet/);
+ assert.match(m('cpu',0,5,0,false),/Every sensor type is turned off/);
+ assert.match(m('zzz',6,5,0,false),/No sensors match "zzz"/);
+ assert.match(m('',6,5,3,false),/Show hidden/);
+ assert.match(m('',6,5,3,true),/Turn on more sensor types/);
+});
+test('closed sensor groups are not updated and table cells are not animated',()=>{
+ const body=cut('function renderSensors','$("filters").addEventListener');
+ assert.match(body,/if \(!d\.open\) return;/);assert.doesNotMatch(body,/tween\(/);
+ assert.match(html,/function setHtml\(el, html\)\{ if \(el\.dataset\.sig !== html\)/);
+});
