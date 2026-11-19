@@ -95,6 +95,44 @@ class PollLoop(unittest.TestCase):
         self.assertGreaterEqual(body["age_sec"], 2.9)
 
 
+class SpeedTestSocket(unittest.TestCase):
+    def test_closing_the_page_stops_the_test(self):
+        state = {"cancelled": False, "finished": False}
+
+        async def fake_run(send):
+            await send({"type": "phase", "phase": "download"})
+            try:
+                await asyncio.sleep(30)
+                state["finished"] = True
+            except asyncio.CancelledError:
+                state["cancelled"] = True
+                raise
+
+        client = TestClient(main.app, base_url="http://127.0.0.1:8084")
+        with patch.object(main.speedtest, "run", fake_run):
+            started = time.monotonic()
+            with client.websocket_connect("ws://127.0.0.1:8084/ws/speedtest", headers={"Origin": "http://127.0.0.1:8084"}) as ws:
+                self.assertEqual(ws.receive_json()["phase"], "download")
+            deadline = time.monotonic() + 5
+            while not state["cancelled"] and time.monotonic() < deadline:
+                time.sleep(0.02)
+        self.assertTrue(state["cancelled"])
+        self.assertFalse(state["finished"])
+        self.assertLess(time.monotonic() - started, 6)
+
+    def test_a_finished_test_still_closes_the_socket(self):
+        async def quick(send):
+            await send({"type": "done"})
+            return {}
+
+        with patch.object(main.speedtest, "run", quick):
+            with TestClient(main.app, base_url="http://127.0.0.1:8084").websocket_connect("ws://127.0.0.1:8084/ws/speedtest", headers={"Origin": "http://127.0.0.1:8084"}) as ws:
+                self.assertEqual(ws.receive_json()["type"], "done")
+                from starlette.websockets import WebSocketDisconnect
+                with self.assertRaises(WebSocketDisconnect):
+                    ws.receive_json()
+
+
 class PreferencesCache(unittest.TestCase):
     def test_file_is_read_again_only_after_it_changes(self):
         with tempfile.TemporaryDirectory() as td:

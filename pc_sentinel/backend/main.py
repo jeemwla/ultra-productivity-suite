@@ -211,9 +211,26 @@ async def speedtest_ws(ws: WebSocket):
         except Exception:
             pass
 
+    async def closed():
+        """Returns when the page goes away (tab closed, reload, navigation)."""
+        try:
+            while (await ws.receive())["type"] != "websocket.disconnect":
+                pass
+        except Exception:
+            pass
+
+    test = asyncio.create_task(speedtest.run(send))
+    watcher = asyncio.create_task(closed())
     try:
-        await speedtest.run(send)
+        done, _ = await asyncio.wait({test, watcher}, return_when=asyncio.FIRST_COMPLETED)
+        if test not in done:  # nobody is watching: stop downloading instead of using the line for the full run
+            test.cancel()
+            try:
+                await test
+            except (asyncio.CancelledError, Exception):
+                pass
     finally:
+        watcher.cancel()
         try:
             await ws.close()
         except Exception:
