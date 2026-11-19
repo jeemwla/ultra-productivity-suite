@@ -174,6 +174,49 @@ def add_local_guard(app):
         return await call_next(request)
 
 
+THEME_DEFAULTS = {"theme": "system", "motion": "full", "density": "comfortable"}
+THEME_CHOICES = {"theme": THEMES, "motion": {"full", "reduced", "off"}, "density": {"comfortable", "compact"}}
+
+
+def merge_theme(current, changes):
+    """current with every valid choice from changes applied; unknown keys and values are ignored."""
+    out = dict(current)
+    if isinstance(changes, dict):
+        for key, allowed in THEME_CHOICES.items():
+            if changes.get(key) in allowed:
+                out[key] = changes[key]
+    return out
+
+
+def read_theme(path):
+    """The saved appearance, with each field checked: a damaged or hand-edited file can't break every app's page."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+    except (OSError, ValueError):
+        saved = None
+    return merge_theme(THEME_DEFAULTS, saved)
+
+
+def write_json_atomic(path, value):
+    """Write to a temporary file in the same folder, then swap it in, so a crash never leaves half a file."""
+    folder = os.path.dirname(path) or "."
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", suffix=".json", dir=folder)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(value, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def add_shared_routes(app, frontend_dir: str):
     dev = os.environ.get("ULTRASUITE_DEV") == "1"
     edition = os.environ.get("ULTRASUITE_EDITION", "Public")
@@ -218,22 +261,16 @@ def add_shared_routes(app, frontend_dir: str):
 
     @app.get("/api/theme")
     async def get_theme():
-        try:
-            return json.load(open(os.path.join(DATA, "theme.json"), encoding="utf-8"))
-        except Exception:
-            return {"theme": "system", "motion": "full", "density": "comfortable"}
+        return read_theme(os.path.join(DATA, "theme.json"))
 
     @app.post("/api/theme")
     async def set_theme(body: dict):
-        cur = await get_theme()
-        if body.get("theme") in THEMES:
-            cur["theme"] = body["theme"]
-        if body.get("motion") in ("full", "reduced", "off"):
-            cur["motion"] = body["motion"]
-        if body.get("density") in ("comfortable", "compact"):
-            cur["density"] = body["density"]
-        os.makedirs(DATA, exist_ok=True)
-        json.dump(cur, open(os.path.join(DATA, "theme.json"), "w", encoding="utf-8"))
+        path = os.path.join(DATA, "theme.json")
+        cur = merge_theme(read_theme(path), body)
+        try:
+            write_json_atomic(path, cur)
+        except OSError:
+            raise HTTPException(500, "Couldn't save the appearance setting. The previous choice is kept.")
         return cur
 
     @app.get("/api/about")
