@@ -1119,12 +1119,13 @@ $("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (
 
 /* ---------- battery (laptops) ---------- */
 let pack = undefined, bhist = null, bright = null, batTimer = 0;
+let brightAt = 0;
 async function loadBattery(){
   try { pack = await api("/api/laptop/battery"); } catch { pack = null; }
-  if (pack && pack.has_battery) { if (!bhist) api("/api/laptop/battery/history").then(h => { bhist = h; renderBattery(); }).catch(() => {}); try { bright = await api("/api/laptop/brightness"); } catch {} }
+  if (pack && pack.has_battery) { if (!bhist) api("/api/laptop/battery/history").then(h => { bhist = h; renderBattery(); }).catch(() => {});
+    if (!bright || Date.now() - brightAt > 30000) { brightAt = Date.now(); try { bright = await api("/api/laptop/brightness"); } catch {} } } // each read starts PowerShell; 30 s is plenty
   renderBattery(); clearTimeout(batTimer); if (page === "battery") batTimer = setTimeout(loadBattery, 5000);
 }
-const hm = (m) => m == null ? "–" : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 function renderBattery(){
   if (document.activeElement && document.activeElement.id === "bt-br") return;
   const bg = (snap && snap.hardware.groups || []).find(g => g.kind === "battery"), lv = bg && bg.sensors.find(s => /level|charge/i.test(s.name) && s.type !== "Voltage");
@@ -1134,8 +1135,12 @@ function renderBattery(){
 }
 
 /* ---------- alerts ---------- */
-const AL = Object.assign({ on: true, cpu: 90, gpu: 90, ram: 92 }, store.get("alerts", {})); $("al-on").checked = AL.on; $("al-cpu").value = AL.cpu; $("al-gpu").value = AL.gpu; $("al-ram").value = AL.ram;
-["al-on", "al-cpu", "al-gpu", "al-ram"].forEach(id => $(id).addEventListener("change", () => { Object.assign(AL, { on: $("al-on").checked, cpu: +$("al-cpu").value || 90, gpu: +$("al-gpu").value || 90, ram: +$("al-ram").value || 92 }); store.set("alerts", AL); }));
+/* Thresholds stay inside each field's min and max: a typo such as 9 or 900 would otherwise warn all the time or never. */
+const alertValue = (raw, min, max, fallback) => { const v = Math.round(+raw); return raw === "" || raw == null || !Number.isFinite(v) ? fallback : Math.min(max, Math.max(min, v)); };
+const alertField = (id, fallback, raw) => { const e = $(id), v = alertValue(raw ?? e.value, +e.min, +e.max, fallback); e.value = v; return v; };
+const AL = Object.assign({ on: true, cpu: 90, gpu: 90, ram: 92 }, store.get("alerts", {})); AL.on = AL.on !== false; $("al-on").checked = AL.on;
+AL.cpu = alertField("al-cpu", 90, AL.cpu); AL.gpu = alertField("al-gpu", 90, AL.gpu); AL.ram = alertField("al-ram", 92, AL.ram);
+["al-on", "al-cpu", "al-gpu", "al-ram"].forEach(id => $(id).addEventListener("change", () => { Object.assign(AL, { on: $("al-on").checked, cpu: alertField("al-cpu", 90), gpu: alertField("al-gpu", 90), ram: alertField("al-ram", 92) }); store.set("alerts", AL); }));
 const lastAlert = {};
 function checkAlerts(s){ if (!AL.on) return; const fire = (k, cond, msg) => { if (cond && Date.now() - (lastAlert[k] || 0) > 300000) { lastAlert[k] = Date.now(); toast(msg, true); } };
   fire("cpu", s.cpu_temp != null && s.cpu_temp >= AL.cpu, `CPU is at ${n0(s.cpu_temp)}°C`); const g = s.gpu_hotspot ?? s.gpu_temp; fire("gpu", g != null && g >= AL.gpu, `GPU is at ${n0(g)}°C`); fire("ram", s.ram_load != null && s.ram_load >= AL.ram, `Memory is ${n0(s.ram_load)}% full`); }

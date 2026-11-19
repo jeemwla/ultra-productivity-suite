@@ -19,7 +19,7 @@ test('charging shows watts into the battery, time to full and capacity in watt-h
  const out=render({has_battery:true,charging:true,plugged_in:true,state:'Charging',charge_pct:50,rate_w:45,voltage_v:16.8,minutes_to_full:46,
   design_mwh:76000,full_mwh:68400,remaining_mwh:34200,health_pct:90,wear_pct:10,cycles:150,
   daily_use:{pct_per_day:28.3,on_battery_hours_per_day:4.3,days:3,drain_samples:3}});
- assert.match(out,/Charging at/);assert.match(out,/45\.0 W/);assert.match(out,/into the battery/);assert.match(out,/0h 46m/);
+ assert.match(out,/Charging at/);assert.match(out,/45\.0 W/);assert.match(out,/into the battery/);assert.match(out,/>46m</);
  assert.match(out,/68\.4 Wh now, 76\.0 Wh when new/);assert.match(out,/>150</);assert.match(out,/28\.3% <small>per day/);assert.match(out,/4\.3 h a day on battery · last 3\.0 days/);
 });
 test('on battery shows draw and time left; a missing time left is not reported',()=>{
@@ -44,4 +44,13 @@ test('relative-capacity batteries never show watt-hours; a paused charge explain
  assert.match(paused,/charge limit \(for example 80% in Armoury Crate, G-Helper or Lenovo Vantage\)/);
  assert.doesNotMatch(render({has_battery:true,plugged_in:true,charging:false,charge_pct:100,state:'Fully charged'}),/charge limit/);
  assert.match(render({has_battery:true,battery_count:2}),/2 batteries, shown combined/);
+});
+test('time left rounds whole minutes first and reads plainly under an hour',()=>{
+ assert.equal(BV.hm(59.6),'1h 00m');assert.equal(BV.hm(29),'29m');assert.equal(BV.hm(0.4),'0m');assert.equal(BV.hm(278),'4h 38m');
+ assert.equal(BV.hm(-5),null);assert.equal(BV.hm(null),null);assert.equal(BV.hm(NaN),null);
+});
+test('the charger footnote appears only while the charger is connected',()=>{
+ const base={has_battery:true,charge_pct:60,state:'On battery',plugged_in:false,charging:false,rate_w:-10};
+ assert.doesNotMatch(render(base),/Charging power is what flows/);
+ assert.match(render({...base,plugged_in:true,state:'Plugged in, not charging',rate_w:0}),/Charging power is what flows/);
 });

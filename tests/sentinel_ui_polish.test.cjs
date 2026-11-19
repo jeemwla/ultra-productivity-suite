@@ -59,3 +59,8 @@ test('the page honours reduced motion in CSS and gives keyboard users a skip lin
  assert.match(html,/if \(e\.key === "Escape"\) \{ e\.preventDefault\(\); e\.stopPropagation\(\); modalClose\(bg\)/);
  assert.ok(!/classList\.add\("show"\); setTimeout\(\(\) => \$\("(fb-msg|rn-in)"\)\.focus/.test(html),'dialogs open through modalOpen');
 });
+test('alert thresholds stay inside each field range and fall back on blanks',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('const alertValue','const alertField'),ctx);const v=vm.runInContext('alertValue',ctx);
+ assert.equal(v('9',50,110,90),50);assert.equal(v('900',50,110,90),110);assert.equal(v('85.6',50,110,90),86);
+ assert.equal(v('',50,110,90),90);assert.equal(v('abc',50,110,90),90);assert.equal(v(undefined,50,99,92),92);assert.equal(v(95,50,99,92),95);
+});
