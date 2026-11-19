@@ -213,6 +213,18 @@ class InputValidation(unittest.TestCase):
                     self.assertEqual(self.c.post("/api/display", json=body).status_code, 400)
             setter.assert_not_called()
 
+    def test_unknown_process_ids_are_refused_without_a_scan(self):
+        ok = ("exe:" + "a" * 64, "pid:1234:1795049146.988", "pid:9:unverified", "pid:42:1795049146")
+        for value in ok:
+            with self.subTest(value=value):
+                self.assertTrue(system_tools.valid_group_id(value))
+        with patch.object(system_tools, "top_apps") as scan:
+            for bad in ("exe:" + "a" * 63, "exe:" + "A" * 64, "x" * 5000, "pid:1:abc", "../etc", "pid:1:2:3"):
+                with self.subTest(bad=bad[:20]):
+                    self.assertEqual(self.c.get(f"/api/processes/{bad}").status_code, 404)
+                    self.assertEqual(self.c.get(f"/api/processes/{bad}/icon").status_code, 404)
+            scan.assert_not_called()
+
     def test_power_plan_rejects_non_text_ids(self):
         with patch.object(system_tools, "_run") as runner:
             for guid in (None, 123, ["381b4222-f694-41f0-9685-ff5bb260df2e"], "not-a-guid"):

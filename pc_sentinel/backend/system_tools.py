@@ -299,6 +299,14 @@ def power_plans():
     return {"plans": plans}
 
 
+GROUP_ID = re.compile(r"exe:[0-9a-f]{64}|pid:\d{1,10}:(?:\d{1,12}(?:\.\d{1,9})?|unverified)")
+
+
+def valid_group_id(value) -> bool:
+    """The two id shapes top_apps creates: a hash of the program path, or a process id with its start time."""
+    return isinstance(value, str) and len(value) <= 120 and GROUP_ID.fullmatch(value) is not None
+
+
 def set_power_plan(guid: str):
     if not isinstance(guid, str) or not re.fullmatch(r"[0-9a-fA-F-]{36}", guid):
         raise HTTPException(400, "Unknown power plan")
@@ -474,6 +482,8 @@ def register(app):
     @app.get("/api/processes/{group_id}")
     async def _process_group(group_id: str):
         import asyncio
+        if not valid_group_id(group_id):  # never a process scan for an id Top apps could not have produced
+            raise HTTPException(404, "This process group is no longer present.")
         result = await asyncio.to_thread(top_apps, 1, include_details=True, group_id=group_id)
         if not result["all_apps"]:
             raise HTTPException(404, "This process group is no longer present.")
@@ -483,6 +493,8 @@ def register(app):
     async def _process_icon(group_id: str):
         """The app's own icon. Only groups already listed by Top apps are served; no path comes from the request."""
         import asyncio
+        if not valid_group_id(group_id):
+            raise HTTPException(404, "No icon is available for this process group.", headers={"Cache-Control": "private, max-age=3600"})
         from fastapi.responses import Response
         from .process_icons import icon_png
         result = await asyncio.to_thread(top_apps, 1, group_id=group_id)
