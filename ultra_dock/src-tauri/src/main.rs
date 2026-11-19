@@ -14,6 +14,7 @@ mod recovery;
 mod wake;
 mod dock_safety;
 mod dock_diagnostics;
+mod dock_app_menu;
 mod dock_layout;
 mod app_categories;
 mod dock_centered_layout;
@@ -1402,16 +1403,7 @@ fn plan_json(plan: &dock_layout::Plan) -> Value {
 #[tauri::command]
 async fn activate(hwnd: isize) -> bool {
     #[cfg(windows)]
-    return tauri::async_runtime::spawn_blocking(move || unsafe {
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::WindowsAndMessaging::*;
-        let h = HWND(hwnd as _);
-        if IsIconic(h).as_bool() { let _ = ShowWindowAsync(h, SW_RESTORE); }
-        // The Dock received the user's click. Do not synthesize Alt or disturb native MRU state.
-        let activated = SetForegroundWindow(h).as_bool();
-        record_dock_event(&format!("activate:{hwnd}:{activated}"));
-        activated
-    }).await.unwrap_or(false);
+    return tauri::async_runtime::spawn_blocking(move || activate_now(hwnd)).await.unwrap_or(false);
     #[cfg(not(windows))]
     false
 }
@@ -1914,8 +1906,104 @@ fn close_dock_menu(app: AppHandle) {
     if let Some(window) = app.get_webview_window("dock-menu") { let _ = window.close(); }
 }
 
+// ----------------------------------------------------------------------------- strip app menu
+/// What the last app or folder right-click resolved to. The native menu is modal, so its
+/// click event always belongs to the most recent target.
+static APP_MENU_TARGET: Mutex<Option<dock_app_menu::Target>> = Mutex::new(None);
+
+fn app_menu_snapshot() -> Vec<dock_app_menu::Window> {
+    SNAPSHOT.lock().map(|s| s.iter().map(|w| dock_app_menu::Window { hwnd: w.hwnd, exe: w.exe.clone(),
+        name: w.name.clone(), category: w.category.clone() }).collect()).unwrap_or_default()
+}
+
+/// Right-click on an app or folder in the strip: a native menu like the taskbar's own.
+/// Only windows in the organizer's snapshot can be targeted.
+#[tauri::command]
+async fn show_app_menu(app: AppHandle, window: WebviewWindow, exe: Option<String>, hwnd: Option<isize>,
+                       folder: Option<String>, folder_exes: Option<Vec<String>>) -> Result<(), String> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    let target = dock_app_menu::resolve(&app_menu_snapshot(), exe.as_deref(), hwnd, folder.as_deref(),
+        &folder_exes.unwrap_or_default()).ok_or("That app is no longer open.")?;
+    let menu = Menu::new(&app).map_err(|e| e.to_string())?;
+    for row in dock_app_menu::items(&target) {
+        match row {
+            Some((action, label)) => menu.append(&MenuItem::with_id(&app, action.id(), label, true, None::<&str>).map_err(|e| e.to_string())?),
+            None => menu.append(&PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?),
+        }.map_err(|e| e.to_string())?;
+    }
+    record_dock_event(if target.folder.is_some() { "app-menu:folder" } else { "app-menu:app" });
+    if let Ok(mut current) = APP_MENU_TARGET.lock() { *current = Some(target); }
+    window.popup_menu(&menu).map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn activate_now(hwnd: isize) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    unsafe {
+        let h = HWND(hwnd as _);
+        if IsIconic(h).as_bool() { let _ = ShowWindowAsync(h, SW_RESTORE); }
+        // The Dock received the user's click. Do not synthesize Alt or disturb native MRU state.
+        let activated = SetForegroundWindow(h).as_bool();
+        record_dock_event(&format!("activate:{hwnd}:{activated}"));
+        activated
+    }
+}
+
+fn handle_app_menu(app: &AppHandle, action: dock_app_menu::Action) {
+    use dock_app_menu::Action;
+    let Some(target) = APP_MENU_TARGET.lock().ok().and_then(|mut t| t.take()) else { return };
+    // The snapshot may have changed while the menu was open: act only on windows still listed.
+    let live: std::collections::HashSet<isize> = app_menu_snapshot().iter().map(|w| w.hwnd).collect();
+    let windows: Vec<isize> = dock_app_menu::windows_for(action, &target).into_iter().filter(|h| live.contains(h)).collect();
+    record_dock_event(&format!("app-menu:{}", action.id()));
+    match action {
+        Action::Open => {
+            #[cfg(windows)]
+            if let Some(h) = windows.first().copied() { std::thread::spawn(move || activate_now(h)); }
+        }
+        Action::CloseWindow | Action::CloseAll => {
+            // The same request the taskbar's "Close window" sends: apps may still ask to save.
+            #[cfg(windows)]
+            unsafe {
+                use windows::Win32::{Foundation::{HWND, LPARAM, WPARAM}, UI::WindowsAndMessaging::{IsWindow, PostMessageW, WM_CLOSE}};
+                for h in windows {
+                    let h = HWND(h as _);
+                    if IsWindow(Some(h)).as_bool() { let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0)); }
+                }
+            }
+        }
+        Action::NewWindow => {
+            let Some(exe) = target.exe.filter(|e| dock_app_menu::new_window_supported(e)) else { return };
+            #[cfg(windows)]
+            std::thread::spawn(move || unsafe {
+                use windows::core::{w, PCWSTR};
+                use windows::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+                let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+                let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+                let file = wide(&exe);
+                let dir = std::path::Path::new(&exe).parent().map(|p| wide(&p.to_string_lossy()));
+                let result = ShellExecuteW(None, w!("open"), PCWSTR(file.as_ptr()), PCWSTR::null(),
+                    dir.as_ref().map_or(PCWSTR::null(), |d| PCWSTR(d.as_ptr())), SW_SHOWNORMAL);
+                record_dock_event(&format!("app-menu:new-window:{}", result.0 as isize > 32));
+            });
+        }
+        Action::UnpinFromDock => {
+            let Some(exe) = target.exe else { return };
+            let current = std::fs::read_to_string(org_path()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .or_else(|| serde_json::from_str::<Value>(DEFAULT_ORG).ok()).unwrap_or_else(|| json!({}));
+            if let Err(error) = dock_settings_save(dock_app_menu::with_keep(&current, &dock_settings::keep_entry(&exe))) {
+                eprintln!("[dock] {error}"); open_dock_settings_window(app, false);
+            }
+        }
+        Action::EditFolders => open_dock_settings_window(app, true),
+        Action::DockSettings => open_dock_settings_window(app, false),
+    }
+}
+
 fn handle_dock_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
     let id = event.id().as_ref();
+    if let Some(action) = dock_app_menu::Action::from_id(id) { handle_app_menu(app, action); return; }
     if let Some(value) = id.strip_prefix("dockpopup_cap_") {
         let cap = if value == "auto" { None } else { value.parse::<u32>().ok() };
         if let Err(error) = set_dock_cap(cap) { eprintln!("[dock] {error}"); open_dock_settings_window(app, false); }
@@ -3025,7 +3113,7 @@ fn main() {
             Ok(())
         })
         .on_menu_event(handle_dock_menu)
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_editor_event, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_editor_event, show_app_menu, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {
