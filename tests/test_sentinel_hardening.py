@@ -220,6 +220,28 @@ class InputValidation(unittest.TestCase):
                     self.assertEqual(self.c.post("/api/power/plans", json={"guid": guid}).status_code, 400)
             runner.assert_not_called()
 
+    def test_concurrent_battery_reads_share_one_run(self):
+        import threading
+        calls, gate = [], threading.Event()
+
+        def slow():
+            calls.append(1)
+            gate.wait(2)
+            return {"has_battery": False}
+
+        laptop._cache.pop("t-share", None)
+        results = []
+        workers = [threading.Thread(target=lambda: results.append(laptop._cached("t-share", 30, slow))) for _ in range(6)]
+        for w in workers:
+            w.start()
+        time.sleep(0.2)
+        gate.set()
+        for w in workers:
+            w.join(5)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(results), 6)
+        laptop._cache.pop("t-share", None)
+
     def test_powershell_failures_read_as_empty(self):
         import subprocess
         for error in (FileNotFoundError("powershell"), subprocess.TimeoutExpired("powershell", 20)):

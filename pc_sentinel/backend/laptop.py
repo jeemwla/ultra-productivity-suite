@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -38,13 +39,24 @@ def _ps(cmd: str, timeout=20) -> str:
     return (r.stdout or "").strip()
 
 
+_locks = {}
+_locks_guard = threading.Lock()
+
+
 def _cached(key, ttl, fn):
+    """One computation per key at a time: windows asking together share one PowerShell run instead of starting one each."""
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
-    val = fn()
-    _cache[key] = (time.time(), val)
-    return val
+    with _locks_guard:
+        lock = _locks.setdefault(key, threading.Lock())
+    with lock:
+        hit = _cache.get(key)
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+        val = fn()
+        _cache[key] = (time.time(), val)
+        return val
 
 
 # ----------------------------------------------------------------------------- battery
