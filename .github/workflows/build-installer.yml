@@ -80,6 +80,18 @@ jobs:
           Copy-Item -LiteralPath $installer.FullName -Destination (Join-Path $out $name)
           $hash = (Get-FileHash -LiteralPath (Join-Path $out $name) -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $name" | Out-File -Encoding ascii (Join-Path $out "SHA256SUMS.txt")
+          # Tool versions and source, so this build can be compared with a local build_release.ps1 run.
+          @(
+            "Ultra Suite $version Public edition, unsigned CI build"
+            "commit:   $env:GITHUB_SHA ($env:GITHUB_REF_NAME)"
+            "run:      $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            "runner:   $env:ImageOS $env:ImageVersion"
+            "python:   $(python --version)"
+            "node:     $(node --version)"
+            "rustc:    $(rustc --version)"
+            "cargo:    $(cargo --version)"
+            "sha256:   $hash"
+          ) | Out-File -Encoding utf8 (Join-Path $out "BUILD_INFO.txt")
           # Forward slashes: the attest and upload actions read these as glob patterns, where a backslash escapes.
           $dir = $out.FullName -replace '\\', '/'
           "path=$dir/$name" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
@@ -96,11 +108,22 @@ jobs:
             "Verify the download with: ``gh attestation verify $name --repo $env:GITHUB_REPOSITORY``"
           ) -join "`n" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
       - name: Attest build provenance
+        id: attest
         # Fork pull requests get no OIDC token, so they skip the attestation.
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ steps.collect.outputs.path }}
+      - name: Verify the attestation as a downloader would
+        if: steps.attest.outcome == 'success'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUBJECT: ${{ steps.collect.outputs.path }}
+        run: |
+          gh attestation verify "$env:SUBJECT" --repo "$env:GITHUB_REPOSITORY" `
+            --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/build-installer.yml"
+          if ($LASTEXITCODE -ne 0) { throw "The new attestation did not verify." }
       - name: Upload installer artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
