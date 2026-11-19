@@ -1,13 +1,17 @@
 name: CI
 
 # Runs every test suite on Windows for pushes to main, every pull request (drafts included),
-# merge queue groups and manual runs. The "CI result" job is the single required check.
+# merge queue groups, manual runs and once a week. The "CI result" job is the single required check.
 on:
   push:
     branches: [main]
   pull_request:
   merge_group:
   workflow_dispatch:
+  schedule:
+    # Tuesdays 10:17 UTC: catches breakage from runner image, toolchain or dependency changes
+    # in weeks without commits.
+    - cron: "17 10 * * 2"
 
 permissions:
   contents: read
@@ -39,8 +43,19 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
       - name: Check tracked files and versions
         run: python -I .github/scripts/repo_guard.py
+      - name: Compile every Python file
+        # Catches syntax errors in modules that no test imports.
+        run: python -I -m compileall -q -j 0 (git ls-files '*.py')
+      - name: Parse JavaScript files and inline page scripts
+        run: node .github/scripts/syntax_check.cjs
+      - name: Parse PowerShell scripts (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -File .github/scripts/ps_parse_check.ps1
 
   workflows:
     name: Workflow lint
@@ -66,16 +81,21 @@ jobs:
         run: '"$RUNNER_TEMP/actionlint" -color'
 
   python:
-    name: Python tests
+    name: Python tests (${{ matrix.python }})
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 matches the build PC. 3.11 is the oldest version build_release.ps1, fastapi and Pillow support.
+        python: ["3.13", "3.11"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: |
             requirements.txt
@@ -95,10 +115,17 @@ jobs:
           code=${PIPESTATUS[0]}
           set -e
           {
-            echo "### Python tests"
+            echo "### Python ${{ matrix.python }} tests"
             grep -E '^(Ran [0-9]+ tests|OK|FAILED)' "$RUNNER_TEMP/python-tests.txt" | sed 's/^/- /'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$code"
+      - name: Keep the test log when the suite fails
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-${{ matrix.python }}-test-log
+          path: ${{ runner.temp }}/python-tests.txt
+          retention-days: 7
 
   node:
     name: Node tests
@@ -121,6 +148,13 @@ jobs:
           $failed = @($junit.SelectNodes('//testcase[failure]')).Count
           "### Node tests`n- $cases tests, $failed failed" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           exit $code
+      - name: Keep the JUnit report when the suite fails
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: node-junit
+          path: ${{ runner.temp }}/node-junit.xml
+          retention-days: 7
 
   rust:
     name: Rust tests (Public and Dev)
