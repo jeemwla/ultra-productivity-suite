@@ -17,6 +17,13 @@
     return p.battery_count > 1 ? `${p.battery_count} batteries, shown combined` : "";
   }
 
+  // The ring turns red below 20%; this says it in words too, so the warning never depends on color alone.
+  function lowNotice(p, pct) {
+    if (!fin(pct) || pct >= 20 || p.plugged_in !== false || p.charging) return "";
+    const left = hm(p.minutes_left);
+    return `<div class="banner critical mt" role="status"><div class="ic">!</div><div><div class="t">Battery low (${n0(pct)}%)</div><div class="s">Plug in soon${left ? `. About ${left} left at the current pace.` : "."}</div></div></div>`;
+  }
+
   function stat(k, v, sub) {
     return `<div class="bt-stat"><div class="muted">${k}</div><div class="big num">${v == null ? NR : v}</div>${sub ? `<div class="muted">${sub}</div>` : ""}</div>`;
   }
@@ -78,7 +85,7 @@
     const wh = mwh => rel ? null : whRaw(mwh);
     const capacity = rel ? "this battery reports capacity in relative units, so watt-hours aren't shown" : wh(p.full_mwh) && wh(p.design_mwh) ? `${wh(p.full_mwh)} now, ${wh(p.design_mwh)} when new` : wh(p.design_mwh) ? `${wh(p.design_mwh)} when new; full charge capacity not reported` : "";
     const brightness = bright && bright.available ? `<div class="muted" style="margin-bottom:6px">Screen brightness</div><div style="display:flex;align-items:center;gap:12px"><input type="range" id="bt-br" min="0" max="100" value="${+bright.percent || 0}" style="flex:1;accent-color:var(--accent)" aria-label="Screen brightness"><b class="num" id="bt-brv">${+bright.percent || 0}%</b></div>` : "";
-    return hero + `<div class="grid g4 mt bt-grid">
+    return hero + lowNotice(p, pct) + `<div class="grid g4 mt bt-grid">
     ${stat("Health", fin(p.health_pct) ? n1(p.health_pct) + "%" : null, capacity)}
     ${stat("Charge cycles", fin(p.cycles) ? n0(p.cycles) : null, fin(p.cycles) ? "full charges so far" : "this battery doesn't report cycles")}
     ${powerStat(p)}

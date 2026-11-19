@@ -54,3 +54,10 @@ test('the charger footnote appears only while the charger is connected',()=>{
  assert.doesNotMatch(render(base),/Charging power is what flows/);
  assert.match(render({...base,plugged_in:true,state:'Plugged in, not charging',rate_w:0}),/Charging power is what flows/);
 });
+test('a low battery on its own power says so in words, not only with a red ring',()=>{
+ const base={has_battery:true,charge_pct:12,state:'On battery',plugged_in:false,charging:false,rate_w:-9,minutes_left:41};
+ const out=render(base);assert.match(out,/Battery low \(12%\)/);assert.match(out,/About 41m left at the current pace/);
+ assert.doesNotMatch(render({...base,charge_pct:25}),/Battery low/);
+ assert.doesNotMatch(render({...base,plugged_in:true,state:'Charging',charging:true,rate_w:30}),/Battery low/);
+ assert.match(render({...base,minutes_left:null}),/Plug in soon\.</);
+});

@@ -814,7 +814,7 @@ function renderOverviewBattery(){
   if (!p) { $("ov-bat").innerHTML = `<div class="muted">Reading the battery…</div>`; return; }
   const rate = typeof p.rate_w === "number" ? (p.charging ? `charging at ${n1(Math.abs(p.rate_w))} W` : p.rate_w < 0 ? `using ${n1(-p.rate_w)} W` : `${n1(p.rate_w)} W`) : "power not reported";
   const time = p.charging && p.minutes_to_full != null ? `full in ${BV.hm(p.minutes_to_full)}` : !p.plugged_in && p.minutes_left != null ? `${BV.hm(p.minutes_left)} left` : "";
-  $("ov-bat").innerHTML = `<div class="big num">${p.charge_pct == null ? "–" : n0(p.charge_pct)}<small>% · ${esc(p.state || "state unavailable")}</small></div><div class="muted">${[rate, time, p.health_pct != null ? `health ${n1(p.health_pct)}%` : null].filter(Boolean).map(esc).join(" · ")}</div>`; }
+  $("ov-bat").innerHTML = `<div class="big num">${p.charge_pct == null ? "–" : n0(p.charge_pct)}<small>% · ${esc(p.state || "state unavailable")}</small>${typeof p.charge_pct === "number" && p.charge_pct < 20 && p.plugged_in === false && !p.charging ? ` <span class="pill critical">Low, plug in soon</span>` : ""}</div><div class="muted">${[rate, time, p.health_pct != null ? `health ${n1(p.health_pct)}%` : null].filter(Boolean).map(esc).join(" · ")}</div>`; }
 function setupOverviewEditor(){
   if (ovEditor || !window.OverviewLayout) return;
   ovEditor = OverviewLayout.createEditor({ grid: $("ov-grid"), live: $("ov-live"), motionOff, isVisible: ovCardVisible,
