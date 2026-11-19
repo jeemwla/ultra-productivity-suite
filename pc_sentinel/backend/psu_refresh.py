@@ -13,6 +13,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 import time
 import unicodedata
 import urllib.request
@@ -262,7 +263,24 @@ def due(state, now, enabled):
     return last_ok is None or now - last_ok >= INTERVAL_S
 
 
+_running = threading.Lock()
+
+
+class Busy(RuntimeError):
+    pass
+
+
 def refresh(fetch=fetch_csv, now=None, cache=None, state_file=None, bundle=None):
+    """One refresh at a time: the 14-day loop and the Refresh now button never download or write the state together."""
+    if not _running.acquire(blocking=False):
+        raise Busy("A catalog refresh is already running. Try again in a moment.")
+    try:
+        return _refresh(fetch, now, cache, state_file, bundle)
+    finally:
+        _running.release()
+
+
+def _refresh(fetch, now, cache, state_file, bundle):
     now = time.time() if now is None else now
     state = read_state(state_file)
     state["last_attempt_ts"] = now
@@ -305,4 +323,7 @@ def register(app):
         from . import preferences
         if preferences.load().get("psu_refresh") is not True:
             raise HTTPException(409, "Turn on PSU catalog refresh in Settings / Extras first.")
-        return await asyncio.to_thread(refresh)
+        try:
+            return await asyncio.to_thread(refresh)
+        except Busy as exc:
+            raise HTTPException(409, str(exc)) from None

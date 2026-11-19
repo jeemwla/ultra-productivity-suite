@@ -158,6 +158,49 @@ class InputValidation(unittest.TestCase):
                 self.assertEqual(laptop._ps("Get-Date"), "")
 
 
+class WriterMeasurement(unittest.TestCase):
+    def test_second_request_keeps_the_running_measurement(self):
+        with tempfile.TemporaryDirectory() as td:
+            sampler = storage_writers.Sampler(store_path=Path(td) / "w.json")
+            sampler.measure(now=1000)
+            sampler.live["game.exe"] = 5_000_000
+            sampler.measure(now=1030)
+            self.assertEqual(sampler.live_started, 1000)
+            self.assertEqual(sampler.live, {"game.exe": 5_000_000})
+            sampler.measure(now=1000 + storage_writers.MEASURE_S + 1)
+            self.assertEqual(sampler.live, {}, "a new measurement starts once the last one finished")
+
+
+class CatalogRefresh(unittest.TestCase):
+    def test_only_one_refresh_runs_at_a_time(self):
+        from backend import psu_refresh
+        import threading
+        started, release = threading.Event(), threading.Event()
+
+        def slow_fetch():
+            started.set()
+            release.wait(5)
+            raise OSError("offline")
+
+        with tempfile.TemporaryDirectory() as td:
+            args = dict(cache=Path(td) / "c.json", state_file=Path(td) / "s.json")
+            worker = threading.Thread(target=lambda: psu_refresh.refresh(fetch=slow_fetch, **args))
+            worker.start()
+            self.assertTrue(started.wait(5))
+            with self.assertRaises(psu_refresh.Busy):
+                psu_refresh.refresh(fetch=lambda: "", **args)
+            app = FastAPI()
+            psu_refresh.register(app)
+            with patch.object(preferences, "load", return_value={"psu_refresh": True}):
+                r = TestClient(app).post("/api/power/catalog/refresh")
+            self.assertEqual(r.status_code, 409)
+            self.assertIn("already running", r.json()["detail"])
+            release.set()
+            worker.join(5)
+            state = psu_refresh.refresh(fetch=lambda: (_ for _ in ()).throw(OSError("still offline")), **args)
+            self.assertIn("still offline", state["last_error"])
+
+
 class PreviewMode(unittest.TestCase):
     def test_off_unless_asked_and_never_without_a_throwaway_settings_folder(self):
         self.assertIsNone(preview.mode({}))
