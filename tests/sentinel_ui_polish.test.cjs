@@ -110,7 +110,7 @@ test('charts are seeded from the service history once, with late readings as gap
 });
 test('the writers table scrolls inside its card at phone width',()=>{
  // position:relative keeps the table's absolutely placed screen-reader labels inside the scroll box; without it they widened the page.
- assert.match(html,/#wr-body\{position:relative;overflow-x:auto;max-width:100%/);
+ assert.match(html,/#wr-body,#wr-live,#wr-detail,#bench-body\{position:relative;overflow-x:auto;max-width:100%/);
 });
 test('unsaved Settings / Extras changes ask before the window closes',()=>{
  let handler;const ctx=vm.createContext({window:{addEventListener:(t,f)=>{if(t==='beforeunload')handler=f;}},preferencesDirty:false,preferencesSaving:false});
