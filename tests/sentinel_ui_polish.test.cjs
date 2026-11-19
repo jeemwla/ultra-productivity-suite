@@ -112,3 +112,11 @@ test('the writers table scrolls inside its card at phone width',()=>{
  // position:relative keeps the table's absolutely placed screen-reader labels inside the scroll box; without it they widened the page.
  assert.match(html,/#wr-body\{position:relative;overflow-x:auto;max-width:100%/);
 });
+test('unsaved Settings / Extras changes ask before the window closes',()=>{
+ let handler;const ctx=vm.createContext({window:{addEventListener:(t,f)=>{if(t==='beforeunload')handler=f;}},preferencesDirty:false,preferencesSaving:false});
+ vm.runInContext(cut('if(typeof window!=="undefined")window.addEventListener("beforeunload"','$("settings-reset").onclick'),ctx);
+ const ev=()=>({prevented:false,preventDefault(){this.prevented=true;}});
+ let e=ev();handler(e);assert.equal(e.prevented,false,'nothing to lose: no prompt');
+ ctx.preferencesDirty=true;e=ev();handler(e);assert.equal(e.prevented,true);
+ ctx.preferencesSaving=true;e=ev();handler(e);assert.equal(e.prevented,false,'a save in flight is not treated as unsaved');
+});

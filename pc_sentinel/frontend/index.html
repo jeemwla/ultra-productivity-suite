@@ -319,7 +319,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 :root[data-motion=off] .ov-grid.editing .ov-item{animation:none!important}
 @media (max-width:1200px){.ov-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
 @media (max-width:760px){.ov-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
-.skip{position:absolute;left:12px;top:-60px;z-index:90;padding:10px 14px;border-radius:10px;background:var(--accent);color:var(--accent-ink,#fff);font-weight:600;text-decoration:none}.skip:focus{top:12px}.main:focus{outline:none}
+.skip{position:absolute;left:12px;top:-60px;z-index:90;padding:10px 14px;border-radius:10px;background:var(--accent);color:var(--accent-ink,#fff);font-weight:600;text-decoration:none}.skip:focus{top:12px}.main:focus,#pg-title:focus{outline:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* ---------- Sensor guide, measurement and writers ---------- */
@@ -424,7 +424,7 @@ table.wr td .btn{height:30px;padding:0 10px}
     <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span><button class="nav gear" id="nav-settings" data-p="settings" aria-label="Settings / Extras" title="Settings / Extras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
   </aside>
   <main class="main" id="main" tabindex="-1">
-    <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
+    <div class="top"><div><h1 id="pg-title" tabindex="-1">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
     <div class="content">
       <div class="banner warning" id="conn" hidden role="status"><div class="ic">!</div><div><div class="t" id="conn-t">Live data paused</div><div class="s" id="conn-s"></div></div></div>
       <div class="banner info" id="upd" hidden><div class="ic">↑</div><div><div class="t" id="upd-t">Update available</div><div class="s" id="upd-s"></div></div><div class="act"><button class="btn" id="upd-later">Later</button><button class="btn primary" id="upd-go">Update now</button></div></div>
@@ -688,6 +688,8 @@ $("settings-save").onclick=async()=>{
   catch(e){$("settings-status").textContent="Not saved: "+e.message;}
   finally{preferencesSaving=false;$("settings-save").disabled=false;$("settings-reset").disabled=false;}
 };
+// Closing or reloading the window with unsaved Settings / Extras changes asks first instead of dropping them.
+if(typeof window!=="undefined")window.addEventListener("beforeunload",(e)=>{if(preferencesDirty&&!preferencesSaving){e.preventDefault();e.returnValue="";}});
 $("settings-reset").onclick=()=>{fillPreferences(defaultPreferences());preferencesDirty=true;preferencesEditing++;$("settings-status").textContent="Default draft restored. Choose Save settings to apply; nothing has changed yet.";};
 fillPreferences(prefs);
 /* ---------- navigation actions ---------- */
@@ -711,7 +713,7 @@ $("nav-settings").addEventListener("click",()=>go("settings"));
 $("skip").addEventListener("click", (e) => { e.preventDefault(); $("main").focus(); }); // "#main" is not a page, so the hash stays put
 window.addEventListener("hashchange", () => go(location.hash.slice(1), false));
 // keyboard: 1-9 jump between sections (when not typing)
-document.addEventListener("keydown", (e) => { if ((typeof MODAL !== "undefined" && MODAL.open) || e.target.closest("input,textarea,select,[contenteditable=true]") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
+document.addEventListener("keydown", (e) => { if ((typeof MODAL !== "undefined" && MODAL.open) || e.target.closest("input,textarea,select,[contenteditable=true]") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) { go(vis[i][0]); $("pg-title").focus?.({ preventScroll: true }); } }); // screen readers hear the new page title
 // swipe between sections on touch screens
 let tx = null, ty = null; document.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
 document.addEventListener("touchend", (e) => { if (tx == null) return; const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null; if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx)) return;
