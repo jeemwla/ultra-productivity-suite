@@ -1,20 +1,71 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dock menu</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="suite.css">
 <style>
-:root{color-scheme:dark light;--bg:#20232b;--card:#292d37;--ink:#f5f6fa;--muted:#adb4c3;--line:#ffffff12;--hover:#ffffff0d;--accent:#67d2fa;--accent-ink:#06232f}
-@media(prefers-color-scheme:light){:root{--bg:#f9fafc;--card:#edf0f5;--ink:#18202f;--muted:#5e6879;--line:#16243c18;--hover:#16243c09;--accent:#006cba;--accent-ink:#fff}}
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}body{padding:8px;font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);user-select:none}button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;border-radius:8px}button:hover,summary:hover{background:var(--hover)}button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button:disabled{opacity:.35;cursor:default}button:disabled:hover{background:transparent}
-main{height:100%;overflow:auto;scrollbar-width:thin;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 6px 20px #0003}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}h1{font-size:15px;font-weight:650;margin:0}#close{width:28px;height:28px;font-size:21px;color:var(--muted)}.grouping{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:9px 3px}.switch{width:30px;height:18px;border:1px solid var(--muted);border-radius:20px;padding:2px}.switch:after{content:"";display:block;width:12px;height:12px;border-radius:50%;background:var(--muted)}[aria-checked=true] .switch{background:var(--accent);border-color:var(--accent)}[aria-checked=true] .switch:after{background:var(--accent-ink);transform:translateX(12px)}
-.counter{padding:12px;background:var(--card);border-radius:12px;margin:4px 0 10px}.counter-title{display:flex;align-items:center;justify-content:space-between;gap:6px;font-weight:600}#auto{font-size:11px;padding:4px 8px;color:var(--muted);border:1px solid var(--line);border-radius:20px}#auto[aria-pressed=true]{color:var(--accent);border-color:var(--accent)}.stepper{display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px}.stepper button{width:36px;height:36px;background:var(--bg);border:1px solid var(--line);font-size:24px;line-height:1}.stepper button:hover{border-color:var(--accent)}output{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}.hint{font-size:11px;color:var(--muted);text-align:center}.action{width:100%;padding:9px 8px;display:flex;align-items:center;gap:10px;text-align:left}.action .symbol{width:20px;text-align:center;font-size:17px;color:var(--muted)}.action .arrow{margin-left:auto;color:var(--muted)}.apps{display:flex;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:8px}.apps button{flex:1;padding:9px 4px;background:var(--card);font-size:12px}.apps button:hover{box-shadow:inset 0 0 0 1px var(--accent)}details{margin-top:8px;color:var(--muted);font-size:12px}summary{cursor:pointer;border-radius:8px;padding:6px 8px}details .action{font-size:12px}#status{font-size:11px;color:var(--muted);min-height:16px;margin-top:4px}#status.error{color:#ef8787}[hidden]{display:none!important}
+/* Dock menu: a small popup above the taskbar. Colors, type, radius, shadow and motion come from tokens.css and
+   suite.css, the same values as the hub and Dock settings. The window itself is transparent around the panel. */
+html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+body{padding:var(--s-2);font-size:var(--t-2);user-select:none;background:transparent}
+main{height:100%;overflow:auto;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-5);padding:var(--s-4);box-shadow:var(--sh-2);
+  animation:menu-in var(--d-2) var(--ease)}
+@keyframes menu-in{from{opacity:0;transform:translateY(6px) scale(.985)}}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s-2)}
+h1{font:var(--w-medium) var(--t-4)/var(--lh-tight) var(--font-display)}
+svg{width:16px;height:16px;flex:none}
+button:disabled{opacity:var(--disabled)}
+#close{width:28px;height:28px;border-radius:var(--r-3);display:grid;place-items:center;color:var(--ink-3);transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+#close:hover{background:var(--hover);color:var(--ink)}
+.grouping{width:100%;min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);text-align:left;padding:0 var(--s-2);border-radius:var(--r-3);transition:background var(--d-1) var(--ease)}
+.grouping:hover:not(:disabled){background:var(--hover)}
+.grouping:disabled{opacity:var(--disabled)}
+/* The row is the switch: its knob follows aria-checked on the button */
+.switch{position:relative;width:40px;height:22px;border-radius:var(--r-full);background:var(--panel-3);border:1px solid var(--line-2);flex:none;transition:background var(--d-2) var(--ease),border-color var(--d-2) var(--ease)}
+.switch::after{content:"";position:absolute;top:50%;left:3px;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:var(--ink-2);transition:transform var(--d-2) var(--ease),background var(--d-2) var(--ease)}
+[aria-checked=true] .switch{background:var(--accent);border-color:transparent}
+[aria-checked=true] .switch::after{transform:translateX(18px);background:var(--accent-ink)}
+.counter{padding:var(--s-3);background:var(--panel-2);border-radius:var(--r-4);margin:var(--s-1) 0 var(--s-3)}
+.counter-title{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);font-weight:var(--w-medium)}
+#auto{font-size:var(--t-1);font-weight:var(--w-medium);height:24px;padding:0 var(--s-3);color:var(--ink-2);border:1px solid var(--line-2);border-radius:var(--r-full);transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+#auto:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+/* Automatic is disabled while it is already on: show it as on, not faded */
+#auto[aria-pressed=true]{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:var(--accent-soft);opacity:1}
+.stepper{display:flex;align-items:center;justify-content:space-between;margin:var(--s-2) 0 var(--s-1)}
+.stepper button{width:36px;height:36px;border-radius:var(--r-3);background:var(--panel);border:1px solid var(--line);font-size:var(--t-5);line-height:1;color:var(--ink-2);
+  transition:border-color var(--d-1) var(--ease),color var(--d-1) var(--ease),transform var(--d-1) var(--ease)}
+.stepper button:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}
+.stepper button:active:not(:disabled){transform:scale(.94)}
+.stepper button:disabled{opacity:var(--disabled)}
+output{font-size:var(--t-6);font-weight:var(--w-medium);font-variant-numeric:tabular-nums}
+.hint{font-size:var(--t-1);color:var(--ink-3);text-align:center}
+.action{width:100%;min-height:38px;padding:0 var(--s-2);display:flex;align-items:center;gap:var(--s-3);text-align:left;border-radius:var(--r-3);transition:background var(--d-1) var(--ease)}
+.action:hover:not(:disabled){background:var(--hover)}
+.action:active:not(:disabled){background:var(--press)}
+.action .symbol{width:20px;display:grid;place-items:center;color:var(--ink-3)}
+.action .arrow{margin-left:auto;display:grid;place-items:center;color:var(--ink-3)}
+.action .arrow svg{width:14px;height:14px}
+.apps{display:flex;gap:var(--s-2);border-top:1px solid var(--line);padding-top:var(--s-3);margin-top:var(--s-2)}
+.apps button{flex:1;min-height:36px;padding:0 var(--s-1);background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-3);font-size:var(--t-1);font-weight:var(--w-medium);
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+.apps button:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:var(--panel-3)}
+details{margin-top:var(--s-2);color:var(--ink-2);font-size:var(--t-1)}
+summary{list-style:none;display:flex;align-items:center;gap:var(--s-2);min-height:32px;padding:0 var(--s-2);border-radius:var(--r-3);cursor:pointer;transition:background var(--d-1) var(--ease)}
+summary::-webkit-details-marker{display:none}
+summary:hover{background:var(--hover)}
+summary svg{width:12px;height:12px;transition:transform var(--d-2) var(--ease)}
+details[open] summary svg{transform:rotate(90deg)}
+details .action{font-size:var(--t-1);min-height:32px}
+details .action[data-action=quit]:hover{color:var(--bad);background:var(--bad-soft)}
+#status{font-size:var(--t-1);color:var(--ink-3);min-height:16px;margin-top:var(--s-1)}
+#status.error{color:var(--bad)}
 </style></head><body><main aria-label="Dock controls">
-<header><h1 id="title">Ultra Dock</h1><button id="close" aria-label="Close Dock menu">×</button></header>
+<header><h1 id="title">Ultra Dock</h1><button id="close" aria-label="Close Dock menu"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></header>
 <button id="grouping" class="grouping" role="switch" aria-checked="true"><span>Group apps into folders</span><span class="switch" aria-hidden="true"></span></button>
 <section class="counter" aria-label="Apps outside folders"><div class="counter-title"><span>Apps outside folders</span><button id="auto" aria-pressed="false">Automatic</button></div>
 <div class="stepper"><button id="less" aria-label="Show fewer apps individually">−</button><output id="count" aria-live="polite">7</output><button id="more" aria-label="Show more apps individually">+</button></div><div class="hint" id="hint">Other apps stay in folders</div></section>
-<button class="action" data-action="settings"><span class="symbol" aria-hidden="true">⚙</span>Dock settings<span class="arrow" aria-hidden="true">›</span></button>
-<button class="action" data-action="edit"><span class="symbol" aria-hidden="true">▦</span>Edit folders<span class="arrow" aria-hidden="true">›</span></button>
+<button class="action" data-action="settings"><span class="symbol" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></svg></span>Dock settings<span class="arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg></span></button>
+<button class="action" data-action="edit"><span class="symbol" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2"/></svg></span>Edit folders<span class="arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg></span></button>
 <div class="apps"><button data-action="sentinel">PC Sentinel</button><button data-action="alarm">Code Red Alarm</button></div>
-<details><summary>More</summary><button class="action" data-action="updates">Open Ultra Suite / updates</button><button class="action" data-action="quit">Quit Ultra Suite</button></details><div id="status" role="status" aria-live="polite"></div>
+<details><summary><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg>More</summary><button class="action" data-action="updates">Open Ultra Suite / updates</button><button class="action" data-action="quit">Quit Ultra Suite</button></details><div id="status" role="status" aria-live="polite"></div>
 </main><script>
 const invoke = window.__TAURI__?.core?.invoke;
 const $ = id => document.getElementById(id);
