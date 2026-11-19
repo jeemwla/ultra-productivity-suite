@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Hardware & Network Sentinel API.
-A single background loop gathers hardware + network data every 2 seconds;
+A single background loop gathers hardware + network data about once a second;
 every open dashboard (PC or phone) receives the same cached snapshot.
 """
 import asyncio
@@ -19,24 +19,76 @@ from .net_monitor import get_live_ping_snapshot, run_on_demand_speedtest
 from .glinet_vpn import vpn_controller
 from . import speedtest
 from . import preferences
+from . import preview as preview_mode
 
+VPN_OFF = {"supported": False, "message": "Enable router controls in Settings / Extras."}
 latest = {"hardware": {"live": False, "source": "starting", "groups": [], "summary": {}},
-          "network": {"online": False, "targets": []}, "vpn": {"supported": False, "message": "Enable router controls in Settings / Extras."}, "ts": 0}
+          "network": {"online": False, "targets": []}, "vpn": dict(VPN_OFF), "ts": 0}
+
+POLL_SECONDS = 1.0
+# A collector that hangs (an unresponsive sensor web server, a stuck WMI query) must not freeze every open window.
+# Each part gets its own deadline; on a miss the last good value stays and is marked stale.
+JOB_TIMEOUT = {"hardware": 8.0, "network": 5.0, "vpn": 8.0}
+ERROR_REPEAT_SECONDS = 300
+PREVIEW_KIND = preview_mode.mode()
+PREVIEW = preview_mode.Preview(PREVIEW_KIND) if PREVIEW_KIND else None
+_changed = asyncio.Event()
+_errors = {}
+
+
+def log_error(key, message, now=None):
+    """Prints a poll error once, then at most every ERROR_REPEAT_SECONDS while it repeats (no log flood every second)."""
+    now = time.time() if now is None else now
+    last = _errors.get(key)
+    if last and last[0] == message and now - last[1] < ERROR_REPEAT_SECONDS:
+        return False
+    _errors[key] = (message, now)
+    print(f"[sentinel] {key} error: {message}")
+    return True
+
+
+async def _bounded(name, coro):
+    try:
+        return await asyncio.wait_for(coro, JOB_TIMEOUT[name])
+    except asyncio.TimeoutError:
+        log_error(name, f"no answer within {JOB_TIMEOUT[name]:.0f} s; keeping the last reading")
+    except Exception as exc:  # one failing part never blanks the others
+        log_error(name, f"{type(exc).__name__}: {exc}")
+    return None
+
+
+def _stale(previous):
+    value = dict(previous)
+    value["stale"] = True
+    return value
+
+
+async def poll_once():
+    prefs = preferences.load()
+    if PREVIEW:
+        latest.update(PREVIEW.snapshot(), vpn=dict(VPN_OFF), preferences=prefs)
+        _changed.set()
+        return
+    jobs = [_bounded("hardware", collect_hardware_telemetry()),
+            _bounded("network", get_live_ping_snapshot(router_ping=prefs["router_ping"]))]
+    if prefs["router_vpn"]:
+        jobs.append(_bounded("vpn", vpn_controller.refresh()))
+    results = await asyncio.gather(*jobs)
+    hardware = results[0] if results[0] is not None else _stale(latest["hardware"])
+    network = results[1] if results[1] is not None else _stale(latest["network"])
+    vpn = vpn_controller.status() if prefs["router_vpn"] else dict(VPN_OFF)
+    latest.update(hardware=hardware, network=network, vpn=vpn, preferences=prefs, ts=time.time())
+    _changed.set()
 
 
 async def poll_loop():
     while True:
+        started = time.monotonic()
         try:
-            prefs = preferences.load()
-            jobs = [collect_hardware_telemetry(), get_live_ping_snapshot(router_ping=prefs["router_ping"])]
-            if prefs["router_vpn"]:
-                jobs.append(vpn_controller.refresh())
-            results = await asyncio.gather(*jobs)
-            vpn = vpn_controller.status() if prefs["router_vpn"] else {"supported": False, "message": "Enable router controls in Settings / Extras."}
-            latest.update(hardware=results[0], network=results[1], vpn=vpn, preferences=prefs, ts=time.time())
+            await poll_once()
         except Exception as exc:
-            print(f"[sentinel] poll error: {exc}")
-        await asyncio.sleep(1.0)
+            log_error("poll", f"{type(exc).__name__}: {exc}")
+        await asyncio.sleep(max(0.2, POLL_SECONDS - (time.monotonic() - started)))
 
 
 @asynccontextmanager
@@ -50,6 +102,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Hardware & Network Sentinel", lifespan=lifespan)
+if PREVIEW:  # registered first so its fixture routes answer before the real ones
+    PREVIEW.register(app)
+    print(f"[sentinel] preview mode ({PREVIEW_KIND}): fixture data, no changes to this PC")
 preferences.register(app)
 
 from . import power_context  # noqa: E402  optional local desktop PSU context, no hardware writes
@@ -102,7 +157,10 @@ async def get_full_snapshot():
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "hardware_live": latest["hardware"].get("live"), "age_sec": round(time.time() - latest["ts"], 1)}
+    ready = latest["ts"] > 0
+    return {"ok": True, "ready": ready, "hardware_live": latest["hardware"].get("live"),
+            "stale": bool(latest["hardware"].get("stale") or latest["network"].get("stale")),
+            "age_sec": round(time.time() - latest["ts"], 1) if ready else None, "preview": PREVIEW_KIND}
 
 
 @app.post("/api/speedtest")
@@ -113,7 +171,7 @@ async def trigger_speedtest():
 @app.get("/api/vpn/status")
 async def get_vpn_status():
     if not preferences.load()["router_vpn"]:
-        return {"supported": False, "message": "Enable router controls in Settings / Extras."}
+        return dict(VPN_OFF)
     return vpn_controller.status()
 
 
@@ -155,7 +213,13 @@ async def telemetry_ws(ws: WebSocket):
             if latest["ts"] != last:
                 last = latest["ts"]
                 await ws.send_json(latest)
-            await asyncio.sleep(0.25)
+            # Wake on the next snapshot instead of checking four times a second; the timeout keeps a slow loop alive.
+            _changed.clear()
+            if latest["ts"] == last:
+                try:
+                    await asyncio.wait_for(_changed.wait(), 2.0)
+                except asyncio.TimeoutError:
+                    pass
     except (WebSocketDisconnect, RuntimeError):
         pass
 

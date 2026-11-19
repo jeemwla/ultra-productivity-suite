@@ -300,7 +300,7 @@ def power_plans():
 
 
 def set_power_plan(guid: str):
-    if not re.fullmatch(r"[0-9a-fA-F-]{36}", guid or ""):
+    if not isinstance(guid, str) or not re.fullmatch(r"[0-9a-fA-F-]{36}", guid):
         raise HTTPException(400, "Unknown power plan")
     r = _run(["powercfg", "/setactive", guid])
     if r.returncode != 0:
@@ -506,7 +506,12 @@ def register(app):
 
     @app.post("/api/display")
     def _set_disp(body: dict):
-        return set_refresh(body.get("device", ""), int(body.get("hz", 0)))
+        device, hz = body.get("device"), body.get("hz")
+        if isinstance(hz, float) and hz.is_integer():
+            hz = int(hz)
+        if not isinstance(device, str) or type(hz) is not int or not 1 <= hz <= 1000:
+            raise HTTPException(400, "Choose a monitor and one of its listed refresh rates.")
+        return set_refresh(device, hz)
 
     @app.get("/api/power/mode")
     async def _pmode():

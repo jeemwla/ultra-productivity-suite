@@ -29,9 +29,13 @@ _cache = {}
 
 
 def _ps(cmd: str, timeout=20) -> str:
-    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], capture_output=True, text=True,
-                       timeout=timeout, creationflags=NO_WINDOW if IS_WIN else 0)
-    return r.stdout.strip()
+    """PowerShell output, or "" when PowerShell is missing, hangs past the timeout or fails to start."""
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], capture_output=True, text=True,
+                           timeout=timeout, creationflags=NO_WINDOW if IS_WIN else 0)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return (r.stdout or "").strip()
 
 
 def _cached(key, ttl, fn):
@@ -182,7 +186,7 @@ def build_battery(d: dict, sps: dict = None, report: dict = None) -> dict:
 
 def battery() -> dict:
     if not IS_WIN:
-        return {"has_battery": False}
+        return {"has_battery": False, "pack": PACK_VERSION}
     try:
         d = json.loads(_ps(_BAT_PS) or "{}")
     except Exception:
@@ -343,6 +347,16 @@ def brightness() -> dict:
     return {"available": v.isdigit(), "percent": int(v) if v.isdigit() else None}
 
 
+def brightness_value(body) -> int:
+    """The requested brightness as a whole percent. Missing or malformed values are refused, never guessed."""
+    value = body.get("percent") if isinstance(body, dict) else None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if type(value) is not int or not 0 <= value <= 100:
+        raise ValueError("Brightness must be a whole number from 0 to 100.")
+    return value
+
+
 def set_brightness(percent: int) -> dict:
     p = max(0, min(100, int(percent)))
     _ps(f"Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorBrightnessMethods | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={p}}} | Out-Null")
@@ -368,8 +382,12 @@ def register(app):
 
     @app.post("/api/laptop/brightness")
     async def _set_br(body: dict):
+        try:
+            percent = brightness_value(body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
         _cache.pop("br", None)
-        return await asyncio.to_thread(set_brightness, body.get("percent", 50))
+        return await asyncio.to_thread(set_brightness, percent)
 
     @app.get("/api/laptop/about")
     async def _about():
