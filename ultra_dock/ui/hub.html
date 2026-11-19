@@ -32,6 +32,8 @@ h1{font:var(--w-bold) var(--t-6)/var(--lh-tight) var(--font-display);letter-spac
 .hero{position:relative;overflow:hidden;border-radius:var(--r-5);padding:var(--s-6);margin-bottom:var(--s-5);border:1px solid var(--line);
   background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 20%,transparent) 0%,transparent 55%),
              radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,var(--ok) 12%,transparent) 0%,transparent 60%),var(--panel)}
+/* Dev edition: its windows load the black and white icons from hubicons/dev/; the header then shows a badge */
+.hero:has(img[src^="hubicons/dev/"])::after,body:has(.brand img[src^="hubicons/dev/"]) .hero::after{content:"Dev edition";position:absolute;top:var(--s-4);right:var(--s-4);height:22px;padding:0 var(--s-2);display:inline-flex;align-items:center;border-radius:var(--r-full);border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);font-size:var(--t-1);font-weight:var(--w-medium);letter-spacing:.02em}
 .banner{display:none;align-items:center;gap:var(--s-4);background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:var(--r-4);padding:var(--s-3) var(--s-4);margin-bottom:var(--s-5)}
 .banner.show{display:flex}
 .banner p{flex:1;min-width:0}
@@ -89,6 +91,7 @@ td.muted{color:var(--ink-3)}
 td .edc{display:flex;align-items:center;gap:var(--s-2);font-weight:var(--w-medium);color:var(--ink)}
 td.muted .edc{color:var(--ink-2)}
 td .edc img{width:22px;height:22px;border-radius:var(--r-2)}
+td .btn{min-height:28px;padding:0 var(--s-3);font-size:var(--t-1)}
 td .small{display:block;margin:var(--s-1) 0 var(--s-2);color:var(--ink-3)}
 td .small:last-child{margin-bottom:0}
 td.empty-row{text-align:center;color:var(--ink-3);padding:var(--s-6) var(--s-4)}
