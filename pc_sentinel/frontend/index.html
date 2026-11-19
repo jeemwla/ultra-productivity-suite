@@ -593,8 +593,8 @@ table.wr td .btn{height:30px;padding:0 10px}
 <div class="modal-bg" id="fb-bg" role="dialog" aria-modal="true" aria-labelledby="fb-h"><div class="modal">
   <h3 id="fb-h">Tell us what you think</h3><p>Ideas, bugs or something you love. It goes straight to the person who builds this.</p>
   <div class="seg" id="fb-kind" style="margin-bottom:10px"><button data-k="idea" aria-pressed="true">Idea</button><button data-k="bug" aria-pressed="false">Bug</button><button data-k="love" aria-pressed="false">Love it</button></div>
-  <textarea id="fb-msg" maxlength="1000" placeholder="What should be better?"></textarea>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="muted" id="fb-st">Anonymous</span><div style="display:flex;gap:8px"><button class="btn" id="fb-cancel">Cancel</button><button class="btn primary" id="fb-send">Send</button></div></div></div></div>
+  <textarea id="fb-msg" maxlength="1000" placeholder="What should be better?" aria-label="Your feedback" aria-describedby="fb-st"></textarea>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="muted" id="fb-st" role="status">Anonymous</span><div style="display:flex;gap:8px"><button class="btn" id="fb-cancel">Cancel</button><button class="btn primary" id="fb-send">Send</button></div></div></div></div>
 <div class="modal-bg" id="rn-bg" role="dialog" aria-modal="true" aria-labelledby="rn-h"><div class="modal">
   <h3 id="rn-h">Name this fan</h3><p>For example: Front intake, AIO pump, Rear exhaust. Leave empty to use the original name.</p>
   <input type="text" id="rn-in" maxlength="40" aria-label="Fan name">
@@ -1239,7 +1239,10 @@ $("fb-open").onclick = fbOpen; $("ab-fb").onclick = fbOpen; $("fb-cancel").oncli
 $("fb-kind").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; fbKind = b.dataset.k; $("fb-kind").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
 $("fb-send").onclick = async () => { const msg = $("fb-msg").value.trim(); if (msg.length < 3) { $("fb-st").textContent = "Write a few words first"; return; } $("fb-send").disabled = true; $("fb-st").textContent = "Sending…";
   try { await api("/api/feedback", { method: "POST", body: JSON.stringify({ kind: fbKind, message: msg }) }); $("fb-st").textContent = "Thank you! Sent."; $("fb-msg").value = ""; setTimeout(fbClose, 900); } catch (e) { $("fb-st").textContent = e.message; } $("fb-send").disabled = false; };
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { fbClose(); rnClose(); } });
+// Ctrl+Enter sends; near the 1000-character limit the status line counts down.
+$("fb-msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("fb-send").click(); } });
+$("fb-msg").addEventListener("input", () => { $("fb-st").textContent = feedbackStatus($("fb-msg").value.length); });
+function feedbackStatus(n){ const left = 1000 - n; return left <= 100 ? `${left} character${left === 1 ? "" : "s"} left` : "Anonymous · Ctrl+Enter sends"; }
 
 /* ---------- speed test ---------- */
 const G = { cx: 155, cy: 150, r: 118, start: -135, sweep: 270 }; const STOPS = [0, 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];

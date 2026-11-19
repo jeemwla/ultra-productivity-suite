@@ -154,3 +154,8 @@ test('chart values answer touch and pen, and speed history can be cleared',()=>{
  assert.match(html,/id="hist-clear">Clear history<\/button>/);
  assert.match(html,/store\.set\("speedHistory", \[\]\); hist\(\);/);
 });
+test('feedback has a label, a live status, Ctrl+Enter and a countdown near the limit',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function feedbackStatus','\n',),ctx);const f=vm.runInContext('feedbackStatus',ctx);
+ assert.equal(f(10),'Anonymous · Ctrl+Enter sends');assert.equal(f(950),'50 characters left');assert.equal(f(999),'1 character left');assert.equal(f(1000),'0 characters left');
+ assert.match(html,/<textarea id="fb-msg"[^>]*aria-label="Your feedback"/);assert.match(html,/id="fb-st" role="status"/);
+});
