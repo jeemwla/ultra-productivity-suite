@@ -181,6 +181,7 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 .presets{display:flex;gap:6px;margin-top:8px}
 .preset{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink-2)}
 .preset:hover{background:var(--surface-2)}
+.preset[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
 
 .switch-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
 .switch-row .t{font-weight:600;font-size:14px}
@@ -268,6 +269,47 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 .sound-unlock{display:none;margin-top:12px}
 .sound-unlock.show{display:inline-flex}
 
+/* Cards enter once; later refreshes update them in place without replaying the animation */
+.alarm{animation:none}
+.alarm.enter{animation:tin .2s ease-out}
+.alarm.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
+.tag.snz{background:var(--accent-soft);color:var(--ink)}
+.field-err{font-size:12px;color:var(--red-ink);margin-top:6px}
+.in[aria-invalid=true]{border-color:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+.clock .t{transition:opacity .3s}
+.clock .t.stale{opacity:.4}
+.next b{font-weight:600;color:var(--ink)}
+.tmr-end{font-size:12px;color:var(--ink-3);min-height:18px;font-variant-numeric:tabular-nums}
+.quick .recent{border-style:dashed}
+
+/* Recent activity */
+.hist{list-style:none;display:grid;gap:2px}
+.hist li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.hist li:first-child{border-top:0}
+.hist .what{color:var(--ink);overflow-wrap:anywhere}
+.hist .what span{color:var(--ink-3)}
+.hist time{color:var(--ink-3);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist .k{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.hist .k.ok{background:var(--green-soft);color:var(--green)}
+.hist .k.bad{background:var(--red-soft);color:var(--red-ink)}
+.hist .k.warn{background:var(--amber-soft);color:var(--ink)}
+.banner.warn .x{margin-left:auto;flex:none}
+
+/* Ringing screen extras */
+.ring.show .ring-box{animation:ring-in .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes ring-in{from{opacity:0;transform:translateY(14px) scale(.97)}}
+.ring-clock{font:600 15px/1 var(--font-display);color:#c9a5a7;margin-top:10px;font-variant-numeric:tabular-nums}
+.ring-bar{height:4px;border-radius:999px;background:rgba(255,149,146,.18);overflow:hidden;margin:10px auto 0;max-width:280px}
+.ring-bar span{display:block;height:100%;width:100%;background:#ff6369;border-radius:inherit;transform-origin:left;transition:transform 1s linear}
+.ring-warn{margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(255,178,36,.14);color:#ffd9a0;font-size:13px;text-align:left}
+.target .ok{color:#7ee2a8}
+.target .next{background:rgba(255,149,146,.25);border-radius:3px}
+.target .bad{background:#ff6369;color:#15090b;border-radius:3px}
+.phrase-meter{font-size:12px;color:#c9a5a7;margin-top:-6px;margin-bottom:10px;min-height:16px}
+.shake{animation:shake .32s ease-in-out}
+@keyframes shake{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+
 @media (max-width:1100px){.grid{grid-template-columns:1fr}#alarms-card{order:-1}}
 @media (max-width:640px){
   .wrap{padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
@@ -302,6 +344,11 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     <button type="button" role="tab" id="tab-timer" aria-controls="panel-timer" aria-selected="false" tabindex="-1">Timer<span class="seg-badge" id="timer-badge" hidden></span></button>
   </div>
 
+  <div class="banner warn" id="missed-warn" role="status" hidden>
+    <span aria-hidden="true">⚠</span>
+    <div id="missed-warn-text"></div>
+    <button type="button" class="btn sm ghost x" id="missed-ok">Got it</button>
+  </div>
   <div class="banner bad" id="clock-warn" role="alert" hidden>
     <span aria-hidden="true">⚠</span>
     <div id="clock-warn-text"></div>
@@ -319,7 +366,8 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
         <form class="card-b" id="form" novalidate>
           <div class="field">
             <label class="f" for="f-label">Name</label>
-            <input class="in" id="f-label" maxlength="80" placeholder="Morning wake-up" value="Wake up" required />
+            <input class="in" id="f-label" maxlength="80" placeholder="Morning wake-up" value="Wake up" required aria-describedby="f-label-err" />
+            <div class="field-err" id="f-label-err" hidden></div>
           </div>
           <div class="row2">
             <div class="field">
@@ -332,7 +380,8 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
               <select class="in" id="f-duration">
                 <option value="60">1 minute</option><option value="300">5 minutes</option>
                 <option value="600" selected>10 minutes</option><option value="900">15 minutes</option>
-                <option value="1800">30 minutes</option>
+                <option value="1800">30 minutes</option><option value="2700">45 minutes</option>
+                <option value="3600">1 hour</option>
               </select>
             </div>
           </div>
@@ -352,11 +401,21 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
             <button class="in time-trigger" type="button" id="date-picker-open" aria-haspopup="dialog" aria-expanded="false" aria-controls="date-picker" aria-labelledby="date-label date-picker-value"><span id="date-picker-value">Choose a date</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button>
             <div class="hint">One-time alarm. It turns itself off after ringing.</div>
           </div>
-          <div class="field">
-            <label class="f" for="f-math">Wake-up math</label>
-            <select class="in" id="f-math">
-              <option value="0" selected>Off</option><option value="1">Easy: one sum to solve</option><option value="2">Hard: bigger numbers</option>
-            </select>
+          <div class="row2">
+            <div class="field">
+              <label class="f" for="f-math">Wake-up math</label>
+              <select class="in" id="f-math">
+                <option value="0" selected>Off</option><option value="1">Easy: one sum to solve</option><option value="2">Hard: bigger numbers</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="f" for="f-snooze">Snooze</label>
+              <select class="in" id="f-snooze" aria-describedby="snooze-hint">
+                <option value="0" selected>Off</option><option value="5">5 min, 3 times</option><option value="9">9 min, 3 times</option>
+                <option value="10">10 min, 3 times</option><option value="15">15 min, 3 times</option>
+              </select>
+              <div class="hint" id="snooze-hint" hidden>Code Red alarms can't snooze.</div>
+            </div>
           </div>
           <div class="cr" id="cr">
             <div class="switch-row">
@@ -365,7 +424,8 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
             </div>
             <div class="phrase">
               <label class="f" for="f-phrase">Phrase to type</label>
-              <input class="in" id="f-phrase" maxlength="120" value="I am out of bed and ready" />
+              <input class="in" id="f-phrase" maxlength="120" value="I am out of bed and ready" aria-describedby="f-phrase-err" />
+              <div class="field-err" id="f-phrase-err" hidden></div>
               <div class="hint">Case-sensitive.</div>
             </div>
           </div>
@@ -406,7 +466,11 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     <div class="stack activity-stack">
     <section class="card" aria-labelledby="h-list" id="alarms-card">
       <div class="card-h"><h2 id="h-list">Alarms</h2><span class="sub" id="count"></span></div>
-      <div class="card-b"><div class="list" id="list" aria-live="polite"></div></div>
+      <div class="card-b"><div class="list" id="list"></div></div>
+    </section>
+    <section class="card" aria-labelledby="h-history" id="history-card">
+      <div class="card-h"><h2 id="h-history">Recent activity</h2><span class="sub" id="history-sub"></span></div>
+      <div class="card-b"><ol class="hist" id="history"><li><span class="what"><span>Loading…</span></span></li></ol></div>
     </section>
     </div>
   </div>
@@ -474,10 +538,14 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   <div class="ring-box">
     <div class="k" id="ring-kind">Alarm</div>
     <h2 id="ring-title">Wake up</h2>
-    <div class="cd" id="ring-cd">10:00</div>
+    <div class="ring-clock" id="ring-clock"></div>
+    <div class="cd" id="ring-cd" role="timer" aria-live="off">10:00</div>
     <div class="cds">until it stops on its own</div>
+    <div class="ring-bar" aria-hidden="true"><span id="ring-bar"></span></div>
+    <div class="ring-warn" id="ring-warn" role="status" hidden></div>
     <div id="ring-phrase-wrap">
       <div class="target" id="ring-target" aria-label="Phrase to type"></div>
+      <div class="phrase-meter" id="ring-meter" aria-live="polite"></div>
     </div>
     <div id="ring-math-wrap" class="field" hidden>
       <label class="f" for="ring-math">Solve: <span id="ring-math-q"></span></label>
@@ -486,12 +554,13 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     <input class="in" id="ring-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Type the phrase above" />
     <div class="err" id="ring-err" role="alert"></div>
     <button type="button" class="btn danger block" id="ring-stop">Stop alarm</button>
+    <button type="button" class="btn block ring-more" id="ring-snooze" hidden>Snooze</button>
     <button type="button" class="btn block ring-more" id="ring-more" hidden>Add 1 minute</button>
     <div class="meta" id="ring-meta"></div>
   </div>
 </div>
 
-<div class="toasts" id="toasts" aria-live="assertive"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -500,12 +569,24 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":
 const store = { get(k, d){ try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
                 set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 
-function toast(msg, isErr=false){
+/* A short message in the corner. Errors are announced right away; a click dismisses one; an optional action
+   (such as Undo) gets a button and a little more time. At most four stay on screen. */
+function toast(msg, isErr=false, action=null){
   const t = document.createElement("div");
   t.className = "toast" + (isErr ? " err" : "");
-  t.textContent = msg;
-  $("toasts").appendChild(t);
-  setTimeout(() => t.remove(), isErr ? 6000 : 3200);
+  if (isErr) t.setAttribute("role", "alert");
+  const text = document.createElement("span"); text.textContent = msg; t.appendChild(text);
+  if (action) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn sm"; b.textContent = action.label;
+    b.style.cssText = "margin-left:auto;height:26px;background:transparent;color:inherit;border-color:currentColor";
+    b.onclick = (e) => { e.stopPropagation(); t.remove(); action.run(); };
+    t.appendChild(b);
+  }
+  t.onclick = () => t.remove();
+  const box = $("toasts"); box.appendChild(t);
+  while (box.children.length > 4) box.firstElementChild.remove();
+  setTimeout(() => t.remove(), action ? 7000 : (isErr ? 6000 : 3200));
 }
 async function api(path, opts={}){
   const res = await fetch(path, { headers: {"Content-Type":"application/json"}, ...opts });
@@ -528,6 +609,9 @@ const pretty = (n) => {
 
 /* ---------- Time format ---------- */
 const pad2 = (n) => String(n).padStart(2,"0");
+/* Alarms ring by the engine's clock. engineSkew = engine time minus this device's time, in ms. */
+let engineSkew = 0;
+const engineNow = () => new Date(Date.now() + engineSkew);
 const localeUses24 = (() => { try { return /^h2/.test(new Intl.DateTimeFormat(undefined,{hour:"numeric"}).resolvedOptions().hourCycle || ""); } catch { return false; } })();
 let clock24 = store.get("clock24", localeUses24) === true;
 function fmtClock(hhmm, use24 = clock24){
@@ -561,6 +645,60 @@ function timeAfter(now, minutes){
   const d = new Date(now.getTime() + minutes * 60000);
   if (d.getSeconds() || d.getMilliseconds()) d.setMinutes(d.getMinutes() + 1, 0, 0);
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/* ---------- Summaries ---------- */
+const WEEK = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+/* ["Mon",...,"Fri"] -> "Weekdays"; ["Sat","Sun"] -> "Weekends"; all seven -> "Every day"; otherwise "Mon, Wed". */
+function repeatText(days){
+  const set = WEEK.filter(d => (days || []).includes(d)), key = set.join(" ");
+  if (set.length === 7) return "Every day";
+  if (key === "Mon Tue Wed Thu Fri") return "Weekdays";
+  if (key === "Sat Sun") return "Weekends";
+  return set.join(", ");
+}
+/* "today", "tomorrow", "yesterday", "Thu" (within a week) or "Nov 30" for a moment relative to now. */
+function dayWord(at, now){
+  const a = new Date(at.getFullYear(), at.getMonth(), at.getDate()), b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((a - b) / 86400000);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  if (days > 1 && days < 7) return at.toLocaleDateString(undefined, {weekday:"short"});
+  return at.toLocaleDateString(undefined, {month:"short", day:"numeric"});
+}
+/* Mirrors the engine: curly quotes, dashes and doubled spaces from phone keyboards don't count; letters do. */
+function normalizePhrase(s){
+  const map = {"‘":"'","’":"'","‚":"'","′":"'","“":'"',"”":'"',"„":'"',"–":"-","—":"-","−":"-"," ":" "};
+  return String(s ?? "").replace(/[‘’‚′“”„–—− ]/g, c => map[c]).trim().split(/\s+/).filter(Boolean).join(" ");
+}
+/* How much of a Code Red phrase is typed correctly so far: {good, total, wrong, done}. wrong means the typed text
+   stopped matching at character `good`. Leading spaces and a trailing space while typing are fine. */
+function phraseProgress(target, typed){
+  const t = normalizePhrase(target), raw = String(typed ?? "").replace(/^\s+/, "");
+  const y = normalizePhrase(raw) + (/\s$/.test(raw) && raw.trim() ? " " : "");
+  let good = 0; while (good < y.length && good < t.length && y[good] === t[good]) good++;
+  return {good, total:t.length, wrong:good < y.length, done:y.trim() === t && !!t};
+}
+/* Keep the last three custom timer lengths (the fixed presets already have a button). */
+function rememberDuration(list, seconds, presets){
+  if (presets.includes(seconds)) return list.slice(0, 3);
+  return [seconds, ...list.filter(s => s !== seconds)].slice(0, 3);
+}
+const HISTORY_KINDS = {
+  audio_started:["Rang","ok"], audio_failed:["Speaker didn't start","bad"], dismissed:["Stopped",""], expired:["Rang out","warn"],
+  snoozed:["Snoozed",""], missed:["Missed","bad"], clock_changed:["Clock changed","warn"],
+  preview_audio_started:["Preview",""], preview_audio_failed:["Preview failed","bad"]
+};
+/* One ring history event as a row, or null for bookkeeping events the page doesn't need to show. */
+function historyRow(e, now){
+  const k = HISTORY_KINDS[e.kind]; if (!k) return null;
+  const at = new Date(e.ts), ok = Number.isFinite(+at);
+  const when = ok ? `${dayWord(at, now).replace(/^./, c => c.toUpperCase())} ${clockText(`${pad2(at.getHours())}:${pad2(at.getMinutes())}`)}` : "";
+  let detail = String(e.detail || "");
+  if (e.kind === "dismissed") detail = detail.replace(/^after (\d+) s$/, (_, s) => `after ${+s < 90 ? s + " s" : Math.round(s / 60) + " min"}`);
+  if (/audio_started$/.test(e.kind) || e.kind === "expired") detail = "";
+  return {label:k[0], tone:k[1], name:e.label || (e.kind === "clock_changed" ? "PC clock" : "Alarm"), detail, when, iso:ok ? e.ts : ""};
 }
 
 /* ---------- Date helpers ---------- */
@@ -608,31 +746,43 @@ function wheelTyped(buffer, values, format){
   return values.findIndex(v => String(format(v)).toLowerCase().startsWith(b));
 }
 /* One scrollable column. Native scrolling gives touch and trackpad momentum, CSS snap lands on a row, a mouse can
-   drag and flick it, the wheel moves one row per notch, and the keys work like a spin button. */
+   drag and flick it, the wheel moves one row per notch, and the keys work like a spin button. A looping column
+   (minutes, hours) holds three copies of its values and quietly recentres after each stop, so 59 sits right above
+   00 and spinning past either end never hits a wall. Only the rows near the middle are restyled per frame. */
 function createWheel(el, opts){
-  let values = opts.values, index = 0, pending = null, raf = 0, settleTimer = 0, inertia = 0, typed = "", typedAt = 0, drag = null, wheelAcc = 0;
+  let values = opts.values, index = 0, pendingRow = null, row = 0, raf = 0, settleTimer = 0, inertia = 0, typed = "", typedAt = 0, drag = null, wheelAcc = 0;
+  const reps = opts.loop ? 3 : 1;
+  let base = opts.loop ? values.length : 0; // the middle copy starts at this row
   el.classList.add("wheel"); if (opts.narrow) el.classList.add("narrow");
   el.tabIndex = 0; el.setAttribute("role","spinbutton"); el.setAttribute("aria-label", opts.label);
   const track = document.createElement("div"); track.className = "wheel-track"; el.appendChild(track);
-  const item = (i) => track.children[i];
+  const rows = () => values.length * reps;
+  const logical = (r) => opts.loop ? ((r - base) % values.length + values.length) % values.length : Math.max(0, Math.min(values.length - 1, r));
+  const rowAt = (top) => opts.loop ? Math.max(0, Math.min(rows() - 1, Math.round(top / WHEEL_ITEM))) : wheelIndex(top, values.length);
+  const copies = (i) => Array.from({length:reps}, (_, c) => track.children[c * values.length + i]).filter(Boolean);
   function build(){
     track.innerHTML = "";
-    values.forEach((v,i) => { const it = document.createElement("div"); it.className = "wheel-item"; it.textContent = opts.format(v); it.dataset.i = String(i); track.appendChild(it); });
+    for (let c = 0; c < reps; c++) values.forEach((v,i) => { const it = document.createElement("div"); it.className = "wheel-item"; it.textContent = opts.format(v); it.dataset.i = String(i); if (c !== (opts.loop ? 1 : 0)) it.setAttribute("aria-hidden", "true"); track.appendChild(it); });
   }
+  let painted = [];
   function paint(){
-    raf = 0; const top = el.scrollTop || 0;
-    for (let i = 0; i < values.length; i++) {
-      const d = (i * WHEEL_ITEM - top) / WHEEL_ITEM, a = Math.min(Math.abs(d), 3), it = item(i);
-      if (!it || !it.style) continue;
-      if (a >= 3) { if (it.style.opacity !== "0") { it.style.opacity = "0"; } continue; }
+    raf = 0; const top = el.scrollTop || 0, mid = top / WHEEL_ITEM, from = Math.max(0, Math.floor(mid) - 3), to = Math.min(rows() - 1, Math.ceil(mid) + 3);
+    const now = [];
+    for (let r = from; r <= to; r++) {
+      const it = track.children[r]; if (!it || !it.style) continue;
+      const d = r - mid, a = Math.min(Math.abs(d), 3);
       it.style.transform = `rotateX(${(-d * 20).toFixed(1)}deg) scale(${(1 - a * .07).toFixed(3)})`;
-      it.style.opacity = (1 - a * .24).toFixed(2);
+      it.style.opacity = a >= 3 ? "0" : (1 - a * .24).toFixed(2); now.push(r);
     }
+    painted.forEach(r => { if (r < from || r > to) { const it = track.children[r]; if (it && it.style) it.style.opacity = "0"; } });
+    painted = now;
   }
   const schedulePaint = () => { if (!raf && typeof requestAnimationFrame === "function") raf = requestAnimationFrame(paint); };
   function commit(i, notify = true){
     i = Math.max(0, Math.min(values.length - 1, i));
-    const changed = i !== index; item(index)?.classList?.remove("on"); index = i; item(i)?.classList?.add("on");
+    const changed = i !== index;
+    if (index >= 0) copies(index).forEach(n => n?.classList?.remove("on"));
+    index = i; copies(i).forEach(n => n?.classList?.add("on"));
     const v = values[i];
     el.setAttribute("aria-valuenow", String(typeof v === "number" ? v : i));
     el.setAttribute("aria-valuetext", `${opts.format(v)}${opts.unit ? " " + opts.unit : ""}`);
@@ -640,26 +790,33 @@ function createWheel(el, opts){
     el.setAttribute("aria-valuemax", String(typeof values[values.length-1] === "number" ? values[values.length-1] : values.length - 1));
     if (changed && notify) opts.onChange?.(v);
   }
-  function scrollToIndex(i, smooth){
-    if (typeof el.scrollTo === "function") el.scrollTo({top:i * WHEEL_ITEM, behavior:smooth && !reduceMotion() ? "smooth" : "auto"});
-    else el.scrollTop = i * WHEEL_ITEM;
+  function scrollToRow(r, smooth){
+    if (typeof el.scrollTo === "function") el.scrollTo({top:r * WHEEL_ITEM, behavior:smooth && !reduceMotion() ? "smooth" : "auto"});
+    else el.scrollTop = r * WHEEL_ITEM;
     schedulePaint();
+  }
+  function recentre(){ // same value, middle copy, no visible jump
+    if (!opts.loop || (row >= base && row < base + values.length)) return;
+    row = base + logical(row); el.scrollTop = row * WHEEL_ITEM; schedulePaint();
   }
   function settle(){
     if (drag) return;
-    const i = pending ?? wheelIndex(el.scrollTop || 0, values.length); pending = null; commit(i);
-    if (Math.abs((el.scrollTop || 0) - i * WHEEL_ITEM) > 1) scrollToIndex(i, true);
+    const r = pendingRow ?? rowAt(el.scrollTop || 0); pendingRow = null; row = r; commit(logical(r));
+    if (Math.abs((el.scrollTop || 0) - r * WHEEL_ITEM) > 1) scrollToRow(r, true); else recentre();
     setTimeout(() => el.classList.remove("free"), 320);
   }
-  function move(delta, loop = false){
-    const from = pending ?? index, to = wheelStep(from, delta, values.length, loop && !!opts.loop);
+  function move(delta, wrap = false){
+    const from = pendingRow ?? row, li = logical(from);
+    let to;
+    if (opts.loop && (wrap || reps > 1)) to = Math.max(0, Math.min(rows() - 1, from + delta));
+    else to = from + (Math.max(0, Math.min(values.length - 1, li + delta)) - li);
     if (to === from) return;
-    pending = to; commit(to); scrollToIndex(to, Math.abs(to - from) <= Math.abs(delta));
+    pendingRow = to; commit(logical(to)); scrollToRow(to, true);
     clearTimeout(settleTimer); settleTimer = setTimeout(settle, 300);
   }
   el.addEventListener("scroll", () => {
     schedulePaint();
-    if (pending === null && !inertia) { const i = wheelIndex(el.scrollTop || 0, values.length); if (i !== index) commit(i); }
+    if (pendingRow === null && !inertia) { const i = logical(rowAt(el.scrollTop || 0)); if (i !== index) commit(i); }
     clearTimeout(settleTimer); settleTimer = setTimeout(settle, 140);
   }, {passive:true});
   el.addEventListener("wheel", (e) => {
@@ -671,7 +828,7 @@ function createWheel(el, opts){
   }, {passive:false});
   el.addEventListener("pointerdown", (e) => {
     if (e.pointerType !== "mouse" || e.button !== 0) return;
-    if (inertia) cancelAnimationFrame(inertia); inertia = 0; pending = null;
+    if (inertia) cancelAnimationFrame(inertia); inertia = 0; pendingRow = null;
     drag = {y:e.clientY, top:el.scrollTop, moved:false, samples:[[performance.now(), e.clientY]]};
     el.setPointerCapture?.(e.pointerId); el.classList.add("free"); e.preventDefault(); el.focus({preventScroll:true});
   });
@@ -704,20 +861,21 @@ function createWheel(el, opts){
   el.addEventListener("keydown", (e) => {
     const big = opts.page || 5, map = {ArrowUp:1, ArrowDown:-1, PageUp:big, PageDown:-big};
     if (e.key in map) { e.preventDefault(); move(map[e.key], true); return; }
-    if (e.key === "Home" || e.key === "End") { e.preventDefault(); move((e.key === "Home" ? 0 : values.length - 1) - (pending ?? index)); return; }
+    const current = logical(pendingRow ?? row);
+    if (e.key === "Home" || e.key === "End") { e.preventDefault(); move((e.key === "Home" ? 0 : values.length - 1) - current); return; }
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && /[0-9a-z]/i.test(e.key)) {
       const now = performance.now(); typed = (now - typedAt < 1000 ? typed : "") + e.key; typedAt = now;
       let i = wheelTyped(typed, values, opts.format);
       if (i < 0) { typed = e.key; i = wheelTyped(typed, values, opts.format); }
-      if (i >= 0) { e.preventDefault(); move(i - (pending ?? index)); }
+      if (i >= 0) { e.preventDefault(); move(i - current); }
     }
   });
-  build(); commit(0, false);
+  build(); row = base; commit(0, false); el.scrollTop = row * WHEEL_ITEM;
   return {
-    get value(){ return values[pending ?? index]; },
-    set(v, smooth = false){ const i = values.indexOf(v); if (i < 0) return; pending = null; commit(i, false); scrollToIndex(i, smooth); },
-    setValues(next, v){ values = next; build(); index = -1; this.set(next.includes(v) ? v : next[0]); },
-    refresh(){ scrollToIndex(index, false); paint(); },
+    get value(){ return values[pendingRow !== null ? logical(pendingRow) : index]; },
+    set(v, smooth = false){ const i = values.indexOf(v); if (i < 0) return; pendingRow = null; commit(i, false); row = base + i; scrollToRow(row, smooth); },
+    setValues(next, v){ values = next; base = opts.loop ? next.length : 0; painted = []; build(); index = -1; this.set(next.includes(v) ? v : next[0]); },
+    refresh(){ scrollToRow(row, false); paint(); },
     el
   };
 }
@@ -745,6 +903,8 @@ function durationText(seconds){
   const h = Math.floor(seconds/3600), m = Math.floor(seconds/60) % 60, s = seconds % 60;
   return [h && `${h} hr`, m && `${m} min`, s && `${s} sec`].filter(Boolean).join(" ") || "0 sec";
 }
+/* The wall-clock minute a countdown with `seconds` left finishes, as "HH:MM". */
+function timeAfterSeconds(now, seconds){ const d = new Date(now.getTime() + Math.ceil(seconds) * 1000); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
 function timerRemaining(t, elapsed){ return Math.max(0, t.remaining_sec - (t.state === "running" ? elapsed/1000 : 0)); }
 const timersFresh = () => !!timerSnap && performance.now() - timerReceivedAt < 10000;
 /* Everything a timer card shows, from one timer, its remaining seconds and the connection state. */
@@ -758,6 +918,7 @@ function timerView(t, remaining, fresh = true, delivery = deliveryEnabled){
     total: `of ${timerText(t.duration_sec)}`,
     progress: state === "idle" ? 1 : (t.duration_sec ? Math.max(0, Math.min(1, remaining / t.duration_sec)) : 0),
     status, cls: state,
+    ends: state === "running" && remaining > 0 ? `Ends ${clockText(timeAfterSeconds(engineNow(), remaining))}` : (state === "paused" ? "Paused" : ""),
     toggleAction: toggle[0], toggleLabel: toggle[1],
     toggleDisabled: off || (runs && !delivery) || (state === "running" && remaining <= 0),
     addDisabled: off || (state !== "paused" && state !== "idle" && !delivery) || (state === "running" && remaining <= 0) || (state !== "finished" && state !== "expired" && remaining + 60 > 86400),
@@ -804,6 +965,15 @@ async function createTimer(spec){
 }
 
 /* ---------- Popovers ---------- */
+/* Left and Right move between the columns of a wheel group, Enter confirms (sets the time, starts the timer). */
+function wireWheelGroup(group, onEnter){
+  group.addEventListener("keydown", (e) => {
+    const cols = [...group.querySelectorAll(".wheel")].filter(w => !w.hidden), i = cols.indexOf(document.activeElement);
+    if (i < 0) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); cols[Math.max(0, Math.min(cols.length - 1, i + (e.key === "ArrowLeft" ? -1 : 1)))].focus({preventScroll:true}); }
+    else if (e.key === "Enter") { e.preventDefault(); setTimeout(onEnter, 0); }
+  });
+}
 function placePop(dialog, anchor){
   const narrow = (() => { try { return matchMedia("(max-width: 640px)").matches; } catch { return false; } })();
   dialog.classList.toggle("sheet", narrow || !anchor);
@@ -889,6 +1059,7 @@ function initTimePicker(){
     $("tp-typed").classList.remove("bad"); $("tp-hour").focus({preventScroll:true});
   };
   $("tp-24").onclick = () => tpSet24(!clock24);
+  wireWheelGroup($("tp-wheels"), () => { tpDraft = tpRead(); $("tp-apply").click(); });
   $("tp-typed").addEventListener("input", () => {
     const v = parseTypedTime($("tp-typed").value), empty = !$("tp-typed").value.trim();
     $("tp-typed").classList.toggle("bad", !v && !empty);
@@ -978,12 +1149,19 @@ function tmFormState(){
   $("tm-presets").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.seconds === total)));
   $("tm-note").textContent = !deliveryEnabled ? deliveryNotice() : "Rings on your alarm speaker with your Sound settings (Alarm tab), even with this window closed.";
 }
+/* Fixed presets, then up to three custom lengths used recently (dashed, so they read as "yours"). */
+function renderTimerPresets(){
+  const recent = store.get("timerRecent", []).filter(s => Number.isInteger(s) && s > 0 && s <= 86400 && !TM_PRESETS.includes(s));
+  $("tm-presets").innerHTML = TM_PRESETS.map(s => `<button type="button" data-seconds="${s}" aria-pressed="false">${s < 3600 ? s/60 + " min" : "1 hr"}</button>`).join("")
+    + recent.map(s => `<button type="button" class="recent" data-seconds="${s}" aria-pressed="false" title="Used recently">${durationText(s)}</button>`).join("");
+  tmFormState();
+}
 function timerCard(t){
   const el = document.createElement("article");
   el.className = "tmr"; el.dataset.id = t.id;
   el.innerHTML = `<div class="tmr-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="54"/><circle class="bar" cx="60" cy="60" r="54" pathLength="100"/></svg>
     <div class="tmr-mid"><div class="tmr-left" role="timer" aria-live="off"></div><div class="tmr-total"></div></div></div>
-    <div class="tmr-name"></div><span class="tag tmr-state" role="status"></span>
+    <div class="tmr-name"></div><span class="tag tmr-state" role="status"></span><div class="tmr-end"></div>
     <div class="tmr-actions"><button type="button" class="btn sm primary" data-act="toggle"></button><button type="button" class="btn sm" data-act="add">+1 min</button>
     <button type="button" class="btn sm ghost" data-act="reset">Reset</button><button type="button" class="btn sm ghost" data-act="delete">Delete</button></div>`;
   return el;
@@ -991,7 +1169,7 @@ function timerCard(t){
 function paintTimer(el, t, v){
   const set = (sel, prop, val) => { const n = el.querySelector(sel); if (n[prop] !== val) n[prop] = val; };
   if (el.dataset.cls !== v.cls) { el.className = `tmr ${v.cls}`; el.dataset.cls = v.cls; }
-  set(".tmr-left", "textContent", v.text); set(".tmr-total", "textContent", v.total); set(".tmr-state", "textContent", v.status);
+  set(".tmr-left", "textContent", v.text); set(".tmr-total", "textContent", v.total); set(".tmr-state", "textContent", v.status); set(".tmr-end", "textContent", v.ends || "");
   set(".tmr-name", "textContent", t.label + (t.code_red ? " · Code Red" : ""));
   el.querySelector(".tmr-left").setAttribute("aria-label", `${t.label}: ${v.text} left`);
   el.querySelector(".bar").style.strokeDashoffset = String((100 * (1 - v.progress)).toFixed(2));
@@ -1042,10 +1220,11 @@ function initTimers(){
     m: createWheel($("tm-m"), {label:"Minutes", unit:"minutes", values:range(60), format:pad2, loop:true, page:10, onChange:tmFormState}),
     s: createWheel($("tm-s"), {label:"Seconds", unit:"seconds", values:range(60), format:pad2, loop:true, page:10, onChange:tmFormState})
   };
-  $("tm-presets").innerHTML = TM_PRESETS.map(s => `<button type="button" data-seconds="${s}" aria-pressed="false">${s < 3600 ? s/60 + " min" : "1 hr"}</button>`).join("");
+  renderTimerPresets();
   $("tm-presets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) tmSet(+b.dataset.seconds, true); });
   tmSet(store.get("timerLast", 300), false);
   $("tm-codered").onchange = () => $("tm-cr").classList.toggle("on", $("tm-codered").checked);
+  wireWheelGroup($("tm-wheels"), () => { if (!$("tm-start").disabled) $("timer-form").requestSubmit(); });
   $("timer-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const total = tmSeconds(), codeRed = $("tm-codered").checked, phrase = $("tm-phrase").value.trim();
@@ -1054,7 +1233,10 @@ function initTimers(){
     unlockAudio();
     const label = $("tm-label").value.trim() || durationText(total);
     const id = await createTimer({duration_sec:total, label, code_red:codeRed, custom_phrase:codeRed ? phrase : "", ring_duration_sec:+$("tm-ring").value});
-    if (id) { store.set("timerLast", total); $("tm-label").value = ""; toast(`${label} started`); kickTimerLoop(); }
+    if (id) {
+      store.set("timerLast", total); store.set("timerRecent", rememberDuration(store.get("timerRecent", []), total, TM_PRESETS));
+      $("tm-label").value = ""; renderTimerPresets(); toast(`${label} started`); kickTimerLoop();
+    }
   });
   $("timer-list").addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]"), card = b?.closest(".tmr"); if (!b || !card) return;
@@ -1103,33 +1285,50 @@ DAYS.forEach((d) => {
 });
 const selectedDays = () => [...daysEl.children].filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.dataset.day);
 function setDays(list){ [...daysEl.children].forEach(b => b.setAttribute("aria-pressed", list.includes(b.dataset.day))); syncDate(); }
+const PRESET_DAYS = {wk:DAYS.slice(0,5), we:["Sat","Sun"], all:DAYS, none:[]};
 function syncDate(){
-  const once = selectedDays().length === 0;
+  const days = selectedDays(), once = days.length === 0;
   $("date-field").hidden = !once;
   if (once && !$("f-date").value) {
-    const now = new Date(), [h,m] = $("f-time").value.split(":").map(Number), t = new Date(now);
+    // The engine's clock decides when "today" ends, not this device's.
+    const now = engineNow(), [h,m] = $("f-time").value.split(":").map(Number), t = new Date(now);
     t.setHours(h, m, 0, 0); if (t <= now) t.setDate(t.getDate()+1);
-    $("f-date").value = t.toLocaleDateString("en-CA");
+    $("f-date").value = `${t.getFullYear()}-${pad2(t.getMonth()+1)}-${pad2(t.getDate())}`;
   }
+  document.querySelectorAll(".preset").forEach(p => p.setAttribute("aria-pressed", String(PRESET_DAYS[p.dataset.p].join() === days.join())));
   if (typeof syncDateLabel === "function") syncDateLabel();
 }
-document.querySelectorAll(".preset").forEach(p => p.onclick = () => setDays({wk:DAYS.slice(0,5), we:["Sat","Sun"], all:DAYS, none:[]}[p.dataset.p]));
-$("f-codered").onchange = () => $("cr").classList.toggle("on", $("f-codered").checked);
+document.querySelectorAll(".preset").forEach(p => p.onclick = () => setDays(PRESET_DAYS[p.dataset.p]));
+/* Code Red and snooze exclude each other: the phrase is there to get you up. */
+function syncSnooze(){
+  const red = $("f-codered").checked;
+  $("cr").classList.toggle("on", red);
+  if (red) $("f-snooze").value = "0";
+  $("f-snooze").disabled = red; $("snooze-hint").hidden = !red;
+}
+$("f-codered").onchange = syncSnooze;
+/* Inline messages under a field, read out with it; cleared as soon as the person types. */
+function fieldError(id, msg){
+  const input = $(id), box = $(id + "-err");
+  input.setAttribute("aria-invalid", msg ? "true" : "false"); box.textContent = msg || ""; box.hidden = !msg;
+  if (msg) input.focus();
+}
+function clearFieldErrors(){ ["f-label","f-phrase"].forEach(id => fieldError(id, "")); }
+["f-label","f-phrase"].forEach(id => $(id).addEventListener?.("input", () => { if ($(id).getAttribute("aria-invalid") === "true") fieldError(id, ""); }));
 
 /* ---------- Alarms ---------- */
-let alarms = [], editingId = null;
-/* Alarms ring by the engine's clock. engineSkew = engine time minus this device's time, in ms. */
-let engineSkew = 0;
-const engineNow = () => new Date(Date.now() + engineSkew);
+let alarms = [], editingId = null, flashId = null;
+const seenAlarmIds = new Set();
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 function nextRing(a, now = engineNow()){
-  if (!a.enabled) return null;
+  if (!a.enabled && !a.snoozed_until) return null;
   // Use the engine's occurrence decision. The value is expressed in its local
   // wall clock, matching engineNow() and the clock shown at the top of the page.
   if (Object.prototype.hasOwnProperty.call(a, "next_ring_local")) {
     const at = a.next_ring_local && new Date(a.next_ring_local);
     return at && Number.isFinite(+at) && at > now ? at : null;
   }
+  if (!a.enabled) return null;
   // Compatibility with an older engine during an update.
   const [h,m] = a.time_hhmm.split(":").map(Number);
   if (a.target_date) {
@@ -1151,14 +1350,26 @@ function missed(a, now = engineNow()){
   const at = new Date(`${a.target_date}T${a.time_hhmm}:00`);
   return now - at > 30 * 60000;
 }
+/* "in 42 min", "in 13h 6m", "in 6 days" */
 const inText = (d, now = engineNow()) => {
   const mins = Math.max(1, Math.round((d - now)/60000)), h = Math.floor(mins/60), m = mins%60;
-  return h >= 24 ? `in ${Math.floor(h/24)}d ${h%24}h` : `in ${h ? h+"h " : ""}${m}m`;
+  if (mins < 60) return `in ${mins} min`;
+  if (h < 24) return `in ${h}h${m ? " " + m + "m" : ""}`;
+  const days = Math.floor(h/24); return `in ${days} day${days > 1 ? "s" : ""}`;
 };
+const snoozedUntil = (a, now = engineNow()) => { const at = a.snoozed_until && new Date(a.snoozed_until); return at && Number.isFinite(+at) && at > now ? at : null; };
+/* The soonest alarm and when, so the summary can name it: "Next alarm in 13h 6m · Gym, tomorrow 5:45 AM". */
+function nextAlarm(list, now = engineNow()){
+  let best = null;
+  for (const a of list) { const at = nextRing(a, now); if (at && (!best || at < best.at)) best = {a, at}; }
+  return best;
+}
 function nextAlarmText(){
   if (!deliveryEnabled) return deliveryNotice();
-  const next = alarms.map(a => nextRing(a)).filter(Boolean).sort((x,y) => x - y)[0];
-  return next ? `Next alarm ${inText(next)}` : "";
+  const now = engineNow(), next = nextAlarm(alarms, now);
+  if (!next) return "";
+  const hhmm = `${pad2(next.at.getHours())}:${pad2(next.at.getMinutes())}`;
+  return `Next alarm ${inText(next.at, now)} · ${next.a.label}, ${dayWord(next.at, now)} ${clockText(hhmm)}`;
 }
 function sorted(){
   const now = engineNow();
@@ -1171,41 +1382,66 @@ function sorted(){
 }
 function statusTag(a){
   if (!deliveryEnabled) return `<span class="tag">${deliveryEdition === "Dev" ? "Saved Dev schedule" : "Saved schedule"}</span><span class="tag">${deliveryNotice()}</span>`;
-  if (missed(a)) return `<span class="tag miss" title="The alarm engine wasn't running on the right clock at that time">Missed</span>`;
+  const snz = snoozedUntil(a);
+  if (snz) return `<span class="tag snz">Snoozed until ${clockText(`${pad2(snz.getHours())}:${pad2(snz.getMinutes())}`)}</span>`;
+  if (missed(a)) return `<span class="tag miss" title="The PC was off or asleep at that time, so it couldn't ring">Missed</span>`;
   if (a.target_date && !a.enabled && a.last_triggered_date) return `<span class="tag ok">Rang</span>`;
   const n = nextRing(a);
   return n ? `<span class="tag">Rings ${inText(n)}</span>` : "";
 }
-function render(){
-  $("count").textContent = alarms.length ? (deliveryEnabled ? `${alarms.filter(a=>a.enabled).length} of ${alarms.length} on` : `${alarms.length} saved`) : "";
-  const n = nextAlarmText(); $("next").hidden = !n; $("next").textContent = n;
-  if (!alarms.length) {
-    $("list").innerHTML = `<div class="empty"><b>No alarms yet</b>${deliveryEnabled ? "Create one on the left. It will ring on this PC and any device you open this page on." : "Create a saved schedule on the left. " + deliveryNotice()}</div>`;
-    return;
-  }
-  $("list").innerHTML = sorted().map(a => {
-    const t = fmtClock(a.time_hhmm);
-    const when = a.target_date ? new Date(a.target_date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})
-      : (a.weekdays.length === 7 ? "Every day" : a.weekdays.join(" "));
-    return `<article class="alarm ${a.enabled ? "" : "off"} ${a.code_red ? "red" : ""} ${a.id === editingId ? "editing" : ""}">
+function alarmCard(a){
+  const t = fmtClock(a.time_hhmm), late = deliveryEnabled && missed(a);
+  const when = a.target_date ? new Date(a.target_date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}) : repeatText(a.weekdays);
+  const cls = ["alarm", a.enabled || snoozedUntil(a) ? "" : "off", a.code_red ? "red" : "", a.id === editingId ? "editing" : "",
+    a.id === flashId ? "flash" : ""].filter(Boolean).join(" ");
+  const first = late ? `<button class="btn sm" data-move="${esc(a.id)}" title="Move it to the next ${esc(clockText(a.time_hhmm))}">Reschedule</button>`
+    : `<button class="btn sm" data-test="${esc(a.id)}" ${deliveryEnabled ? "" : "disabled"}>Preview</button>`;
+  return `<article class="${cls}" data-id="${esc(a.id)}">
       <div class="alarm-top">
         <div><div class="time">${t.t}<small>${t.ap}</small></div><div class="name">${esc(a.label)}</div></div>
-        <label class="switch"><input type="checkbox" ${a.enabled ? "checked" : ""} data-toggle="${esc(a.id)}" aria-label="${a.enabled ? "Turn off" : "Turn on"} ${esc(a.label)}"><span></span></label>
+        <label class="switch"><input type="checkbox" role="switch" ${a.enabled ? "checked" : ""} data-toggle="${esc(a.id)}" aria-label="Alarm ${esc(a.label)}"><span></span></label>
       </div>
       <div class="tags">
         ${statusTag(a)}
         <span class="tag">${esc(when)}</span>
-        <span class="tag">${Math.round(a.ring_duration_sec/60)} min</span>
+        <span class="tag" title="How long it rings if nobody stops it">${Math.round(a.ring_duration_sec/60)} min ring</span>
         ${a.code_red ? `<span class="tag red" title="${esc(a.custom_phrase)}">Code Red</span>` : ""}
         ${a.math_mission_difficulty ? `<span class="tag">Math ${a.math_mission_difficulty === 2 ? "hard" : "easy"}</span>` : ""}
+        ${a.snooze_limit && !a.code_red ? `<span class="tag">Snooze ${a.snooze_minutes || 9} min</span>` : ""}
       </div>
       <div class="alarm-actions">
-        <button class="btn sm" data-test="${esc(a.id)}" ${deliveryEnabled ? "" : "disabled"}>Preview</button>
+        ${first}
         <button class="btn sm" data-edit="${esc(a.id)}" aria-label="Edit ${esc(a.label)}">Edit</button>
         <button class="btn sm ghost" data-del="${esc(a.id)}" aria-label="Delete ${esc(a.label)}">Delete</button>
       </div>
     </article>`;
-  }).join("");
+}
+let lastListHtml = "";
+/* Rebuild the list only when something visible changed. New cards slide in once; refreshes (every 30 s, every
+   minute for the countdowns) update in place without replaying that animation or dropping keyboard focus. */
+function render(){
+  $("count").textContent = alarms.length ? (deliveryEnabled ? `${alarms.filter(a=>a.enabled).length} of ${alarms.length} on` : `${alarms.length} saved`) : "";
+  const n = nextAlarmText(); $("next").hidden = !n; $("next").textContent = n;
+  const html = !alarms.length
+    ? `<div class="empty"><b>No alarms yet</b>${deliveryEnabled ? "Create one on the left. It will ring on this PC and any device you open this page on." : "Create a saved schedule on the left. " + deliveryNotice()}</div>`
+    : sorted().map(alarmCard).join("");
+  if (html !== lastListHtml) {
+    const list = $("list"), active = typeof document !== "undefined" ? document.activeElement : null;
+    const keep = active && list.contains?.(active) ? [...active.attributes].find(x => /^data-(toggle|test|edit|del|move)$/.test(x.name)) : null;
+    list.innerHTML = html; lastListHtml = html;
+    if (keep) list.querySelector?.(`[${keep.name}="${CSS.escape(keep.value)}"]`)?.focus({preventScroll:true});
+    alarms.forEach(a => { if (!seenAlarmIds.has(a.id)) list.querySelector?.(`[data-id="${CSS.escape(a.id)}"]`)?.classList.add("enter"); });
+  }
+  alarms.forEach(a => seenAlarmIds.add(a.id));
+  if (flashId) { const el = $("list").querySelector?.(`[data-id="${CSS.escape(flashId)}"]`); flashId = null; lastListHtml = "";
+    el?.scrollIntoView?.({block:"nearest", behavior:reduceMotion() ? "auto" : "smooth"}); }
+}
+/* Everything needed to save an alarm again (undo a delete, reschedule a missed one). */
+function alarmBody(a, over = {}){
+  return {label:a.label, time_hhmm:a.time_hhmm, target_date:a.target_date || null, weekdays:a.weekdays || [], recurring:!!a.recurring,
+    enabled:!!a.enabled, code_red:!!a.code_red, custom_phrase:a.code_red ? a.custom_phrase || "" : "", volume_percent:a.volume_percent ?? 100,
+    ring_duration_sec:a.ring_duration_sec, wake_up_check_min:a.wake_up_check_min ?? 5, math_mission_difficulty:a.math_mission_difficulty || 0,
+    snooze_limit:a.code_red ? 0 : (a.snooze_limit || 0), snooze_minutes:a.snooze_minutes || 9, ...over};
 }
 
 /* ---------- Edit mode ---------- */
@@ -1214,38 +1450,55 @@ function setDuration(sec){
   if (![...sel.options].some(o => +o.value === sec)) sel.add(new Option(`${Math.round(sec/60)} minutes`, sec));
   sel.value = String(sec);
 }
+function setSnooze(a){
+  const sel = $("f-snooze"), v = a.snooze_limit && !a.code_red ? String(a.snooze_minutes || 9) : "0";
+  if (![...sel.options].some(o => o.value === v)) sel.add(new Option(`${v} min, 3 times`, v));
+  sel.value = v;
+}
 function startEdit(a){
-  editingId = a.id;
+  editingId = a.id; clearFieldErrors();
   $("f-label").value = a.label; $("f-time").value = a.time_hhmm; setDuration(a.ring_duration_sec);
   syncTimePicker();
-  $("f-date").value = a.target_date || ""; dateAuto = !a.target_date; setDays(a.target_date ? [] : a.weekdays);
+  // A one-time alarm whose moment passed gets the next date that time comes up, instead of a date the engine refuses.
+  const stale = a.target_date && new Date(`${a.target_date}T${a.time_hhmm}:00`) <= engineNow();
+  $("f-date").value = stale ? "" : (a.target_date || ""); dateAuto = !a.target_date || !!stale; setDays(a.target_date ? [] : a.weekdays);
+  if (stale) { $("f-date").value = onceDate(a.time_hhmm); syncDateLabel(); }
   $("f-math").value = String(a.math_mission_difficulty || 0);
-  $("f-codered").checked = !!a.code_red; $("cr").classList.toggle("on", !!a.code_red);
+  $("f-codered").checked = !!a.code_red; setSnooze(a); syncSnooze();
   if (a.code_red) $("f-phrase").value = a.custom_phrase || "";
   $("h-new").innerHTML = `Edit alarm<span class="badge">${esc(a.label)}</span>`;
   $("save").textContent = "Save changes"; $("cancel-edit").hidden = false;
-  render(); $("h-new").scrollIntoView({behavior: "smooth", block: "center"}); $("f-label").focus({preventScroll: true});
+  render(); $("h-new").scrollIntoView({behavior: reduceMotion() ? "auto" : "smooth", block: "center"}); $("f-label").focus({preventScroll: true});
 }
 function endEdit(){
   editingId = null; $("form").reset(); $("f-time").value = "07:00"; $("f-date").value = ""; dateAuto = true; setDays([]);
-  syncTimePicker();
-  $("cr").classList.toggle("on", $("f-codered").checked);
+  syncTimePicker(); syncSnooze(); clearFieldErrors();
   $("h-new").textContent = "New alarm"; $("save").textContent = "Save alarm"; $("cancel-edit").hidden = true; render();
 }
 $("cancel-edit").onclick = endEdit;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingId && !$("time-picker").open && !$("date-picker").open && !$("ring").classList.contains("show")) endEdit(); });
 
+async function deleteAlarm(id){
+  const a = alarms.find(x => x.id === id);
+  alarms = (await api(`/api/alarms/${encodeURIComponent(id)}`, {method:"DELETE"})).alarms;
+  if (id === editingId) endEdit(); else render();
+  if (!a) { toast("Alarm deleted"); return; }
+  toast(`Deleted ${a.label}`, false, {label:"Undo", run: async () => {
+    try { const data = await api("/api/alarms", {method:"POST", body:JSON.stringify(alarmBody(a))}); alarms = data.alarms; flashId = data.id; render(); toast(`${a.label} is back`); }
+    catch (err) { toast(err.message, true); }
+  }});
+}
 $("list").addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-test],[data-del],[data-edit]"); if (!t) return;
+  const t = e.target.closest("[data-test],[data-del],[data-edit],[data-move]"); if (!t) return;
   if (t.dataset.edit) { const a = alarms.find(x => x.id === t.dataset.edit); if (a) startEdit(a); return; }
   try {
     if (t.dataset.test) { unlockAudio(); await api(`/api/alarms/${encodeURIComponent(t.dataset.test)}/test-ring?seconds=10`, {method:"POST"}); }
-    if (t.dataset.del) {
-      const a = alarms.find(x => x.id === t.dataset.del);
-      if (!confirm(`Delete "${a ? a.label : "this alarm"}"?`)) return;
-      alarms = (await api(`/api/alarms/${encodeURIComponent(t.dataset.del)}`, {method:"DELETE"})).alarms;
-      if (t.dataset.del === editingId) endEdit(); else render();
-      toast("Alarm deleted");
+    if (t.dataset.del) await deleteAlarm(t.dataset.del);
+    if (t.dataset.move) {
+      const a = alarms.find(x => x.id === t.dataset.move); if (!a) return;
+      const day = nextDateFor(a.time_hhmm, "", engineNow());
+      alarms = (await api(`/api/alarms/${encodeURIComponent(a.id)}`, {method:"PUT", body:JSON.stringify(alarmBody(a, {target_date:day, enabled:true}))})).alarms;
+      flashId = a.id; render(); toast(`${a.label} moved to ${dateLabel(day, keyOf(engineNow()))}`);
     }
   } catch (err) { toast(err.message, true); }
 });
@@ -1260,24 +1513,48 @@ $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const days = selectedDays();
   const label = $("f-label").value.trim(), codeRed = $("f-codered").checked, phrase = $("f-phrase").value.trim();
-  if (!label) { toast("Give the alarm a name.", true); $("f-label").focus(); return; }
+  clearFieldErrors();
+  if (!label) { fieldError("f-label", "Give the alarm a name."); return; }
   if (!$("f-time").value) { toast("Pick a time.", true); return; }
   if (!days.length && dateAuto) { $("f-date").value = onceDate($("f-time").value); syncDateLabel(); }
   if (!days.length && !$("f-date").value) { toast("Pick a day or a date.", true); return; }
-  if (codeRed && phrase.length < 4) { toast("Code Red needs a phrase of at least 4 characters.", true); $("f-phrase").focus(); return; }
+  if (codeRed && normalizePhrase(phrase).length < 4) { fieldError("f-phrase", "Code Red needs a phrase of at least 4 characters."); return; }
+  const snooze = codeRed ? 0 : +$("f-snooze").value;
   const btn = $("save"), editing = editingId; btn.disabled = true; btn.textContent = "Saving…";
   try {
     const data = await api(editing ? `/api/alarms/${encodeURIComponent(editing)}` : "/api/alarms", { method: editing ? "PUT" : "POST", body: JSON.stringify({
       label, time_hhmm: $("f-time").value, target_date: days.length ? null : $("f-date").value,
       weekdays: days, recurring: days.length > 0, enabled: true, code_red: codeRed, custom_phrase: codeRed ? phrase : "",
-      volume_percent: 100, ring_duration_sec: +$("f-duration").value, math_mission_difficulty: +$("f-math").value })});
-    alarms = data.alarms;
+      volume_percent: 100, ring_duration_sec: +$("f-duration").value, math_mission_difficulty: +$("f-math").value,
+      snooze_limit: snooze ? 3 : 0, snooze_minutes: snooze || 9 })});
+    alarms = data.alarms; flashId = data.id;
     const saved = alarms.find(a => a.id === data.id), n = deliveryEnabled && saved && nextRing(saved);
     toast(`${deliveryEdition === "Dev" ? "Saved Dev schedule" : (editing ? "Updated" : "Saved")}: ${label} at ${clockText($("f-time").value)}${n ? ", rings " + inText(n) : ""}`);
     if (editing) endEdit(); else render();
   } catch (err) { toast(err.message, true); }
   finally { btn.disabled = false; btn.textContent = editingId ? "Save changes" : "Save alarm"; }
 });
+
+/* ---------- Recent activity ---------- */
+let historyEvents = [];
+function renderHistory(){
+  const now = engineNow(), rows = historyEvents.map(e => historyRow(e, now)).filter(Boolean).slice(0, 8);
+  $("history").innerHTML = rows.length ? rows.map(r => `<li><span class="k ${r.tone}">${esc(r.label)}</span><span class="what">${esc(r.name)}${r.detail ? ` <span>${esc(r.detail)}</span>` : ""}</span><time datetime="${esc(r.iso)}">${esc(r.when)}</time></li>`).join("")
+    : `<li><span class="what"><span>Nothing yet. Rings, snoozes and missed alarms show up here.</span></span></li>`;
+  // Missed alarms in the last 12 hours get a banner until acknowledged.
+  const seen = store.get("missedSeen", ""), recent = historyEvents.filter(e => e.kind === "missed" && e.ts > seen && now - new Date(e.ts) < 12 * 3600000);
+  $("missed-warn").hidden = !recent.length || !deliveryEnabled;
+  if (recent.length) {
+    const names = [...new Set(recent.map(e => e.label || "An alarm"))].slice(0, 3).join(", ");
+    $("missed-warn-text").textContent = `Missed: ${names}. The PC was off, asleep or busy when ${recent.length > 1 ? "they were" : "it was"} due. `
+      + "Alarms can wake a sleeping PC only when it's plugged in and Windows allows wake timers.";
+    $("missed-ok").onclick = () => { store.set("missedSeen", recent[0].ts); $("missed-warn").hidden = true; };
+  }
+}
+async function loadHistory(){
+  try { historyEvents = (await api("/api/alarms/history?limit=40")).events || []; renderHistory(); }
+  catch { $("history").innerHTML = `<li><span class="what"><span>History is unavailable right now.</span></span></li>`; }
+}
 
 /* ---------- Sound output ---------- */
 async function loadAudio(){
@@ -1324,8 +1601,9 @@ function unlockAudio(){
 }
 document.addEventListener("pointerdown", unlockAudio, { once: true });
 $("unlock").onclick = unlockAudio;
-function startBrowserSiren(){
-  if (!deliveryEnabled || sirenTimer || !$("browser-ring").checked) return;
+/* force: the speaker helper failed, so this window rings even without the opt-in. Dev never rings. */
+function startBrowserSiren(force = false){
+  if (!deliveryEnabled || sirenTimer || !(force || $("browser-ring").checked)) return;
   unlockAudio(); if (!ctx) return;
   const beep = () => {
     if (ctx.state !== "running") { $("unlock").classList.add("show"); return; }
@@ -1339,31 +1617,57 @@ function startBrowserSiren(){
 function stopBrowserSiren(){ if (sirenTimer) { clearInterval(sirenTimer); sirenTimer = null; } }
 
 /* ---------- Ringing screen ---------- */
-let ringingId = null, needPhrase = false, ringAlarm = null;
+let ringingId = null, needPhrase = false, ringAlarm = null, lastRemaining = 0;
+const snoozeLeft = (a) => a && !a.is_test && !a.is_timer && !a.code_red ? Math.max(0, (a.snooze_limit || 0) - (a.snoozes_used || 0)) : 0;
+/* Everything behind the ringing screen is inert, so Tab and screen readers stay on it. */
+function setBackgroundInert(on){ [".wrap", "#fbk-open", "#toasts"].forEach(sel => { const el = document.querySelector(sel); if (el) el.inert = on; }); }
+function paintPhrase(){
+  const target = normalizePhrase(ringAlarm?.custom_phrase), p = phraseProgress(target, $("ring-input").value), box = $("ring-target");
+  box.textContent = "";
+  const part = (text, cls) => { if (!text) return; const s = document.createElement("span"); if (cls) s.className = cls; s.textContent = text; box.appendChild(s); };
+  part(target.slice(0, p.good), "ok"); part(target.slice(p.good, p.good + 1), p.wrong ? "bad" : "next"); part(target.slice(p.good + 1), "");
+  $("ring-meter").textContent = !$("ring-input").value ? "" : p.done ? "Matches. Press Enter to stop it." : p.wrong ? `Check character ${p.good + 1}.` : `${p.good} of ${p.total} characters`;
+}
 function showRing(msg){
   ["time-picker","date-picker"].forEach(id => { if ($(id).open) { $(id).classList.remove("closing"); $(id).close(); } });
   const a = msg.alarm, test = !!a.is_test; ringAlarm = a;
   needPhrase = !!a.code_red && !test;
-  if (ringingId !== a.id) {
+  const fresh = ringingId !== a.id;
+  if (fresh) {
     ringingId = a.id; $("ring-input").value = ""; $("ring-math").value = ""; $("ring-err").textContent = "";
     setTimeout(() => (needPhrase ? $("ring-input") : (msg.math_question && !test ? $("ring-math") : $("ring-stop"))).focus(), 50);
   }
-  $("ring").classList.add("show");
+  $("ring").classList.add("show"); setBackgroundInert(true);
   $("ring-kind").textContent = test ? "Preview" : (a.is_timer ? "Timer" : (a.code_red ? "Code Red" : "Alarm"));
   $("ring-title").textContent = a.label;
-  const r = Math.max(0, msg.remaining_sec|0);
+  if (lastClock) $("ring-clock").textContent = clockText(lastClock);
+  const r = Math.max(0, msg.remaining_sec|0), total = Math.max(1, a.ring_duration_sec || r || 1);
   $("ring-cd").textContent = `${String(Math.floor(r/60)).padStart(2,"0")}:${String(r%60).padStart(2,"0")}`;
+  $("ring-bar").style.transform = `scaleX(${Math.min(1, r / total).toFixed(4)})`;
+  lastRemaining = r;
   $("ring-phrase-wrap").hidden = !needPhrase; $("ring-input").hidden = !needPhrase;
-  $("ring-target").textContent = a.custom_phrase || "";
+  if (needPhrase) { if (fresh) paintPhrase(); } else $("ring-target").textContent = "";
   const showMath = !!msg.math_question && !test;
   $("ring-math-wrap").hidden = !showMath; $("ring-math-q").textContent = msg.math_question || "";
   $("ring-stop").textContent = needPhrase ? "Check phrase and stop" : (a.is_timer ? "Stop timer" : "Stop alarm");
   $("ring-more").hidden = !(a.is_timer && a.timer_id && !a.code_red && !test);
+  const left = snoozeLeft(a);
+  $("ring-snooze").hidden = !left;
+  if (left) $("ring-snooze").textContent = `Snooze ${a.snooze_minutes || 9} min (${left} left)`;
   $("ring-meta").textContent = test ? "This is a short preview." : "";
-  startBrowserSiren();
+  // If the speaker helper couldn't start, this window is the alarm: ring here even without the browser opt-in.
+  const failed = msg.audio === "failed" && !test && deliveryEnabled;
+  $("ring-warn").hidden = !failed;
+  if (failed) $("ring-warn").textContent = "The speaker helper didn't start, so this window is ringing instead. Keep it open and the volume up.";
+  startBrowserSiren(failed);
 }
-function hideRing(){ $("ring").classList.remove("show"); ringingId = null; stopBrowserSiren(); }
+function hideRing(){
+  $("ring").classList.remove("show"); setBackgroundInert(false); ringingId = null; ringAlarm = null; stopBrowserSiren();
+  loadHistory();
+}
+function shake(el){ el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }
 ["paste","drop","copy","cut"].forEach(ev => $("ring-input").addEventListener(ev, (e) => { e.preventDefault(); $("ring-err").textContent = "Paste is blocked. Type it."; }));
+$("ring-input").addEventListener("input", () => { $("ring-err").textContent = ""; paintPhrase(); });
 $("ring-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ring-stop").click(); });
 $("ring-math").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ring-stop").click(); });
 $("ring-more").onclick = async () => {
@@ -1372,13 +1676,27 @@ $("ring-more").onclick = async () => {
   catch (err) { $("ring-err").textContent = err.message; }
   finally { b.disabled = false; }
 };
+$("ring-snooze").onclick = async () => {
+  const b = $("ring-snooze"), a = ringAlarm; if (!a) return; b.disabled = true;
+  try {
+    const d = await api("/api/alarms/snooze", {method:"POST", body:JSON.stringify({alarm_id:a.id})});
+    hideRing(); loadAlarms();
+    toast(`Snoozed until ${clockText(d.until.slice(11, 16))}${d.left ? `. ${d.left} snooze${d.left > 1 ? "s" : ""} left` : ". That was the last snooze"}`);
+  } catch (err) { $("ring-err").textContent = err.message; }
+  finally { b.disabled = false; }
+};
 $("ring-stop").onclick = async () => {
   const b = $("ring-stop"); b.disabled = true;
   try {
     await api("/api/alarms/dismiss", {method:"POST", body: JSON.stringify({ alarm_id: ringingId || "manual",
       typed_phrase: $("ring-input").value, math_answer: $("ring-math").value === "" ? null : parseInt($("ring-math").value, 10) })});
     hideRing(); toast("Stopped.");
-  } catch (err) { $("ring-err").textContent = err.message.replace(/^CODE RED LOCK: /, ""); }
+  } catch (err) {
+    $("ring-err").textContent = err.message.replace(/^CODE RED LOCK: /, "");
+    const wrongMath = !$("ring-math-wrap").hidden && /answer/i.test(err.message);
+    if (wrongMath) { $("ring-math").value = ""; $("ring-math").focus(); }
+    shake(wrongMath ? $("ring-math") : (needPhrase ? $("ring-input") : b));
+  }
   finally { b.disabled = false; }
 };
 
@@ -1397,16 +1715,19 @@ function checkClock(eng){
 }
 
 /* ---------- Live connection ---------- */
-let ws = null, retry = 0, lastClock = null;
+let ws = null, retry = 0, retryTimer = 0, lastClock = null, lastMessageAt = 0, lastMinute = -1;
 function refreshClock(){ if (lastClock) $("clock").textContent = clockText(lastClock); }
 function connect(){
+  clearTimeout(retryTimer); retryTimer = 0;
+  if (ws && ws.readyState <= 1) return; // already open or opening: never run two sockets
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/ws`);
-  ws.onopen = () => { retry = 0; chip("chip-engine", "ok", "Live"); loadAlarms(); };
+  ws.onopen = () => { retry = 0; chip("chip-engine", "ok", "Live"); loadAlarms(); loadHistory(); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
+    lastMessageAt = performance.now(); $("clock").classList.remove("stale");
     if (m.timers) applyTimerSnapshot(m.timers);
-    if (m.server_time) { lastClock = m.server_time.slice(0,5); refreshClock(); }
+    if (m.server_time) { lastClock = m.server_time.slice(0,5); refreshClock(); $("ring-clock").textContent = clockText(lastClock); }
     if (m.server_iso) {
       const eng = new Date(m.server_iso);
       engineSkew = eng - Date.now();
@@ -1415,14 +1736,25 @@ function connect(){
     } else if (m.server_date) $("date").textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
     if (m.is_ringing && m.alarm) showRing(m); else if (ringingId) hideRing();
   };
-  ws.onclose = () => { chip("chip-engine", "bad", "Reconnecting…"); const d = Math.min(10000, 1000 * 2 ** retry++); setTimeout(connect, d); };
+  ws.onclose = () => {
+    chip("chip-engine", "bad", "Reconnecting…"); $("clock").classList.add("stale");
+    const d = Math.min(10000, 1000 * 2 ** retry++); clearTimeout(retryTimer); retryTimer = setTimeout(connect, d);
+  };
   ws.onerror = () => ws.close();
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadAudio(); if (ws && ws.readyState > 1) connect(); } });
-setInterval(() => { if (!document.hidden) loadAlarms(); }, 30000);
-setInterval(loadAudio, 30000);
+/* The clock dims when the engine has been quiet for 5 s, so a frozen time is never mistaken for the real one.
+   Countdowns in the list ("Rings in 42 min") roll over each minute without waiting for the next refresh. */
+setInterval(() => {
+  if (lastMessageAt && performance.now() - lastMessageAt > 5000) $("clock").classList.add("stale");
+  const minute = engineNow().getMinutes();
+  if (minute !== lastMinute) { lastMinute = minute; if (!document.hidden) { render(); renderHistory(); } }
+}, 2000);
+addEventListener("online", () => { retry = 0; connect(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadAudio(); loadHistory(); if (!ws || ws.readyState > 1) connect(); } });
+setInterval(() => { if (!document.hidden) { loadAlarms(); loadHistory(); } }, 30000);
+setInterval(() => { if (!document.hidden) loadAudio(); }, 30000);
 initTimePicker(); initDatePicker(); initTimers(); initTabs();
-syncDate(); syncTimePicker(); renderTimers(); loadAlarms(); loadAudio(); loadTimer(); connect();
+syncDate(); syncTimePicker(); syncSnooze(); renderTimers(); loadAlarms(); loadHistory(); loadAudio(); loadTimer(); connect();
 </script>
 
 <!-- Feedback (sends to the Ultra Suite team) -->
