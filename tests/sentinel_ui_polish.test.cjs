@@ -84,3 +84,9 @@ test('Performance charts describe their numbers for screen readers',()=>{
  assert.match(l('ram',Array(120).fill(60),'%'),/last 2 min/);
  for(const k of ['cpu','gpu','ram','cput','gput'])assert.match(html,new RegExp(`data-chart="${k}"><svg [^>]*role="img"`));
 });
+test('the PSU catalog folds once a PSU is saved and is never forced shut again',()=>{
+ const src=cut('let psuCatalogFolded','function renderPower(');
+ const cat={open:true};const ctx=vm.createContext({$:id=>id==='psu-catalog'?cat:null,snap:null,powerContextGeneration:0,powerContext:null,powerContextError:'',renderPower(){},api:async()=>({rated_watts:850})});
+ vm.runInContext(src.replace(/^let /,'var '),ctx);
+ return vm.runInContext('loadPowerContext()',ctx).then(()=>{assert.equal(cat.open,false);cat.open=true;return vm.runInContext('loadPowerContext()',ctx);}).then(()=>assert.equal(cat.open,true,'a reader who opens it keeps it open'));
+});

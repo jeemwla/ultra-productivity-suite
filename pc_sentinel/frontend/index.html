@@ -921,7 +921,9 @@ function powerView(p){
 let powerHistoryKind=null;
 function recordPowerHistory(p){const view=powerView(p);if(powerHistoryKind!==view.kind){H.pw.length=0;powerHistoryKind=view.kind;}push("pw",view.value);}
 let powerContext=null, powerContextError="", powerSaving=false, powerContextGeneration=0, powerSavedAt=0, powerSavedClear=false;
-async function loadPowerContext(){const generation=++powerContextGeneration;try{const value=await api("/api/power/context");if(generation!==powerContextGeneration)return;powerContext=value;powerContextError="";}catch{if(generation!==powerContextGeneration)return;powerContextError="PSU details could not be loaded. Retry Save when the local service is ready.";}if(snap)renderPower();}
+// The catalog starts open for first-time setup; once a PSU is saved it starts folded so the Power page stays short.
+let psuCatalogFolded=false;
+async function loadPowerContext(){const generation=++powerContextGeneration;try{const value=await api("/api/power/context");if(generation!==powerContextGeneration)return;powerContext=value;powerContextError="";if(!psuCatalogFolded&&value&&value.rated_watts){psuCatalogFolded=true;const c=$("psu-catalog");if(c)c.open=false;}}catch{if(generation!==powerContextGeneration)return;powerContextError="PSU details could not be loaded. Retry Save when the local service is ready.";}if(snap)renderPower();}
 function renderPower(){
   if(!snap)return;const p=snap.hardware.power||{},v=powerView(p),laptop=snap.hardware.device?.type==="laptop";
   tween($("pw-total"),v.value,n0);
