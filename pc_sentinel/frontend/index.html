@@ -569,7 +569,7 @@ table.wr td .btn{height:30px;padding:0 10px}
           <section class="card"><div class="ch"><h2>Sensor source</h2><span class="sub" id="src-sub"></span></div><div class="cb" id="src-body"></div></section>
         </div>
         <div class="grid g2 mt">
-          <section class="card"><div class="ch"><h2>Alerts</h2><span class="sub">A notice when something runs hot</span></div><div class="cb">
+          <section class="card"><div class="ch"><h2>Alerts</h2><span class="sub">A notice when a part stays over its limit for 5 seconds</span></div><div class="cb">
             <div class="field"><span>Alerts on</span><label class="toggle"><input type="checkbox" id="al-on" checked aria-label="Alerts on"><span></span></label></div>
             <div class="field"><label for="al-cpu">CPU warning at (°C)</label><input id="al-cpu" type="number" min="50" max="110" value="90"></div>
             <div class="field"><label for="al-gpu">GPU warning at (°C)</label><input id="al-gpu" type="number" min="50" max="120" value="90"></div>
@@ -1169,8 +1169,15 @@ const AL = Object.assign({ on: true, cpu: 90, gpu: 90, ram: 92 }, store.get("ale
 AL.cpu = alertField("al-cpu", 90, AL.cpu); AL.gpu = alertField("al-gpu", 90, AL.gpu); AL.ram = alertField("al-ram", 92, AL.ram);
 ["al-on", "al-cpu", "al-gpu", "al-ram"].forEach(id => $(id).addEventListener("change", () => { Object.assign(AL, { on: $("al-on").checked, cpu: alertField("al-cpu", 90), gpu: alertField("al-gpu", 90), ram: alertField("al-ram", 92) }); store.set("alerts", AL); }));
 const lastAlert = {};
-function checkAlerts(s){ if (!AL.on) return; const fire = (k, cond, msg) => { if (cond && Date.now() - (lastAlert[k] || 0) > 300000) { lastAlert[k] = Date.now(); toast(msg, true); } };
-  fire("cpu", s.cpu_temp != null && s.cpu_temp >= AL.cpu, `CPU is at ${n0(s.cpu_temp)}°C`); const g = s.gpu_hotspot ?? s.gpu_temp; fire("gpu", g != null && g >= AL.gpu, `GPU is at ${n0(g)}°C`); fire("ram", s.ram_load != null && s.ram_load >= AL.ram, `Memory is ${n0(s.ram_load)}% full`); }
+/* A reading must stay over its limit for ALERT_SECONDS in a row: Ryzen and GPU boost spikes last a moment and are normal. */
+const ALERT_SECONDS = 5, alertStreak = {};
+function alertDue(k, cond, now){ alertStreak[k] = cond ? (alertStreak[k] || 0) + 1 : 0;
+  if (alertStreak[k] < ALERT_SECONDS || now - (lastAlert[k] || 0) <= 300000) return false; lastAlert[k] = now; return true; }
+function checkAlerts(s){ if (!AL.on) return; const now = Date.now(), fire = (k, cond, msg) => { if (alertDue(k, cond, now)) toast(msg, true); };
+  fire("cpu", s.cpu_temp != null && s.cpu_temp >= AL.cpu, `CPU has been at ${n0(s.cpu_temp)}°C or more for ${ALERT_SECONDS} seconds`);
+  const hot = s.gpu_hotspot != null, g = hot ? s.gpu_hotspot : s.gpu_temp;
+  fire("gpu", g != null && g >= AL.gpu, `GPU ${hot ? "hot spot " : ""}has been at ${n0(g)}°C or more for ${ALERT_SECONDS} seconds`);
+  fire("ram", s.ram_load != null && s.ram_load >= AL.ram, `Memory is ${n0(s.ram_load)}% full`); }
 
 /* ---------- updates, about, export ---------- */
 async function checkUpdate(force){ try { const u = await api("/api/update" + (force ? "?force=true" : "")); $("ab-ver").textContent = `Version ${u.current}`;

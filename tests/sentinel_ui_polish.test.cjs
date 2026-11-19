@@ -90,3 +90,12 @@ test('the PSU catalog folds once a PSU is saved and is never forced shut again',
  vm.runInContext(src.replace(/^let /,'var '),ctx);
  return vm.runInContext('loadPowerContext()',ctx).then(()=>{assert.equal(cat.open,false);cat.open=true;return vm.runInContext('loadPowerContext()',ctx);}).then(()=>assert.equal(cat.open,true,'a reader who opens it keeps it open'));
 });
+test('alerts need a reading to stay over its limit, then wait five minutes before repeating',()=>{
+ const toasts=[];const ctx=vm.createContext({toast:m=>toasts.push(m),n0:v=>String(Math.round(v)),AL:{on:true,cpu:90,gpu:90,ram:92},lastAlert:{},Date:{now:()=>ctx.t}});ctx.t=1e6;
+ vm.runInContext(cut('const ALERT_SECONDS','/* ---------- updates, about, export'),ctx);
+ const tick=(s,n=1)=>{for(let i=0;i<n;i++){ctx.t+=1000;vm.runInContext('checkAlerts',ctx)(s);}};
+ tick({cpu_temp:95},4);tick({cpu_temp:70});tick({cpu_temp:95},4);assert.deepEqual(toasts,[],'short spikes stay quiet');
+ tick({cpu_temp:95},1);assert.equal(toasts.length,1);assert.match(toasts[0],/for 5 seconds/);
+ tick({cpu_temp:95},60);assert.equal(toasts.length,1,'no repeat within five minutes');
+ tick({gpu_temp:70,gpu_hotspot:96},5);assert.match(toasts[1],/GPU hot spot has been at 96/);
+});
