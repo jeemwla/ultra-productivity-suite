@@ -48,3 +48,8 @@
   :root{--d-1:0ms;--d-2:0ms;--d-3:0ms}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+/* More contrast (Windows contrast settings or accessibility tools): stronger lines and secondary text */
+@media (prefers-contrast: more){
+  :root{--line:rgba(255,255,255,.24); --line-2:rgba(255,255,255,.4); --ink-2:rgba(242,244,248,.9); --ink-3:rgba(242,244,248,.78); --disabled:.55}
+  @media (prefers-color-scheme: light){:root{--line:rgba(0,0,0,.28); --line-2:rgba(0,0,0,.45); --ink-2:rgba(17,19,24,.9); --ink-3:rgba(17,19,24,.8)}}
+}

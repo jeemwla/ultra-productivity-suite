@@ -39,3 +39,26 @@ test('strip button widths still match the widths the Rust layout plans with',()=
   assert.match(html,new RegExp(`\\.win\\{position:relative;width:${num('APP_W')}px;`),'app button width');
   assert.match(html,new RegExp(`\\.more\\{width:${num('MENU_W')}px;`),'menu button width');
 });
+
+test('opaque windows paint their first frame in the system theme, and the strip does not',()=>{
+  for(const page of ['hub.html','dock.html','dock_menu.html','starting.html'])
+    assert.match(ui(page),/<meta name="color-scheme" content="dark light" ?\/?>/,page);
+  assert.doesNotMatch(ui('index.html'),/<meta name="color-scheme"/);
+});
+
+test('Windows contrast themes keep switch, pill and running bar state visible',()=>{
+  assert.match(ui('suite.css'),/@media \(forced-colors: active\)\{[\s\S]*\.sw\[aria-checked=true\]\{background:Highlight/);
+  assert.match(ui('suite.css'),/\.sw,\.sw::after,\.pill::before\{forced-color-adjust:none\}/);
+  assert.match(ui('dock_menu.html'),/@media \(forced-colors: active\)\{[\s\S]*\[aria-checked=true\] \.switch\{background:Highlight/);
+  assert.match(ui('index.html'),/@media \(forced-colors: active\)\{[^\n]*\.win\.active \.runbar\{background:Highlight/);
+  assert.match(ui('tokens.css'),/@media \(prefers-contrast: more\)\{/);
+});
+
+test('hub cards are named regions and their buttons say which app they act on',()=>{
+  const hub=ui('hub.html');
+  for(const app of ['sentinel','alarm','dock','insights']){
+    assert.match(hub,new RegExp(`id="c-${app}" aria-labelledby="h-${app}"`),app);
+    assert.match(hub,new RegExp(`<h2 id="h-${app}">`),app);
+  }
+  assert.equal((hub.match(/aria-describedby="h-(sentinel|alarm|dock|insights)"/g)||[]).length,5);
+});

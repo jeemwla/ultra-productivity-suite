@@ -5,7 +5,10 @@
 html{color-scheme:dark light}
 body{font:var(--t-3)/var(--lh-body) var(--font);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input,select,textarea{font:inherit;color:inherit}
-button{border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button{border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.pill,.sw{user-select:none}
+h1,h2,h3{text-wrap:balance}
+p{text-wrap:pretty}
 button:disabled{cursor:default}
 img{-webkit-user-drag:none}
 ::selection{background:color-mix(in srgb,var(--accent) 32%,transparent)}
@@ -67,3 +70,19 @@ select{padding-right:var(--s-2);cursor:pointer}
   border:1px dashed var(--line-2);border-radius:var(--r-4);color:var(--ink-3);font-size:var(--t-2)}
 .empty b{color:var(--ink-2);font-weight:var(--w-medium);font-size:var(--t-3)}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* Windows contrast themes force system colors. Keep every state visible: the switch knob and track, the pill
+   dot, the primary button, disabled controls and the focus ring. */
+@media (forced-colors: active){
+  .btn,.sw,.pill,select,input[type=text],input[type=search],textarea,.empty{border:1px solid ButtonText}
+  .btn.primary{border-width:2px}
+  .btn:disabled,:is(select,input,textarea):disabled{opacity:1;color:GrayText;border-color:GrayText}
+  .sw,.sw::after,.pill::before{forced-color-adjust:none}
+  .sw{background:Canvas;border-color:ButtonText}
+  .sw::after{background:ButtonText}
+  .sw[aria-checked=true]{background:Highlight;border-color:Highlight}
+  .sw[aria-checked=true]::after{background:HighlightText}
+  .sw:disabled{opacity:1;border-color:GrayText}.sw:disabled::after{background:GrayText}
+  .pill::before{background:CanvasText}
+  :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible{outline-color:Highlight}
+}

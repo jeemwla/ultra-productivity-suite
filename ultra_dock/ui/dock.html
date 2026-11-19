@@ -3,12 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>Dock settings</title>
 <link rel="stylesheet" href="tokens.css" />
 <link rel="stylesheet" href="suite.css" />
 <style>
 /* Dock settings: every option of Ultra Dock in one window. Spacing, type, radius, color, shadow and motion come
    from tokens.css; buttons, pills, switches and fields from suite.css, so it matches the Ultra Suite hub. */
+html{scrollbar-gutter:stable}
 html,body{min-height:100%}
 main{max-width:980px;margin:0 auto;padding:var(--s-6) var(--s-6) var(--s-8)}
 .hero{display:flex;align-items:center;gap:var(--s-4);border-radius:var(--r-5);padding:var(--s-5) var(--s-6);margin-bottom:var(--s-4);border:1px solid var(--line);
@@ -25,6 +27,10 @@ main{max-width:980px;margin:0 auto;padding:var(--s-6) var(--s-6) var(--s-8)}
 .row .txt{flex:1;min-width:0}
 .row .txt b{display:block;font-weight:var(--w-medium)}
 .row .txt span{display:block;color:var(--ink-3);font-size:var(--t-2)}
+label.txt{cursor:pointer}
+/* The row under the pointer is highlighted, so a picker on the right is easy to match with its app */
+#apps .row{margin:0 calc(-1 * var(--s-3));padding-left:var(--s-3);padding-right:var(--s-3);border-radius:var(--r-3);transition:background var(--d-1) var(--ease)}
+#apps .row:hover{background:var(--hover)}
 /* App count: minus, the count in use and plus, then Automatic as a toggle that reads as on, not as a call to action */
 .cap-controls{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
 .cap-stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--r-3);background:var(--panel-2);overflow:hidden}
@@ -74,6 +80,9 @@ main{max-width:980px;margin:0 auto;padding:var(--s-6) var(--s-6) var(--s-8)}
 .status.err{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent);pointer-events:auto;user-select:text}
 .confirm{display:flex;gap:var(--s-2);align-items:center;flex-wrap:wrap}
 code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-break:break-all}
+/* One click selects the whole settings file path for copying */
+#path{user-select:all;cursor:text;background:var(--panel-2);border-radius:var(--r-2);padding:1px var(--s-1)}
+#path:empty{display:none}
 @media (max-width:640px){main{padding:var(--s-4)}.hero{flex-wrap:wrap;padding:var(--s-4)}.hero .grow{flex:1 1 calc(100% - 64px)}.row{flex-wrap:wrap}.cat{grid-template-columns:1fr auto}.cat .moves{flex-direction:row;grid-column:1/-1}select,.app select{min-width:0;width:100%}}
 .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--s-3);margin:var(--s-3) 0 var(--s-4)}
 .tile{padding:var(--s-3);border:1px solid var(--line);border-radius:var(--r-4);background:var(--panel-2);min-width:0;transition:background var(--d-2) var(--ease),border-color var(--d-2) var(--ease)}
@@ -107,7 +116,7 @@ code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-b
     <h2 id="h-layout">Layout</h2>
     <p class="lead">How the Dock shows the apps you have open. Folders hold up to 6 apps and never just one.</p>
     <div class="row">
-      <div class="txt"><b>Group apps into folders</b><span>Off: every app keeps its normal taskbar button.</span></div>
+      <label class="txt" for="organize"><b>Group apps into folders</b><span>Off: every app keeps its normal taskbar button.</span></label>
       <button class="sw" role="switch" id="organize" aria-checked="false" aria-label="Group apps into folders"></button>
     </div>
     <div class="row">
