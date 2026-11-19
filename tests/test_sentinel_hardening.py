@@ -114,6 +114,18 @@ class PollLoop(unittest.TestCase):
         self.assertGreaterEqual(body["age_sec"], 2.9)
 
 
+class Jitter(unittest.TestCase):
+    def test_latency_page_jitter_matches_the_speed_test_measure(self):
+        from backend import net_monitor
+        self.assertEqual(net_monitor.jitter_ms([10, 12, 10, 12]), 2.0)
+        # a slow drift is not jitter: a spread would call this 3.4 ms, the step size is 1 ms
+        self.assertEqual(net_monitor.jitter_ms([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]), 1.0)
+        self.assertEqual(net_monitor.jitter_ms([10, None, 30, 31, 33]), 1.5, "a lost reply is not a 20 ms step")
+        self.assertIsNone(net_monitor.jitter_ms([10, None, 12]))
+        self.assertIsNone(net_monitor.jitter_ms([]))
+        self.assertEqual(net_monitor.jitter_ms([99, 99] + [10, 12] * 10), 2.0, "only the last 20 replies count")
+
+
 class SpeedTestSocket(unittest.TestCase):
     def test_closing_the_page_stops_the_test(self):
         state = {"cancelled": False, "finished": False}
