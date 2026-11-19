@@ -1072,13 +1072,19 @@ function renderStorage(){
 /* ---------- network + vpn ---------- */
 function sparkPath(h){ const W = 160, Hh = 36, ok = h.filter(v => v != null); if (ok.length < 2) return { l: "", d: null }; const max = Math.max(...ok) * 1.2, n = h.length, x = (i) => i / Math.max(1, n - 1) * (W - 6) + 3, y = (v) => Hh - 3 - v / (max || 1) * (Hh - 8);
   const p = []; h.forEach((v, i) => { if (v != null) p.push([x(i), y(v)]); }); return { l: smooth(p), d: p[p.length - 1] }; }
+/* Latency alone hides a line that drops replies; the last minute's loss is shown when there is any. */
+function pingStatus(p){ const loss = typeof p.loss_pct === "number" ? p.loss_pct : 0, lost = loss > 0 ? ` · ${loss}% lost` : "";
+  const title = `Average ${p.avg_ms == null ? "–" : p.avg_ms + " ms"}; ${loss}% of the last minute's checks got no reply.`;
+  if (p.latency_ms == null) return { level: "critical", text: "No reply" + lost, title };
+  if (loss >= 5 || p.latency_ms > 120) return { level: "warning", text: (p.latency_ms > 120 ? "Slow" : "Dropping") + lost, title };
+  return { level: "good", text: "OK" + lost, title }; }
 function renderNet(){
   const net = snap.network || {}, t = net.targets || [], box = $("pings");
   if (box.dataset.sig !== t.map(p => p.id).join()) { box.dataset.sig = t.map(p => p.id).join(); box.innerHTML = t.map(p => `<div class="ping" data-id="${esc(p.id)}"><div><div class="n">${esc(p.name)}</div><div class="h">${esc(p.host)} · <span class="status good ps">OK</span></div></div>
     <div class="spark-wrap"><svg class="spark" viewBox="0 0 160 36" aria-hidden="true"><line x1="0" y1="34" x2="160" y2="34" stroke="var(--grid)"/><path class="sl" fill="none" stroke="var(--series)" stroke-width="2" stroke-linecap="round"/><circle class="sd" r="3.5" fill="var(--series)" stroke="var(--surface)" stroke-width="2" cx="-9" cy="-9"/></svg></div>
     <div class="v"><span class="num pv">–</span><small> ms</small></div></div>`).join("") || `<div class="empty">No ping targets</div>`; }
-  t.forEach(p => { const el = box.querySelector(`.ping[data-id="${CSS.escape(p.id)}"]`); if (!el) return; const l = p.latency_ms == null ? "critical" : p.latency_ms > 120 ? "warning" : "good", ps = el.querySelector(".ps");
-    ps.className = "status ps " + l; ps.textContent = p.latency_ms == null ? "No reply" : l === "warning" ? "Slow" : "OK"; tween(el.querySelector(".pv"), p.latency_ms, n0, 700);
+  t.forEach(p => { const el = box.querySelector(`.ping[data-id="${CSS.escape(p.id)}"]`); if (!el) return; const ps = el.querySelector(".ps"), st = pingStatus(p);
+    ps.className = "status ps " + st.level; ps.textContent = st.text; ps.title = st.title; tween(el.querySelector(".pv"), p.latency_ms, n0, 700);
     const sp = sparkPath(p.history || []); el.querySelector(".sl").setAttribute("d", sp.l); if (sp.d) { el.querySelector(".sd").setAttribute("cx", sp.d[0]); el.querySelector(".sd").setAttribute("cy", sp.d[1]); } });
   $("netstats").textContent = `Jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"} · ${net.online ? "online" : "offline"}`; $("netstats").title = "Jitter is the average change in latency between back-to-back replies to the first target.";
   // Without full sensors there are no throughput readings at all; that is "not available", not 0 B/s.

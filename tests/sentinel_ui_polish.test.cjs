@@ -139,3 +139,12 @@ test('touch screens see Rename, and an empty speed chart says what it is for',()
  assert.match(html,/\.chart\.st-empty::after\{content:"Download and upload speeds are drawn here while a test runs\."/);
  assert.match(cut('function drawSpeedChart','function extras'),/classList\.toggle\("st-empty", !sp\.down\.length && !sp\.up\.length\)/);
 });
+test('latency rows show lost replies, not only the last reply time',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function pingStatus','function renderNet'),ctx);const st=vm.runInContext('pingStatus',ctx);
+ assert.equal(st({latency_ms:16,loss_pct:0,avg_ms:15}).text,'OK');
+ assert.equal(st({latency_ms:16,loss_pct:2,avg_ms:15}).text,'OK · 2% lost');
+ const d=st({latency_ms:16,loss_pct:8,avg_ms:15});assert.equal(d.level,'warning');assert.equal(d.text,'Dropping · 8% lost');
+ assert.equal(st({latency_ms:200,loss_pct:0}).text,'Slow');
+ assert.equal(st({latency_ms:null,loss_pct:100}).text,'No reply · 100% lost');
+ assert.match(st({latency_ms:16,loss_pct:0,avg_ms:15}).title,/Average 15 ms; 0% of the last minute/);
+});
