@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Hardware telemetry from LibreHardwareMonitor's Remote Web Server (data.json).
+Hardware telemetry in LibreHardwareMonitor's data.json shape.
 
-Works on any PC: it reads whatever CPU / GPU / RAM / drives / fans LibreHardwareMonitor
-reports, groups them by component, and computes a plain-language summary.
-If LibreHardwareMonitor is not reachable, it says so (no made-up numbers).
+Sources, in order: PC Sentinel's own sensor helper (installed with the suite, this edition's port on 127.0.0.1),
+then a LibreHardwareMonitor the user runs (its web server, 8085), then LibreHardwareMonitor's WMI output, then what
+Windows reports by itself. The snapshot says which source is active ("source", "source_id") and why the earlier ones
+were skipped ("sources"). It reads whatever CPU / GPU / RAM / drives / fans are reported, groups them by component,
+and computes a plain-language summary. Nothing reachable means it says so (no made-up numbers).
 """
 import os
 import re
@@ -398,28 +400,83 @@ def _wmi_groups() -> Optional[List[dict]]:
     return groups
 
 
+def groups_from_tree(tree) -> List[dict]:
+    """Sensor groups from a data.json tree (LibreHardwareMonitor's or the sensor helper's, same shape)."""
+    if not isinstance(tree, dict):
+        raise ValueError("data.json is not an object")
+    groups: Dict[str, dict] = {}
+    _walk(tree, [], groups)
+    return sorted(groups.values(), key=lambda g: KIND_ORDER.index(g["kind"]) if g["kind"] in KIND_ORDER else 99)
+
+
+def _has_cpu_temperature(groups) -> bool:
+    return any(g.get("kind") == "cpu" and any(s.get("type") == "Temperature" for s in g.get("sensors", []))
+               for g in groups or [])
+
+
+# Sources in the order they are tried. "helper" is PC Sentinel's own sensor helper (installed with the suite);
+# "lhm_http" is a LibreHardwareMonitor the user runs themselves; then WMI; then what Windows reports by itself.
+SOURCE_LABELS = {"helper": "PC Sentinel sensor helper", "lhm_http": "LibreHardwareMonitor",
+                 "lhm_wmi": "LibreHardwareMonitor (WMI)", "windows": "Windows built-in sensors"}
+_helper_state = {"health": None}
+
+
+def forget_cached_state():
+    """Next read re-checks every source right away (used by the Try again button)."""
+    _wmi_cache.update(at=0.0, groups=None)
+    _mon_cache.update(at=0.0, data=None)
+    _helper_state["health"] = None
+
+
+async def _http_sources(client) -> tuple:
+    """Try the helper, then a user's own LibreHardwareMonitor. Returns (groups, source_id, attempts, health).
+
+    The helper wins when it reports a CPU temperature. Otherwise both are asked, and the one with more sensors wins
+    (the helper on a tie), so a PC whose driver is blocked can still use a LibreHardwareMonitor the user runs."""
+    from . import sensor_helper
+    attempts, found, health = [], [], None
+    try:
+        tree, health = await sensor_helper.fetch(client)
+        groups = groups_from_tree(tree)
+        attempts.append({"id": "helper", "ok": bool(groups), "reason": None if groups else "no readings yet"})
+        if groups:
+            found.append(("helper", groups))
+            if _has_cpu_temperature(groups):
+                return groups, "helper", attempts, health
+    except Exception as exc:
+        attempts.append({"id": "helper", "ok": False, "reason": exc.__class__.__name__})
+    try:
+        resp = await client.get(LHM_REMOTE_URL)
+        resp.raise_for_status()
+        groups = groups_from_tree(resp.json())
+        attempts.append({"id": "lhm_http", "ok": bool(groups), "reason": None if groups else "no readings"})
+        if groups:
+            found.append(("lhm_http", groups))
+    except Exception as exc:
+        attempts.append({"id": "lhm_http", "ok": False, "reason": exc.__class__.__name__})
+    if not found:
+        return None, None, attempts, health
+    best = max(found, key=lambda f: (sum(len(g["sensors"]) for g in f[1]), f[0] == "helper"))
+    return best[1], best[0], attempts, health
+
+
 async def collect_hardware_telemetry() -> Dict:
     import asyncio
-    from . import native_sensors as ns, storage_health as sh
-    glist, source, level, err = None, None, "full", None
-    try:
-        async with httpx.AsyncClient(timeout=1.5) as client:
-            resp = await client.get(LHM_REMOTE_URL)
-            resp.raise_for_status()
-            tree = resp.json()
-        groups: Dict[str, dict] = {}
-        _walk(tree, [], groups)
-        glist = sorted(groups.values(), key=lambda g: KIND_ORDER.index(g["kind"]) if g["kind"] in KIND_ORDER else 99)
-        source = "LibreHardwareMonitor"
-    except Exception as exc:
-        err = exc.__class__.__name__
+    from . import native_sensors as ns, storage_health as sh, sensor_helper
+    level = "full"
+    async with httpx.AsyncClient(timeout=1.5) as client:
+        glist, source_id, attempts, health = await _http_sources(client)
+    _helper_state["health"] = health
     if not glist:
         glist = await asyncio.to_thread(_wmi_groups)
+        attempts.append({"id": "lhm_wmi", "ok": bool(glist), "reason": None if glist else "not available"})
         if glist:
-            source = "LibreHardwareMonitor (WMI)"
+            source_id = "lhm_wmi"
     if not glist:
         nat = await asyncio.to_thread(ns.native_groups)
-        glist, source, level = nat["groups"], "Windows built-in sensors", "basic"
+        glist, source_id, level = nat["groups"], "windows", "basic"
+        attempts.append({"id": "windows", "ok": True, "reason": None})
+    source = SOURCE_LABELS[source_id]
     info = await asyncio.to_thread(ns.device_info)
     if _mon_cache["data"] is None or time.time() - _mon_cache["at"] > 15:
         from . import sensor_setup
@@ -428,11 +485,15 @@ async def collect_hardware_telemetry() -> Dict:
     drives = sh.merge_lhm([dict(x) for x in await asyncio.to_thread(sh.drives)], glist)
     summary = summarize(glist)
     summary.setdefault("cpu_name", info.get("cpu"))
-    out = {"live": True, "source": source, "level": level, "groups": glist, "summary": summary,
+    helper = await asyncio.to_thread(sensor_helper.summary, health)
+    helper["last_setup"] = await asyncio.to_thread(sensor_helper.last_result)
+    out = {"live": True, "source": source, "source_id": source_id, "sources": attempts, "helper": helper,
+           "level": level, "groups": glist, "summary": summary,
            "cooling": cooling_report(glist), "power": power_report(glist, summary), "drives": drives,
            "device": info, "monitors": _mon_cache["data"], "sensor_count": sum(len(g["sensors"]) for g in glist)}
     from . import sensor_setup
-    out["sensor_setup"] = sensor_setup.guide(_mon_cache["data"], _mon_cache.get("drivers"), level, glist)
+    out["sensor_setup"] = sensor_setup.guide(_mon_cache["data"], _mon_cache.get("drivers"), level, glist,
+                                             helper=helper, source_id=source_id)
     if level == "basic":
         m = _mon_cache["data"] or {}
         out["help"] = ("LibreHardwareMonitor is installed but not running. Start it to add temperatures, fans and power."

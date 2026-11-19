@@ -1,0 +1,53 @@
+Ultra Suite Sensor Helper: third-party notices
+================================================
+
+The Ultra Suite Sensor Helper (UltraSuiteSensorHelper.exe) is part of Ultra Suite (MIT License). It reads hardware
+sensors for PC Sentinel with the libraries below. Each keeps its own license. The license texts that ship inside the
+packages are appended at the end of this file by the build.
+
+
+LibreHardwareMonitorLib 0.9.6
+  License: Mozilla Public License 2.0 (MPL-2.0), https://mozilla.org/MPL/2.0/
+  Copyright: LibreHardwareMonitor contributors
+  Source code: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/v0.9.6
+  Package: https://www.nuget.org/packages/LibreHardwareMonitorLib/0.9.6
+  Ultra Suite uses the unmodified library. Its source code is available at the address above, under the MPL-2.0.
+
+PawnIO modules embedded in LibreHardwareMonitorLib (for example AMDFamily17, IntelMSR, LpcIO, RyzenSMU and SmbusI801)
+  License: GNU Lesser General Public License 2.1 (LGPL-2.1), https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+  Copyright: namazso and PawnIO.Modules contributors
+  Source code: https://github.com/namazso/PawnIO.Modules
+  The library carries these signed module binaries as resources and passes them to the PawnIO driver.
+
+DiskInfoToolkit 1.1.2, BlackSharp.Core 1.0.7, RAMSPDToolkit-NDD 1.4.2
+  License: MPL-2.0, https://mozilla.org/MPL/2.0/
+  Copyright: Blacktempel
+  Source code: https://github.com/Blacktempel/DiskInfoToolkit, https://github.com/Blacktempel/BlackSharp,
+               https://github.com/Blacktempel/RAMSPDToolkit
+  Used unmodified.
+
+HidSharp 2.6.4
+  License: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+  Copyright 2010-2025 James F. Bellinger
+  Source code: https://software.seekye.com/hidsharp
+
+System.Memory 4.6.3, System.Buffers 4.6.1, System.Numerics.Vectors 4.6.1,
+System.Runtime.CompilerServices.Unsafe 6.1.2, System.Threading.AccessControl 10.0.3,
+System.Security.AccessControl 6.0.0, System.Security.Principal.Windows 5.0.0
+  License: MIT, https://licenses.nuget.org/MIT
+  Copyright (c) .NET Foundation and Contributors
+  Source code: https://github.com/dotnet/maintenance-packages, https://github.com/dotnet/runtime,
+               https://github.com/dotnet/dotnet
+
+
+PawnIO driver (not included in Ultra Suite)
+  PawnIO is a separate program by namazso. Ultra Suite does not include it. When "Full hardware sensors" is chosen
+  during setup (or later from PC Sentinel), the sensor helper downloads the official, digitally signed installer from
+  https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe, checks its SHA-256
+  (1f519a22e47187f70a1379a48ca604981c4fcf694f4e65b734aaa74a9fba3032), and runs it with "-install -silent".
+  PawnIO stays installed when Ultra Suite is removed, because other programs may use it. It can be removed from
+  Windows Settings > Apps.
+  License: GNU General Public License 2.0 or later, with an exception for programs that use PawnIO only through its
+  device IO control interface (as the sensor helper does). Details: https://github.com/namazso/PawnIO
+  Source code: https://github.com/namazso/PawnIO
+  Website: https://pawnio.eu

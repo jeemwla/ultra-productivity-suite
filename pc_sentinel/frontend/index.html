@@ -422,7 +422,7 @@ table.wr td .btn{height:30px;padding:0 10px}
     <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
     <div class="content">
       <div class="banner info" id="upd" hidden><div class="ic">↑</div><div><div class="t" id="upd-t">Update available</div><div class="s" id="upd-s"></div></div><div class="act"><button class="btn" id="upd-later">Later</button><button class="btn primary" id="upd-go">Update now</button></div></div>
-      <div class="banner warning" id="basic" hidden><div class="ic">i</div><div><div class="t" id="basic-t">Basic sensor mode</div><div class="s" id="basic-s"></div></div><div class="act"><button class="btn primary" id="lhm-go">Set up full sensors</button></div></div>
+      <div class="banner warning" id="basic" hidden><div class="ic">i</div><div><div class="t" id="basic-t">Basic sensor mode</div><div class="s" id="basic-s"></div></div><div class="act"><button class="btn primary" id="sensor-retry" hidden>Try again</button><button class="btn primary" id="lhm-go">Set up full sensors</button></div></div>
 
       <!-- OVERVIEW -->
       <section class="page" id="p-overview">
@@ -1084,6 +1084,9 @@ function renderSystem(){
 }
 async function setupLhm(){ const b = $("lhm-go"); b.disabled = true; b.textContent = "Setting up…"; toast("Installing LibreHardwareMonitor. Windows will ask for permission once.");
   try { await api("/api/setup/lhm", { method: "POST" }); toast("Done. Full sensors appear in a few seconds."); } catch (e) { toast(e.message, true); } b.disabled = false; b.textContent = "Set up full sensors"; }
+async function retrySensors(){ const b = $("sensor-retry"); b.disabled = true; const label = b.textContent; b.textContent = "Starting…";
+  try { const r = await api("/api/sensors/helper/retry", { method: "POST" }); toast(r.message || "Checking sensors again.", !r.started); } catch (e) { toast(e.message, true); } b.disabled = false; b.textContent = label; }
+$("sensor-retry").onclick = retrySensors;
 $("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (e.target.closest("[data-lhm]")) setupLhm(); });
 
 /* ---------- battery (laptops) ---------- */
@@ -1199,9 +1202,9 @@ function render(){
   $("brand-sub").textContent = dev.hostname || "Your PC";
   $("brand-sub").title = dev.hostname ? "Windows computer name" : "Windows computer name is unavailable";
   const sg = window.SentinelPanels && hw.sensor_setup ? SentinelPanels.sensorBanner(hw.sensor_setup) : null;
-  if (sg) { $("basic").hidden = false; $("basic").className = "banner " + sg.kind; $("basic-t").textContent = sg.title; if ($("basic-s").dataset.sig !== sg.html) { $("basic-s").dataset.sig = sg.html; $("basic-s").innerHTML = sg.html; } $("lhm-go").hidden = !sg.setup || hw.can_install_lhm === false; }
+  if (sg) { $("basic").hidden = false; $("basic").className = "banner " + sg.kind; $("basic-t").textContent = sg.title; if ($("basic-s").dataset.sig !== sg.html) { $("basic-s").dataset.sig = sg.html; $("basic-s").innerHTML = sg.html; } $("lhm-go").hidden = !sg.setup || sg.retry || hw.can_install_lhm === false; $("sensor-retry").hidden = !sg.retry; if (sg.retry && !$("sensor-retry").disabled) $("sensor-retry").textContent = sg.retryLabel; }
   else if (hw.sensor_setup) $("basic").hidden = true;
-  else { $("basic").hidden = hw.level !== "basic"; $("basic-t").textContent = "Basic sensor mode"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor."; $("lhm-go").hidden = hw.can_install_lhm === false; }
+  else { $("sensor-retry").hidden = true; $("basic").hidden = hw.level !== "basic"; $("basic-t").textContent = "Basic sensor mode"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor."; $("lhm-go").hidden = hw.can_install_lhm === false; }
   applyPreferences();
   $("settings-form").textContent = dev.type ? `Detected: ${dev.type === "laptop" ? "Laptop" : "Desktop"}${dev.form_basis ? `. ${dev.form_basis}.` : ""}` : "Detecting this PC…";
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);

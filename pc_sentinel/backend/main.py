@@ -61,6 +61,8 @@ max_power.register(app)
 
 from . import system_tools  # noqa: E402  power plans, refresh rate, top apps, LibreHardwareMonitor setup
 system_tools.register(app)
+from . import sensor_helper  # noqa: E402  own read-only sensor helper; Try again runs its elevated setup (alarm-gated)
+sensor_helper.register(app)
 from . import benchmark  # noqa: E402  bounded before/after measurement for Max Performance
 benchmark.register(app)
 from . import psu_refresh  # noqa: E402  optional 14-day PSU catalog refresh (off by default)
