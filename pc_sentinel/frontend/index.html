@@ -1184,10 +1184,16 @@ function checkAlerts(s){ if (!AL.on) return; const now = Date.now(), fire = (k, 
 
 /* ---------- updates, about, export ---------- */
 async function checkUpdate(force){ try { const u = await api("/api/update" + (force ? "?force=true" : "")); $("ab-ver").textContent = `Version ${u.current}`;
-  if (u.available && (force || store.get("skipVersion", "") !== u.latest)) { $("upd").hidden = false; $("upd").dataset.v = u.latest; $("upd-t").textContent = `Ultra Suite ${u.latest} is available`; $("upd-s").textContent = u.summary || (u.notes || "").split("\n").map(l => l.replace(/[#*`]/g, "").trim()).find(l => l && !/^ultra suite/i.test(l)) || "New features and fixes."; }
+  if (u.available && (force || !updateSnoozed(store.get("updateLater", null), u.latest, Date.now()))) { $("upd").hidden = false; $("upd").dataset.v = u.latest; $("upd-t").textContent = `Ultra Suite ${u.latest} is available`; $("upd-s").textContent = u.summary || (u.notes || "").split("\n").map(l => l.replace(/[#*`]/g, "").trim()).find(l => l && !/^ultra suite/i.test(l)) || "New features and fixes."; }
   else if (force) toast(u.error ? "Couldn't check for updates right now." : `You're on the newest version (${u.current}).`); } catch { if (force) toast("Couldn't check for updates right now.", true); } }
-$("upd-later").onclick = () => { store.set("skipVersion", $("upd").dataset.v || ""); $("upd").hidden = true; };
-$("upd-go").onclick = async () => { $("upd-go").disabled = true; $("upd-go").textContent = "Downloading…"; try { await api("/api/update/install", { method: "POST" }); toast("The installer is starting. Ultra Suite reopens when it's done."); } catch (e) { toast(e.message, true); } $("upd-go").disabled = false; $("upd-go").textContent = "Update now"; };
+/* Later means later: the same version comes back after 3 days (it used to stay hidden for good). A newer version shows at once. */
+const UPDATE_LATER_MS = 3 * 86400000;
+function updateSnoozed(later, version, now){ return !!(later && later.v === version && now < later.until); }
+$("upd-later").onclick = () => { store.set("updateLater", { v: $("upd").dataset.v || "", until: Date.now() + UPDATE_LATER_MS }); $("upd").hidden = true; };
+$("upd-go").onclick = async () => { $("upd-go").disabled = true; $("upd-go").textContent = "Downloading…";
+  try { await api("/api/update/install", { method: "POST" }); toast("The installer is starting. Ultra Suite reopens when it's done."); $("upd-go").textContent = "Installer started"; return; } // stays disabled: a second click would start a second installer
+  catch (e) { toast(e.message, true); } $("upd-go").disabled = false; $("upd-go").textContent = "Update now"; };
+setInterval(() => { if (!document.hidden) checkUpdate(false); }, 6 * 3600000); // a window left open for days still hears about updates
 $("ab-upd").onclick = () => checkUpdate(true);
 function prepareReport(input, includeIdentifiers=false){
   const report=JSON.parse(JSON.stringify(input));

@@ -120,3 +120,10 @@ test('unsaved Settings / Extras changes ask before the window closes',()=>{
  ctx.preferencesDirty=true;e=ev();handler(e);assert.equal(e.prevented,true);
  ctx.preferencesSaving=true;e=ev();handler(e);assert.equal(e.prevented,false,'a save in flight is not treated as unsaved');
 });
+test('Later hides an update for three days, and a newer version shows at once',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('const UPDATE_LATER_MS','$("upd-later").onclick'),ctx);const z=vm.runInContext('updateSnoozed',ctx),D=vm.runInContext('UPDATE_LATER_MS',ctx);
+ const later={v:'2.3.0',until:1000+D};
+ assert.equal(z(later,'2.3.0',1000),true);assert.equal(z(later,'2.3.0',1000+D),false,'back after three days');
+ assert.equal(z(later,'2.3.1',1000),false,'a newer version is not hidden');assert.equal(z(null,'2.3.0',1000),false);
+ assert.match(html,/\$\("upd-go"\)\.textContent = "Installer started"; return;/);
+});
