@@ -19,7 +19,6 @@ from .net_monitor import get_live_ping_snapshot, run_on_demand_speedtest
 from .glinet_vpn import vpn_controller
 from . import speedtest
 from . import preferences
-from . import preview as preview_mode
 
 VPN_OFF = {"supported": False, "message": "Enable router controls in Settings / Extras."}
 latest = {"hardware": {"live": False, "source": "starting", "groups": [], "summary": {}},
@@ -30,8 +29,25 @@ POLL_SECONDS = 1.0
 # Each part gets its own deadline; on a miss the last good value stays and is marked stale.
 JOB_TIMEOUT = {"hardware": 8.0, "network": 5.0, "vpn": 8.0}
 ERROR_REPEAT_SECONDS = 300
-PREVIEW_KIND = preview_mode.mode()
-PREVIEW = preview_mode.Preview(PREVIEW_KIND) if PREVIEW_KIND else None
+
+
+def _load_preview():
+    """SENTINEL_PREVIEW turns on the developer preview (pc_sentinel/dev_preview.py, run from the source folder only)."""
+    if not (os.environ.get("SENTINEL_PREVIEW") or "").strip():
+        return None, None
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        import dev_preview
+    except ImportError:
+        print("[sentinel] SENTINEL_PREVIEW is set but the preview is not part of this build; showing real data")
+        return None, None
+    from . import laptop
+    kind = dev_preview.mode()
+    return kind, dev_preview.Preview(kind, laptop)
+
+
+PREVIEW_KIND, PREVIEW = _load_preview()
 _changed = asyncio.Event()
 _errors = {}
 

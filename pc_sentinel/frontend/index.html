@@ -57,7 +57,7 @@ a{color:var(--accent);text-decoration:none}
 .nav .badge{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--critical)}
 .side .spacer{flex:1}
 .side .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 6px 2px;border-top:1px solid var(--line);margin-top:8px}
-.side .foot .chip{max-width:105px}
+.side .foot .chip{max-width:none;flex:1 1 auto;min-width:0}
 .side .foot .nav{width:34px;height:34px;min-width:34px;justify-content:center;padding:0;flex:none}
 .settings-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
 .settings-row label{flex:1;cursor:pointer}.settings-row input{width:18px;height:18px;accent-color:var(--accent);flex:none}
@@ -319,6 +319,7 @@ td.n,th.n{text-align:right;white-space:nowrap} tr.hid td{opacity:.4} td.cbx{widt
 :root[data-motion=off] .ov-grid.editing .ov-item{animation:none!important}
 @media (max-width:1200px){.ov-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
 @media (max-width:760px){.ov-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
+.skip{position:absolute;left:12px;top:-60px;z-index:90;padding:10px 14px;border-radius:10px;background:var(--accent);color:var(--accent-ink,#fff);font-weight:600;text-decoration:none}.skip:focus{top:12px}.main:focus{outline:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* ---------- Sensor guide, measurement and writers ---------- */
@@ -352,6 +353,8 @@ table.wr td .btn{height:30px;padding:0 10px}
 .side .foot .nav.gear:hover svg{transform:rotate(60deg)}
 .side .foot .nav.gear[aria-current=page]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 @media (prefers-reduced-motion:reduce){.side .foot .nav.gear svg{transition:none}.side .foot .nav.gear:hover svg{transform:none}}
+/* Windows "Animation effects" off: no page slide-ins, blinking or moving stripes, even when Appearance is left on Full. */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 #p-settings .card .ch h2{display:flex;align-items:center;gap:10px}
 #p-settings .card .ch h2 .sic{width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none}
 #p-settings .card .ch h2 .sic svg{width:17px;height:17px}
@@ -410,6 +413,7 @@ table.wr td .btn{height:30px;padding:0 10px}
 </style>
 </head>
 <body>
+<a class="skip" href="#main" id="skip">Skip to content</a>
 <div class="app">
   <aside class="side" id="side" aria-label="Sections">
     <div class="brand"><div class="logo" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2-6 4 12 2-6h6"/></svg></div>
@@ -418,9 +422,10 @@ table.wr td .btn{height:30px;padding:0 10px}
     <div class="spacer"></div>
     <div class="foot"><span class="chip" id="live" title="Connection"><span class="dot"></span>Connecting…</span><span data-theme-slot></span><button class="nav gear" id="nav-settings" data-p="settings" aria-label="Settings / Extras" title="Settings / Extras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
   </aside>
-  <main class="main" id="main">
+  <main class="main" id="main" tabindex="-1">
     <div class="top"><div><h1 id="pg-title">Overview</h1><p id="pg-sub"></p></div><button class="btn" id="fb-open" type="button">Feedback</button></div>
     <div class="content">
+      <div class="banner warning" id="conn" hidden role="status"><div class="ic">!</div><div><div class="t" id="conn-t">Live data paused</div><div class="s" id="conn-s"></div></div></div>
       <div class="banner info" id="upd" hidden><div class="ic">↑</div><div><div class="t" id="upd-t">Update available</div><div class="s" id="upd-s"></div></div><div class="act"><button class="btn" id="upd-later">Later</button><button class="btn primary" id="upd-go">Update now</button></div></div>
       <div class="banner warning" id="basic" hidden><div class="ic">i</div><div><div class="t" id="basic-t">Basic sensor mode</div><div class="s" id="basic-s"></div></div><div class="act"><button class="btn primary" id="lhm-go">Set up full sensors</button></div></div>
 
@@ -581,7 +586,7 @@ table.wr td .btn{height:30px;padding:0 10px}
     </div>
   </main>
 </div>
-<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div><div class="sr-only" id="alerts" aria-live="assertive"></div>
 <div class="modal-bg" id="fb-bg" role="dialog" aria-modal="true" aria-labelledby="fb-h"><div class="modal">
   <h3 id="fb-h">Tell us what you think</h3><p>Ideas, bugs or something you love. It goes straight to the person who builds this.</p>
   <div class="seg" id="fb-kind" style="margin-bottom:10px"><button data-k="idea" aria-pressed="true">Idea</button><button data-k="bug" aria-pressed="false">Bug</button><button data-k="love" aria-pressed="false">Love it</button></div>
@@ -601,13 +606,33 @@ const n1 = (v) => v == null || isNaN(v) ? "–" : (Math.round(v * 10) / 10).toLo
 const auto = (v) => v == null || isNaN(v) ? "–" : (Math.abs(v) >= 100 ? n0(v) : n1(v));
 const rate = (b) => b == null ? "–" : b >= 1e9 ? `${n1(b / 1e9)} GB/s` : b >= 1e6 ? `${n1(b / 1e6)} MB/s` : b >= 1e3 ? `${n0(b / 1e3)} KB/s` : `${n0(b)} B/s`;
 const api = async (p, o) => { const r = await fetch(p, { headers: { "Content-Type": "application/json" }, ...o }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || `Request failed (${r.status})`); return d; };
-function toast(m, err){ const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = m; $("toasts").appendChild(t); setTimeout(() => t.remove(), err ? 6000 : 3200); }
+function toast(m, err){ const box = $("toasts"), same = [...box.children].find(x => x.textContent === m);
+  if (same) { clearTimeout(same._t); same._t = setTimeout(() => same.remove(), err ? 6000 : 3200); return; } // one copy of a repeated message
+  const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = m;
+  if (err) { t.setAttribute("aria-hidden", "true"); $("alerts").textContent = m; } // problems are announced at once, not after other speech
+  box.appendChild(t); t._t = setTimeout(() => t.remove(), err ? 6000 : 3200); }
+/* ---------- dialogs: focus moves in, Tab stays inside, Escape closes, focus returns to the button that opened it ---------- */
+const MODAL = { open: null, back: null };
+const FOCUSABLE = 'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[href],[tabindex]:not([tabindex="-1"])';
+function modalOpen(bg, first){ MODAL.back = document.activeElement; MODAL.open = bg; bg.classList.add("show"); setTimeout(() => (first || bg.querySelector(FOCUSABLE))?.focus(), 50); }
+function modalClose(bg){ if (!bg.classList.contains("show")) return; bg.classList.remove("show"); if (MODAL.open !== bg) return; MODAL.open = null; const b = MODAL.back; MODAL.back = null; if (b && b.isConnected && typeof b.focus === "function") b.focus(); }
+document.addEventListener("keydown", (e) => { const bg = MODAL.open; if (!bg || !bg.classList.contains("show")) return;
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); modalClose(bg); return; }
+  if (e.key !== "Tab") return; const f = [...bg.querySelectorAll(FOCUSABLE)].filter(x => x.offsetParent !== null); if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !bg.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !bg.contains(document.activeElement))) { e.preventDefault(); first.focus(); } }, true);
+/* Apps without an icon keep their letter badge; asking again on every refresh only fills the log with 404s. */
+const NOICON = new Set(); document.addEventListener("error", (e) => { const t = e.target; if (t && t.classList && t.classList.contains("app-ic")) { NOICON.add(t.dataset.id); t.remove(); } }, true);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const when = (s) => new Date(s * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 /* ---------- smooth numbers ---------- */
 const TW = new Map(); let rafT = 0;
+/* Motion level: the Appearance choice (Full, Reduced, Off) and the Windows "Animation effects" setting both count. */
+const motionLevel = () => { const m = document.documentElement?.dataset?.motion; return m === "off" ? "off" : m === "reduced" || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) ? "reduced" : "full"; };
 function tween(el, to, fmt = auto, dur = 800){ if (!el) return; if (to == null || isNaN(to)) { TW.delete(el); el._c = null; el.textContent = "–"; return; }
+  if (motionLevel() !== "full") { TW.delete(el); el._c = to; el.textContent = fmt(to); return; }
   const from = el._c == null ? to : el._c; TW.set(el, { from, to, st: performance.now(), dur, fmt }); if (!rafT) rafT = requestAnimationFrame(stepT); }
 function stepT(t){ rafT = 0; for (const [el, s] of TW) { const k = Math.min(1, (t - s.st) / s.dur), e = 1 - Math.pow(1 - k, 3); el._c = s.from + (s.to - s.from) * e; el.textContent = s.fmt(el._c); if (k >= 1) TW.delete(el); } if (TW.size) rafT = requestAnimationFrame(stepT); }
 function smooth(p){ if (p.length < 2) return ""; let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
@@ -682,9 +707,10 @@ function go(p, push = true){
 }
 $("navs").addEventListener("click", (e) => { const b = e.target.closest(".nav"); if (b) go(b.dataset.p); });
 $("nav-settings").addEventListener("click",()=>go("settings"));
+$("skip").addEventListener("click", (e) => { e.preventDefault(); $("main").focus(); }); // "#main" is not a page, so the hash stays put
 window.addEventListener("hashchange", () => go(location.hash.slice(1), false));
 // keyboard: 1-9 jump between sections (when not typing)
-document.addEventListener("keydown", (e) => { if (e.target.closest("input,textarea,select,[contenteditable=true]") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
+document.addEventListener("keydown", (e) => { if ((typeof MODAL !== "undefined" && MODAL.open) || e.target.closest("input,textarea,select,[contenteditable=true]") || e.ctrlKey || e.metaKey || e.altKey) return; const vis = PAGES.filter(x => !$("nav-" + x[0]).hidden); const i = +e.key - 1; if (i >= 0 && i < vis.length) go(vis[i][0]); });
 // swipe between sections on touch screens
 let tx = null, ty = null; document.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
 document.addEventListener("touchend", (e) => { if (tx == null) return; const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null; if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx)) return;
@@ -736,11 +762,15 @@ function drawTrend(id, arr){ const a = arr.slice(-60).filter(v => v != null); if
 function buildTiles(){ if ($("t-cpu")) return; const tile = (id, l, u, c, href) => `<a class="card tile" href="#${href}" style="color:inherit"><div class="l"><span>${l}</span><span id="t-${id}-sub"></span></div>
   <div class="v"><span class="num" id="t-${id}">–</span><small id="t-${id}-u">${u}</small></div><div class="m num" id="t-${id}-m"></div>${trend(id, c)}<div class="status good" id="t-${id}-st">Normal</div></a>`;
   $("ovc-cpu").innerHTML = tile("cpu", "Processor", "°C", "var(--series)", "performance"); $("ovc-gpu").innerHTML = tile("gpu", "Graphics", "°C", "var(--series-2)", "performance"); $("ovc-ram").innerHTML = tile("ram", "Memory", "%", "var(--good)", "performance"); $("ovc-pw").innerHTML = tile("pw", "System power", "W", "var(--warning)", "power"); }
+/* A score that lost points (memory almost full, a warm part) is still healthy, but a green check with "All good" over a warning reads as a contradiction. */
+function healthView(h, hl){ const notes = (h.notes || []).length;
+  if (hl === "good" && h.label === "All good" && h.score < 100 && notes) return { cls: "info", icon: "i", label: notes === 1 ? "Healthy, one thing to watch" : `Healthy, ${notes} things to watch` };
+  return { cls: hl, icon: hl === "good" ? "✓" : "!", label: h.label }; }
 function setSt(id, l, t){ const e = $(id); e.className = "status " + l; e.textContent = t; }
 function renderOverview(){
   const hw = snap.hardware, s = hw.summary || {}; buildTiles(); setupOverviewEditor();
   const h = s.health || { score: 100, label: "All good", notes: [] }, hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
-  $("health").hidden = false; $("health").className = `banner ${hl}`; $("health-ic").textContent = hl === "good" ? "✓" : "!"; $("health-t").textContent = h.label; $("health-s").textContent = (h.notes || []).join(" · ");
+  const hv = healthView(h, hl); $("health").hidden = false; $("health").className = `banner ${hv.cls}`; $("health-ic").textContent = hv.icon; $("health-t").textContent = hv.label; $("health-s").textContent = (h.notes || []).join(" · ");
   const cpuT = s.cpu_temp; $("t-cpu-sub").textContent = s.cpu_name || "";
   if (cpuT != null) { $("t-cpu-u").textContent = "°C"; tween($("t-cpu"), cpuT, n0); $("t-cpu-m").textContent = [s.cpu_load != null && `${n0(s.cpu_load)}% load`, s.cpu_power != null && `${n0(s.cpu_power)} W`, s.cpu_clock != null && `${n0(s.cpu_clock)} MHz`].filter(Boolean).join(" · "); const l = lvl(cpuT, 80, 90); setSt("t-cpu-st", l, HOT[l]); }
   else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "load · temperature " + (typeof SentinelPanels !== "undefined" ? SentinelPanels.missingReading(hw.sensor_setup) : "needs full sensors"); const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
@@ -756,6 +786,7 @@ function renderOverview(){
   const dr = hw.drives || []; const wrPill = typeof loadWriters === "function" ? (loadWriters(), typeof SentinelPanels !== "undefined" ? SentinelPanels.overviewPill(writers, wrIgnored()) : "") : ""; $("ov-drives").innerHTML = (wrPill ? `<div class="ov-pill">${wrPill}</div>` : "") + (dr.length ? dr.map(d => `<div class="mini"><span>${esc(d.name)}</span><span class="pill ${d.health === "Healthy" ? "good" : d.health === "Warning" ? "warning" : "critical"}">${esc(d.health)}${d.life_left != null ? ` · ${d.life_left}% life` : ""}</span></div>`).join("") : `<div class="muted">No drives reported</div>`);
   const net = snap.network || {}; $("ov-net").innerHTML = `<div class="big num">${net.primary_ping_ms == null ? "–" : n0(net.primary_ping_ms)}<small>ms ping</small></div><div class="muted">${net.online ? "Online" : "Offline"} · jitter ${net.jitter_ms == null ? "–" : n1(net.jitter_ms) + " ms"}${snap.vpn && snap.vpn.vpn_enabled ? " · VPN on" : ""}</div>`;
   const fans = (hw.cooling || {}).fans || []; $("ov-cool").innerHTML = fans.length ? `<div class="big num">${fans.filter(f => f.spinning).length}<small>of ${fans.length} fans spinning</small></div><div class="muted">fastest ${n0(Math.max(...fans.map(f => f.rpm)))} RPM${s.storage_max_temp != null ? ` · hottest drive ${n0(s.storage_max_temp)}°C` : ""}</div>` : hasFanData() === false && hw.device?.type === "laptop" ? `<div class="muted">This laptop reports no fan speeds to Windows. Its firmware or the maker's app controls the fans.</div>` : `<div class="muted">Fan speeds need full sensors (LibreHardwareMonitor).</div>`;
+  for (const k of ["cpu", "gpu", "ram", "pw"]) { const e = $(`t-${k}-sub`); if (e.title !== e.textContent) e.title = e.textContent; } // full name when the tile is too narrow
   renderOverviewBattery(); if (ovEditor) ovEditor.apply(false);
 }
 let ovEditor = null, packAt = 0;
@@ -810,7 +841,7 @@ function renderApps(){
   const scrollTop=box.scrollTop;
   const open=new Set([...box.querySelectorAll("details[open]")].map(x=>x.dataset.group)),focus=document.activeElement?.closest?.(".process-group")?.dataset.group;
   box.dataset.sig=signature;box.innerHTML=list.map(a=>{const id=a.group_id,name=a.display_name||a.name||"Unknown process",explanation=a.explanation||"Role not identified. The executable filename is shown.";
-   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}<img class="app-ic" alt="" loading="lazy" src="/api/processes/${encodeURIComponent(id)}/icon"></span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}${a.explanation?`<br>${esc(a.explanation)}`:""}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button class="btn" type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
+   return `<details class="process-group" data-group="${esc(id)}"${open.has(id)?" open":""}><summary class="process-summary"><span class="av" aria-hidden="true" style="background:${COLORS[[...name].reduce((h,c)=>h+c.charCodeAt(0),0)%COLORS.length]}">${esc(name.slice(0,2).toUpperCase())}${typeof NOICON!=="undefined"&&NOICON.has(id)?"":`<img class="app-ic" alt="" loading="lazy" src="/api/processes/${encodeURIComponent(id)}/icon" data-id="${esc(id)}">`}</span><span class="nm">${esc(name)}<small>${esc(a.raw_filename_display||a.raw_filename||a.name)} · ${a.count} process${a.count===1?"":"es"}${a.explanation?`<br>${esc(a.explanation)}`:""}</small></span><span class="bar meter" aria-hidden="true"><i style="width:0"></i></span><span class="vv"></span></summary><div class="process-details"><p>${esc(explanation)}</p><p>Name source: ${esc(a.name_source||"filename")}. A description or path does not verify that a process is safe.</p><p><code>${esc(a.exe_display||a.exe||"Executable path unavailable")}</code></p><button class="btn" type="button" data-refresh-process="${esc(id)}">Refresh PID details</button><div class="process-pids">Open this group to load PID details.</div></div></details>`;}).join("")||`<div class="empty">${appsExpanded?"No matching groups.":appsKey==="mem"?"No memory readings reported.":`No confirmed app readings at or above 0.5% ${appsKey.toUpperCase()} right now.`}</div>`;
   box.querySelectorAll("img.app-ic").forEach(img=>{img.addEventListener("load",()=>img.parentNode.classList.add("has-icon"),{once:true});img.addEventListener("error",()=>img.remove(),{once:true});});
   if(focus)[...box.querySelectorAll(".process-group")].find(n=>n.dataset.group===focus)?.querySelector("summary")?.focus({preventScroll:true});
   box.scrollTop=scrollTop;
@@ -945,10 +976,10 @@ function renderPerformance(){
 /* ---------- cooling ---------- */
 const FAN = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 10.6c.3-2.9 1.6-6.6 4.6-6.6 2.2 0 3 1.9 2.3 3.4-.9 1.9-3.6 3-6.9 3.2zm1.4 1.4c2.9.3 6.6 1.6 6.6 4.6 0 2.2-1.9 3-3.4 2.3-1.9-.9-3-3.6-3.2-6.9zM12 13.4c-.3 2.9-1.6 6.6-4.6 6.6-2.2 0-3-1.9-2.3-3.4.9-1.9 3.6-3 6.9-3.2zM10.6 12c-2.9-.3-6.6-1.6-6.6-4.6 0-2.2 1.9-3 3.4-2.3 1.9.9 3 3.6 3.2 6.9z"/><circle cx="12" cy="12" r="1.6"/></svg>`;
 const ang = {}; let fanRaf = 0, fanLast = 0;
-const motionOff = () => document.documentElement.dataset.motion === "off" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+const motionOff = () => motionLevel() !== "full";
 function spin(t){ const dt = fanLast ? Math.min(.1, (t - fanLast) / 1000) : 0; fanLast = t;
   if (!motionOff()) document.querySelectorAll(".fan[data-rpm]").forEach(el => { const k = el.dataset.key; ang[k] = ((ang[k] || 0) + dt * (+el.dataset.rpm || 0) * .6) % 360; el.querySelector(".blade svg").style.transform = `rotate(${ang[k]}deg)`; });
-  fanRaf = page === "cooling" ? requestAnimationFrame(spin) : 0; if (!fanRaf) fanLast = 0; }
+  fanRaf = page === "cooling" && !motionOff() ? requestAnimationFrame(spin) : 0; if (!fanRaf) fanLast = 0; }
 function renderCooling(){
   const c = snap.hardware.cooling || {}, fans = c.fans || [], names = store.get("fanNames", {});
   $("cool-sub").textContent = fans.length ? `${fans.filter(f => f.spinning).length} of ${fans.length} spinning${c.fancontrol ? " · curves from FanControl" : ""}` : "";
@@ -970,8 +1001,8 @@ function renderCooling(){
   if (!fanRaf) fanRaf = requestAnimationFrame(spin);
 }
 let renaming = null;
-$("fans").addEventListener("click", (e) => { const b = e.target.closest("[data-rename]"); if (!b) return; renaming = b.dataset.rename; $("rn-in").value = (store.get("fanNames", {})[renaming]) || ""; $("rn-in").placeholder = b.closest(".fan").querySelector(".fn").textContent; $("rn-bg").classList.add("show"); setTimeout(() => $("rn-in").focus(), 50); });
-const rnClose = () => $("rn-bg").classList.remove("show");
+$("fans").addEventListener("click", (e) => { const b = e.target.closest("[data-rename]"); if (!b) return; renaming = b.dataset.rename; $("rn-in").value = (store.get("fanNames", {})[renaming]) || ""; $("rn-in").placeholder = b.closest(".fan").querySelector(".fn").textContent; modalOpen($("rn-bg"), $("rn-in")); });
+const rnClose = () => modalClose($("rn-bg"));
 $("rn-cancel").onclick = rnClose; $("rn-bg").addEventListener("click", (e) => { if (e.target === $("rn-bg")) rnClose(); });
 $("rn-save").onclick = () => { const names = store.get("fanNames", {}), v = $("rn-in").value.trim(); if (v) names[renaming] = v.slice(0, 40); else delete names[renaming]; store.set("fanNames", names); rnClose(); renderCooling(); };
 $("rn-in").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rn-save").click(); });
@@ -1141,7 +1172,7 @@ $("ab-export").onclick = () => { const rep = prepareReport({ exported: new Date(
   a.href = URL.createObjectURL(new Blob([JSON.stringify(rep, null, 2)], { type: "application/json" })); a.download = `pc-sentinel-report-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("Report saved to your Downloads folder."); };
 
 /* ---------- feedback ---------- */
-let fbKind = "idea"; const fbOpen = () => { $("fb-bg").classList.add("show"); $("fb-st").textContent = "Anonymous"; setTimeout(() => $("fb-msg").focus(), 50); }, fbClose = () => $("fb-bg").classList.remove("show");
+let fbKind = "idea"; const fbOpen = () => { $("fb-st").textContent = "Anonymous"; modalOpen($("fb-bg"), $("fb-msg")); }, fbClose = () => modalClose($("fb-bg"));
 $("fb-open").onclick = fbOpen; $("ab-fb").onclick = fbOpen; $("fb-cancel").onclick = fbClose; $("fb-bg").addEventListener("click", (e) => { if (e.target === $("fb-bg")) fbClose(); });
 $("fb-kind").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; fbKind = b.dataset.k; $("fb-kind").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
 $("fb-send").onclick = async () => { const msg = $("fb-msg").value.trim(); if (msg.length < 3) { $("fb-st").textContent = "Write a few words first"; return; } $("fb-send").disabled = true; $("fb-st").textContent = "Sending…";
@@ -1159,7 +1190,7 @@ function drawGauge(){ if ($("gauge").dataset.ok) return; $("gauge").dataset.ok =
   const minor = Array.from({ length: (STOPS.length - 1) * 4 + 1 }, (_, i) => { const deg = G.start + G.sweep * i / ((STOPS.length - 1) * 4), [a, b] = polar(deg, G.r + 11), [c, d] = polar(deg, G.r + (i % 4 ? 15 : 19)); return `<line x1="${a.toFixed(1)}" y1="${b.toFixed(1)}" x2="${c.toFixed(1)}" y2="${d.toFixed(1)}" stroke="var(--line-strong)" stroke-width="${i % 4 ? 1 : 2}"/>`; }).join("");
   $("gauge").innerHTML = `${minor}<path d="${arcP(1)}" fill="none" stroke="var(--series-track)" stroke-width="16" stroke-linecap="round"/><path id="g-arc" d="${arcP(0)}" fill="none" stroke="var(--series)" stroke-width="16" stroke-linecap="round"/>${ticks}
     <g id="g-needle" style="transform:rotate(${G.start}deg)"><path d="M${G.cx - 4},${G.cy} L${G.cx},${G.cy - G.r + 18} L${G.cx + 4},${G.cy} Z" fill="var(--ink)"/><circle cx="${G.cx}" cy="${G.cy}" r="9" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/></g>`; }
-function animG(){ sp.shown += (sp.target - sp.shown) * .09; if (Math.abs(sp.target - sp.shown) < .05) sp.shown = sp.target; const f = sp.phase === "ping" ? 0 : frac(sp.shown);
+function animG(){ sp.shown += (sp.target - sp.shown) * .09; if (Math.abs(sp.target - sp.shown) < .05 || motionLevel() !== "full") sp.shown = sp.target; const f = sp.phase === "ping" ? 0 : frac(sp.shown);
   const a = $("g-arc"); if (a) { a.setAttribute("d", arcP(f)); a.setAttribute("stroke", sp.phase === "upload" ? "var(--series-2)" : "var(--series)"); } const nd = $("g-needle"); if (nd) nd.style.transform = `rotate(${G.start + G.sweep * f}deg)`;
   $("g-val").textContent = sp.phase === "ping" ? n0(sp.target) : auto(sp.shown); if (sp.running || sp.shown !== sp.target) requestAnimationFrame(animG); }
 const setPh = (l, m) => { $("g-phase").className = "g-phase" + (m ? " on" : "") + (m === "up" ? " up" : ""); $("g-phase-t").textContent = l; };
@@ -1213,7 +1244,15 @@ function onSnap(d){ snap = d; if(d.preferences)acceptPreferences(d.preferences);
   checkAlerts(s); if (!document.hidden) render(); }
 function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`); ws.onopen = () => { retry = 0; };
   ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
-setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && snap.hardware.level !== "basic"; $("live").innerHTML = `<span class="dot ${fresh ? (full ? "good" : "warning") : "critical"}"></span>${fresh ? (snap ? `Live · ${snap.hardware.sensor_count} sensors` : "Live") : "Reconnecting…"}`; }, 1000);
+function connState(now){ const age = now - lastMsg, fresh = age < 5000, hw = snap && snap.hardware || {}, net = snap && snap.network || {};
+  if (!lastMsg) return { fresh: false, chip: "Connecting…", title: "Connecting to the Sentinel service", banner: null };
+  if (!fresh) return { fresh, chip: "Reconnecting…", title: "No live data for " + Math.round(age / 1000) + " s", banner: { t: "Live data paused", s: `Reconnecting to the Sentinel service. The numbers shown are from ${new Date(lastMsg).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.` } };
+  const count = hw.sensor_count, chip = count ? `${n0(count)} sensors` : "Live", title = count ? `Live: ${n0(count)} sensors reporting` : "Live";
+  const late = [hw.stale && "sensor readings", net.stale && "latency checks"].filter(Boolean);
+  return { fresh, chip, title, banner: late.length ? { t: "Some readings are late", s: `The ${late.join(" and ")} did not answer in time, so the last values stay on screen until they do.` } : null }; }
+setInterval(() => { const st = connState(Date.now()), full = snap && snap.hardware.level !== "basic";
+  $("live").innerHTML = `<span class="dot ${st.fresh ? (full ? "good" : "warning") : "critical"}"></span>${esc(st.chip)}`; $("live").title = st.title; $("live").setAttribute("aria-label", st.title);
+  $("conn").hidden = !st.banner; if (st.banner && $("conn-s").textContent !== st.banner.s) { $("conn-t").textContent = st.banner.t; $("conn-s").textContent = st.banner.s; } }, 1000);
 setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
 go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); connect();
 </script>

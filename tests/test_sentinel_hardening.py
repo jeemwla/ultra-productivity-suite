@@ -16,7 +16,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "pc_sentinel"))
 sys.path.insert(0, os.path.join(ROOT, "core"))
 
-from backend import laptop, preferences, preview, system_tools  # noqa: E402
+from backend import laptop, preferences, system_tools  # noqa: E402
+import dev_preview as preview  # noqa: E402
 from backend import storage_writers  # noqa: E402
 
 with patch.object(storage_writers, "register", lambda app: None):  # no background PDH sampler during tests
@@ -167,6 +168,13 @@ class PreviewMode(unittest.TestCase):
             preview.mode({"SENTINEL_PREVIEW": "phone", "ULTRASUITE_CONF": "x"})
         self.assertEqual(preview.mode({"SENTINEL_PREVIEW": "Laptop", "ULTRASUITE_CONF": "x"}), "laptop")
 
+    def test_packaged_app_never_imports_the_preview(self):
+        source = (Path(ROOT) / "pc_sentinel" / "backend" / "main.py").read_text(encoding="utf-8")
+        self.assertNotIn("from . import preview", source)
+        self.assertFalse((Path(ROOT) / "pc_sentinel" / "backend" / "preview.py").exists())
+        with patch.dict(os.environ, {"SENTINEL_PREVIEW": ""}):
+            self.assertEqual(main._load_preview(), (None, None))
+
     def test_fixture_has_no_personal_identifiers(self):
         text = (Path(ROOT) / "tests" / "fixtures" / "sentinel_preview.json").read_text(encoding="utf-8")
         self.assertIn("PREVIEW-PC", text)
@@ -174,7 +182,7 @@ class PreviewMode(unittest.TestCase):
         self.assertNotRegex(text, r'"serial": "(?!PREVIEW-)')
 
     def test_laptop_preview_has_a_battery_and_no_fans(self):
-        p = preview.Preview("laptop", environ={})
+        p = preview.Preview("laptop", laptop, environ={})
         s = p.snapshot(t=100)
         self.assertEqual(s["hardware"]["device"]["type"], "laptop")
         self.assertTrue(s["hardware"]["device"]["has_battery"])
@@ -189,11 +197,11 @@ class PreviewMode(unittest.TestCase):
         self.assertEqual(p.battery(50)["health_pct"], 90.0)
 
     def test_held_battery_state(self):
-        p = preview.Preview("laptop", environ={"SENTINEL_PREVIEW_BATTERY": "charging"})
+        p = preview.Preview("laptop", laptop, environ={"SENTINEL_PREVIEW_BATTERY": "charging"})
         self.assertTrue(all(p.battery(t)["charging"] for t in range(0, 300, 20)))
 
     def test_desktop_preview_moves_but_stays_in_range(self):
-        p = preview.Preview("desktop", environ={})
+        p = preview.Preview("desktop", laptop, environ={})
         self.assertFalse(p.battery()["has_battery"])
         loads = []
         for t in range(0, 120, 7):
@@ -204,7 +212,7 @@ class PreviewMode(unittest.TestCase):
 
     def test_routes_answer_first_and_change_nothing_on_this_pc(self):
         app = FastAPI()
-        p = preview.Preview("laptop", environ={})
+        p = preview.Preview("laptop", laptop, environ={})
         p.register(app)
         system_tools.register(app)
         laptop.register(app)

@@ -1,4 +1,4 @@
-"""Developer preview mode: every page runs on fixture data and nothing on this PC is changed.
+"""Developer preview mode (not packaged; the installed app never loads it): every page runs on fixture data and nothing on this PC is changed.
 
 Turn it on with SENTINEL_PREVIEW=desktop or SENTINEL_PREVIEW=laptop. It also needs ULTRASUITE_CONF pointing at a
 throwaway folder, so saved settings never reach the real Sentinel settings. The installed app never sets either variable.
@@ -19,11 +19,9 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from . import laptop
-
 KINDS = ("desktop", "laptop")
 BATTERY_STATES = ("discharging", "charging", "plugged")
-FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 REFUSED = "Preview mode: this action is turned off, so nothing on this PC changes."
 
 
@@ -73,7 +71,7 @@ def battery_state(t, environ=None):
     return BATTERY_STATES[int(t // 45) % len(BATTERY_STATES)]
 
 
-def battery(t, report, environ=None):
+def battery(t, report, laptop, environ=None):
     """A battery built by the real merge code (laptop.build_battery) from synthetic Windows rows."""
     state = battery_state(t, environ)
     pct = round(_wave(t, 600, 35, 85))
@@ -132,8 +130,10 @@ def snapshot(base, t):
 
 
 class Preview:
-    def __init__(self, kind, fixture=None, environ=None):
+    def __init__(self, kind, laptop, fixture=None, environ=None):
+        """laptop is Sentinel's own backend.laptop module, so the preview battery goes through the real merge code."""
         self.kind = kind
+        self.laptop = laptop
         self.environ = os.environ if environ is None else environ
         self.fx = fixture or load_fixture()
         base = self.fx["snapshot"]
@@ -152,8 +152,8 @@ class Preview:
 
     def battery(self, t=None):
         if self.kind != "laptop":
-            return {"has_battery": False, "pack": laptop.PACK_VERSION}
-        return battery(time.time() if t is None else t, self.report, self.environ)
+            return {"has_battery": False, "pack": self.laptop.PACK_VERSION}
+        return battery(time.time() if t is None else t, self.report, self.laptop, self.environ)
 
     def register(self, app):
         """Registered before the real routes, so these answer first. Starlette uses the first matching route."""

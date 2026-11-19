@@ -488,8 +488,8 @@ def register(app):
         result = await asyncio.to_thread(top_apps, 1, group_id=group_id)
         exe = result["all_apps"][0].get("canonical_exe") if result["all_apps"] else None
         png = await asyncio.to_thread(icon_png, exe) if exe else None
-        if not png:
-            raise HTTPException(404, "No icon is available for this process group.")
+        if not png:  # cacheable, so a page reload does not ask again for the same missing icon
+            raise HTTPException(404, "No icon is available for this process group.", headers={"Cache-Control": "private, max-age=3600"})
         return Response(png, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
     @app.get("/api/power/plans")
