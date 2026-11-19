@@ -10,7 +10,7 @@
       shortcuts, Run value and uninstall entry, monochrome icons, no alarm delivery, no GitHub updates, no telemetry.
       Never upload it.
   Needs: Python 3.11+ with requirements.txt and the exact pins in requirements-build.txt, Rust (MSVC),
-  VS Build Tools (C++), Node.js. The Tauri CLI version comes from ultra_dock\package-lock.json (npm ci).
+  VS Build Tools (C++ and the Roslyn C# compiler, for the PC Sentinel sensor helper), Node.js. The Tauri CLI version comes from ultra_dock\package-lock.json (npm ci).
   Refuses uncommitted tracked changes unless -AllowDirty; <output>\build-environment.json records the inputs.
   Every native step must exit 0 or the build stops; the installer reported at the end is verified to be new.
 #>
@@ -83,6 +83,16 @@ $null = Assert-FreshFile -Path "$Out\dist\$CoreName\$CoreName.exe" -NotBeforeUtc
 # The packaged app folders must hold exactly the staged files, byte for byte (names only are reported on failure).
 Invoke-Native -Step "packaged file check" -FilePath $PythonExe -ArgumentList @("-I", $StageTool, "--stage", $Stage,
     "--verify-output", "$Out\dist\$CoreName\_internal")
+# PC Sentinel's sensor helper (.NET Framework 4.8, pinned and hash-checked NuGet packages) ships in core\sensor-helper.
+# The same files serve both editions; the installer hooks pass the edition. Its unit tests run first.
+$helperScript = "$R\tools\build_sensor_helper.ps1"
+$ps = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+Invoke-Native -Step "sensor helper tests" -FilePath $ps -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass",
+    "-File", $helperScript, "-TestOnly")
+$helperStarted = [DateTime]::UtcNow
+Invoke-Native -Step "sensor helper" -FilePath $ps -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass",
+    "-File", $helperScript, "-OutDir", "$Out\dist\$CoreName\sensor-helper")
+$null = Assert-FreshFile -Path "$Out\dist\$CoreName\sensor-helper\UltraSuiteSensorHelper.exe" -NotBeforeUtc $helperStarted -What "The sensor helper"
 
 Write-Host "[3/3] Building the installer" -ForegroundColor Cyan
 Set-Location "$R\ultra_dock"
