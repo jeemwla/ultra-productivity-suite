@@ -99,3 +99,12 @@ test('alerts need a reading to stay over its limit, then wait five minutes befor
  tick({cpu_temp:95},60);assert.equal(toasts.length,1,'no repeat within five minutes');
  tick({gpu_temp:70,gpu_hotspot:96},5);assert.match(toasts[1],/GPU hot spot has been at 96/);
 });
+test('charts are seeded from the service history once, with late readings as gaps',()=>{
+ const src=cut('const H = {','function lineChart(')+cut('function powerView(','let powerContext=')+cut('function seedHistory','async function loadHistory')+cut('function push(k, v)','function render(');
+ const ctx=vm.createContext({validWatts:v=>typeof v==='number'&&v>=0,n0:v=>String(Math.round(v))});vm.runInContext(src.replace(/const H = /,'var H = '),ctx);
+ const ok={summary:{cpu_load:10,gpu_load:2,ram_load:50,cpu_temp:55,gpu_temp:40},power:{measured_subtotal_w:80}};
+ const n=vm.runInContext('seedHistory',ctx)([ok,{stale:true},ok]);
+ assert.equal(n,2);assert.deepEqual([...vm.runInContext('H.cpu',ctx)],[10,null,10]);assert.deepEqual([...vm.runInContext('H.pw',ctx)],[80,null,80]);
+ assert.equal(vm.runInContext('seedHistory',ctx)([ok]),0,'live data already started: no second seed');
+ assert.equal(vm.runInContext('seedHistory',ctx)(null),0);
+});

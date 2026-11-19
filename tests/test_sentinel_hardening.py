@@ -84,6 +84,25 @@ class PollLoop(unittest.TestCase):
             self.assertTrue(main.log_error("hardware", "different", now=1100 + main.ERROR_REPEAT_SECONDS))
         self.assertEqual(printed.call_count, 3)
 
+    def test_history_keeps_two_minutes_of_slim_samples(self):
+        main.history.clear()
+        snap = {"ts": 5, "hardware": {"summary": {"cpu_load": 40, "gpu_load": 3, "ram_load": 55, "cpu_temp": 60, "gpu_temp": 44,
+                                                 "cpu_name": "x"}, "groups": [{"sensors": list(range(300))}],
+                                     "power": {"measured": {"CPU package": 50}, "measured_subtotal_w": 50, "estimated": {"a": 1},
+                                               "coverage": {"component_readings_complete": False, "scope": "x"}}}}
+        sample = main.history_sample(snap)
+        self.assertEqual(sample["summary"], {"cpu_load": 40, "gpu_load": 3, "ram_load": 55, "cpu_temp": 60, "gpu_temp": 44})
+        self.assertEqual(sample["power"], {"measured": {"CPU package": 50}, "measured_subtotal_w": 50,
+                                           "coverage": {"component_readings_complete": False}})
+        self.assertNotIn("groups", str(sample))
+        for i in range(main.HISTORY_SAMPLES + 30):
+            main.history.append({**sample, "ts": i})
+        body = TestClient(main.app, base_url="http://127.0.0.1:8084").get("/api/history").json()
+        self.assertEqual(len(body["samples"]), main.HISTORY_SAMPLES)
+        self.assertEqual(body["samples"][0]["ts"], 30)
+        self.assertTrue(main.history_sample({"hardware": {"stale": True}})["stale"])
+        main.history.clear()
+
     def test_health_before_the_first_snapshot_has_no_age(self):
         main.latest["ts"] = 0
         body = TestClient(main.app, base_url="http://127.0.0.1:8084").get("/api/health").json()

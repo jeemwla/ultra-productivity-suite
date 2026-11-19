@@ -7,6 +7,7 @@ every open dashboard (PC or phone) receives the same cached snapshot.
 import asyncio
 import os
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -49,6 +50,22 @@ def _load_preview():
 
 PREVIEW_KIND, PREVIEW = _load_preview()
 _changed = asyncio.Event()
+# The last two minutes of the numbers the charts draw, so a page opened now shows full charts instead of empty ones.
+HISTORY_SAMPLES = 120
+history = deque(maxlen=HISTORY_SAMPLES)
+SUMMARY_KEYS = ("cpu_load", "gpu_load", "ram_load", "cpu_temp", "gpu_temp")
+POWER_KEYS = ("measured", "measured_subtotal_w", "modeled_dc_w", "modeled_wall_w", "wall_model")
+
+
+def history_sample(snapshot):
+    hw = snapshot.get("hardware") or {}
+    summary, power = hw.get("summary") or {}, hw.get("power") or {}
+    slim_power = {k: power[k] for k in POWER_KEYS if k in power}
+    coverage = power.get("coverage") or {}
+    if "component_readings_complete" in coverage:
+        slim_power["coverage"] = {"component_readings_complete": coverage["component_readings_complete"]}
+    return {"ts": snapshot.get("ts"), "stale": bool(hw.get("stale")),
+            "summary": {k: summary.get(k) for k in SUMMARY_KEYS}, "power": slim_power}
 _errors = {}
 
 
@@ -83,6 +100,7 @@ async def poll_once():
     prefs = preferences.load()
     if PREVIEW:
         latest.update(PREVIEW.snapshot(), vpn=dict(VPN_OFF), preferences=prefs)
+        history.append(history_sample(latest))
         _changed.set()
         return
     jobs = [_bounded("hardware", collect_hardware_telemetry()),
@@ -94,6 +112,7 @@ async def poll_once():
     network = results[1] if results[1] is not None else _stale(latest["network"])
     vpn = vpn_controller.status() if prefs["router_vpn"] else dict(VPN_OFF)
     latest.update(hardware=hardware, network=network, vpn=vpn, preferences=prefs, ts=time.time())
+    history.append(history_sample(latest))
     _changed.set()
 
 
@@ -169,6 +188,12 @@ async def serve_ui_script(name: str):
 @app.get("/api/snapshot")
 async def get_full_snapshot():
     return latest
+
+
+@app.get("/api/history")
+async def get_history():
+    """Oldest first, about one sample a second. Stale samples repeat the last good reading and are marked."""
+    return {"interval_s": POLL_SECONDS, "samples": list(history)}
 
 
 @app.get("/api/health")

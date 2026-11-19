@@ -125,6 +125,10 @@ def snapshot(base, t):
     if net.get("targets"):
         net["primary_ping_ms"] = net["targets"][0]["latency_ms"]
     net["jitter_ms"] = round(_wave(t, 23, 0.8, 4.5), 1)
+    hot = summary["ram_load"] >= 80
+    summary["health"] = {"score": 92 if hot else 100, "label": "All good", "unchecked": [],
+                         "notes": [f"Memory is almost full ({summary['ram_load']:.0f}%)"] if hot else
+                         ["Temperatures and memory are in a healthy range."]}
     s["ts"] = time.time()
     return s
 
@@ -168,7 +172,7 @@ class Preview:
 
         @app.get("/api/processes")
         async def _processes(all_apps: bool = False):
-            return fx["processes"]
+            return {**fx["processes"], "observed_at": time.time()}
 
         @app.get("/api/processes/{group_id}/icon")
         async def _icon(group_id: str):

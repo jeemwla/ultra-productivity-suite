@@ -1278,6 +1278,12 @@ function render(){
   const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
   ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
 }
+/* Fill the charts with the service's last two minutes before live updates start; a slow answer never holds up the page. */
+function seedHistory(samples){ if (!Array.isArray(samples) || H.cpu.length) return 0; let n = 0;
+  for (const x of samples.slice(-HMAX)) { if (!x) continue; if (x.stale) { for (const k of Object.keys(H)) push(k, null); continue; } const s = x.summary || {}; // a late reading is a gap, not a repeat
+    push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); recordPowerHistory(x.power); push("cput", s.cpu_temp); push("gput", s.gpu_temp); n++; }
+  return n; }
+async function loadHistory(){ try { const r = await Promise.race([api("/api/history"), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 1500))]); seedHistory(r.samples); } catch {} }
 function onSnap(d){ snap = d; if(d.preferences)acceptPreferences(d.preferences); lastMsg = Date.now(); const s = d.hardware.summary || {};
   push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); recordPowerHistory(d.hardware.power); push("cput", s.cpu_temp); push("gput", s.gpu_temp);
   checkAlerts(s); if (!document.hidden) render(); }
@@ -1293,7 +1299,7 @@ setInterval(() => { const st = connState(Date.now()), full = snap && snap.hardwa
   $("live").innerHTML = `<span class="dot ${st.fresh ? (full ? "good" : "warning") : "critical"}"></span>${esc(st.chip)}`; $("live").title = st.title; $("live").setAttribute("aria-label", st.title);
   $("conn").hidden = !st.banner; if (st.banner && $("conn-s").textContent !== st.banner.s) { $("conn-t").textContent = st.banner.t; $("conn-s").textContent = st.banner.s; } }, 1000);
 setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
-go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); connect();
+go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); loadHistory().finally(connect);
 </script>
 <script src="/psu_picker.js"></script><script src="/ui/battery_view.js"></script><script src="/ui/edit_layout.js"></script><script src="/ui/sentinel_panels.js"></script><script>setupOverviewEditor();</script>
 </body>
