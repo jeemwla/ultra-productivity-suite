@@ -541,7 +541,7 @@ table.wr td .btn{height:30px;padding:0 10px}
 
       <!-- SENSORS -->
       <section class="page" id="p-sensors"><section class="card"><div class="cb">
-        <div class="tools"><input class="search" id="q" type="search" placeholder="Search sensors (fan, core, hot spot…)" aria-label="Search sensors"><button class="btn" id="show-all">Show hidden</button></div>
+        <div class="tools"><input class="search" id="q" type="search" placeholder="Search sensors (fan, core, hot spot…), press /" aria-label="Search sensors" aria-keyshortcuts="/"><button class="btn" id="show-all">Show hidden</button></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="filters"></div>
         <div id="groups"></div></div></section></section>
 
@@ -1141,6 +1141,9 @@ $("filters").addEventListener("click", (e) => { const b = e.target.closest("[dat
 $("groups").addEventListener("change", (e) => { const id = e.target.dataset.id; if (!id) return; e.target.checked ? hidden.delete(id) : hidden.add(id); store.set("hiddenSensors", [...hidden]); renderSensors(); });
 $("groups").addEventListener("toggle", (e) => { const d = e.target; if (d.open && d.dataset && d.dataset.key && snap) renderSensors(); if (!d.dataset || !d.dataset.key || $("q").value) return; const o = new Set(store.get("openGroups", ["cpu", "gpu"])); d.open ? o.add(d.dataset.key) : (o.delete(d.dataset.key), o.delete(d.dataset.key.split(":")[0])); store.set("openGroups", [...o]); }, true);
 $("q").addEventListener("input", renderSensors);
+// "/" jumps to the search box on the Sensors page; Escape in the box clears it.
+document.addEventListener("keydown", (e) => { if (e.key !== "/" || page !== "sensors" || e.ctrlKey || e.metaKey || e.altKey || (typeof MODAL !== "undefined" && MODAL.open) || e.target.closest("input,textarea,select,[contenteditable=true]")) return; e.preventDefault(); $("q").focus(); $("q").select(); });
+$("q").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("q").value) { e.preventDefault(); e.stopPropagation(); $("q").value = ""; renderSensors(); } });
 $("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; renderSensors(); };
 
 /* ---------- system ---------- */

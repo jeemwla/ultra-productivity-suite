@@ -159,3 +159,8 @@ test('feedback has a label, a live status, Ctrl+Enter and a countdown near the l
  assert.equal(f(10),'Anonymous · Ctrl+Enter sends');assert.equal(f(950),'50 characters left');assert.equal(f(999),'1 character left');assert.equal(f(1000),'0 characters left');
  assert.match(html,/<textarea id="fb-msg"[^>]*aria-label="Your feedback"/);assert.match(html,/id="fb-st" role="status"/);
 });
+test('the Sensors search answers to / and Escape clears it',()=>{
+ assert.match(html,/id="q"[^>]*aria-keyshortcuts="\/"/);
+ assert.match(html,/if \(e\.key !== "\/" \|\| page !== "sensors"/);
+ assert.match(html,/if \(e\.key === "Escape" && \$\("q"\)\.value\)/);
+});
