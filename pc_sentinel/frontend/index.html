@@ -156,6 +156,7 @@ a{color:var(--accent);text-decoration:none}
 .fan .nm button{border:0;background:none;color:var(--accent);font-size:12px;padding:2px 6px;border-radius:6px;opacity:0;transition:opacity .15s}
 .fan:hover .nm button,.fan .nm button:focus-visible{opacity:1}
 @media (hover:none){.fan .nm button{opacity:1}}
+.f .cnt{opacity:.72;font-weight:500;margin-left:2px} /* the count keeps the button text color, readable on pressed and plain buttons */
 .chart.st-empty{position:relative}.chart.st-empty::after{content:"Download and upload speeds are drawn here while a test runs.";position:absolute;inset:0;display:grid;place-items:center;padding:0 16px;text-align:center;color:var(--ink-3r);font-size:13px;pointer-events:none} /* touch screens cannot hover, so Rename stays visible there */
 .fan .sb{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fan .bars{display:grid;gap:5px}.fan .bl{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3)}
@@ -541,7 +542,7 @@ table.wr td .btn{height:30px;padding:0 10px}
 
       <!-- SENSORS -->
       <section class="page" id="p-sensors"><section class="card"><div class="cb">
-        <div class="tools"><input class="search" id="q" type="search" placeholder="Search sensors (fan, core, hot spot…), press /" aria-label="Search sensors" aria-keyshortcuts="/"><button class="btn" id="show-all">Show hidden</button></div>
+        <div class="tools"><input class="search" id="q" type="search" placeholder="Search sensors (fan, core, hot spot…), press /" aria-label="Search sensors" aria-keyshortcuts="/"><button class="btn" id="show-all" aria-pressed="false">Show hidden</button></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="filters"></div>
         <div id="groups"></div></div></section></section>
 
@@ -1106,6 +1107,8 @@ let hidden = new Set(store.get("hiddenSensors", [])), types = new Set(store.get(
 const ALLT = ["Temperature", "Power", "Load", "Clock", "Fan", "Control", "Voltage", "Current", "Data", "SmallData", "Throughput", "Level", "Timing", "Factor", "Energy", "Other"];
 const TL = { Temperature: "Temps", SmallData: "Memory MB", Throughput: "Network" }, KL = { cpu: "CPU", gpu: "GPU", memory: "Memory", storage: "Drive", motherboard: "Motherboard", network: "Network", battery: "Battery", psu: "Power supply", other: "Other" };
 const SEC = [["Temperature", "Temperatures", "°C"], ["Power", "Power draw", "W"], ["Load", "Usage", "%"], ["Clock", "Clock speeds", "MHz"], ["Fan", "Fan speeds", "RPM"], ["Control", "Fan control", "%"], ["Voltage", "Voltages", "V"], ["Current", "Current", "A"], ["Level", "Levels", "%"], ["Data", "Data", "GB"], ["SmallData", "Memory", "MB"], ["Throughput", "Throughput", ""], ["Timing", "Timings", "ns"], ["Factor", "Factors", ""], ["Energy", "Energy", "mWh"], ["Other", "Other", ""]];
+// How many sensors of each type exist, shown on the filter buttons so a type's size is clear before turning it on.
+function sensorTypeCounts(groups){ const c = {}; for (const g of groups || []) for (const x of g.sensors || []) c[x.type] = (c[x.type] || 0) + 1; return c; }
 const setText = (el, v) => { if (el && el.textContent !== v) el.textContent = v; };
 function sensorsEmpty(q, typeCount, groupCount, hiddenCount, showAll){
   if (!groupCount) return "No sensors are reporting yet. Readings appear here as soon as the sensor source answers.";
@@ -1114,8 +1117,8 @@ function sensorsEmpty(q, typeCount, groupCount, hiddenCount, showAll){
   if (hiddenCount && !showAll) return "Every matching sensor is hidden. Choose Show hidden to see them.";
   return "No sensors of the chosen types. Turn on more sensor types above."; }
 function renderSensors(){
-  const hw = snap.hardware, present = ALLT.filter(t => (hw.groups || []).some(g => g.sensors.some(x => x.type === t))), sig = present.join() + [...types].join();
-  if ($("filters").dataset.sig !== sig) { $("filters").dataset.sig = sig; $("filters").innerHTML = present.map(t => `<button class="f" data-t="${t}" aria-pressed="${types.has(t)}">${TL[t] || t}</button>`).join(""); }
+  const hw = snap.hardware, counts = sensorTypeCounts(hw.groups), present = ALLT.filter(t => counts[t]), sig = present.map(t => t + counts[t]).join() + [...types].join();
+  if ($("filters").dataset.sig !== sig) { $("filters").dataset.sig = sig; $("filters").innerHTML = present.map(t => `<button class="f" data-t="${t}" aria-pressed="${types.has(t)}" aria-label="${TL[t] || t}, ${counts[t]} sensors">${TL[t] || t} <span class="cnt">${counts[t]}</span></button>`).join(""); }
   const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1", open = new Set(store.get("openGroups", ["cpu", "gpu"])), keys = new Set();
   (hw.groups || []).forEach(g => { const rows = g.sensors.filter(x => types.has(x.type) && (!q || (g.name + " " + x.name + " " + x.type).toLowerCase().includes(q)) && (showAll || !hidden.has(x.id)));
     const key = g.kind + ":" + g.name; keys.add(key); let d = $("groups").querySelector(`details[data-key="${CSS.escape(key)}"]`);
@@ -1144,7 +1147,7 @@ $("q").addEventListener("input", renderSensors);
 // "/" jumps to the search box on the Sensors page; Escape in the box clears it.
 document.addEventListener("keydown", (e) => { if (e.key !== "/" || page !== "sensors" || e.ctrlKey || e.metaKey || e.altKey || (typeof MODAL !== "undefined" && MODAL.open) || e.target.closest("input,textarea,select,[contenteditable=true]")) return; e.preventDefault(); $("q").focus(); $("q").select(); });
 $("q").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("q").value) { e.preventDefault(); e.stopPropagation(); $("q").value = ""; renderSensors(); } });
-$("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; renderSensors(); };
+$("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; b.setAttribute("aria-pressed", String(b.dataset.on === "1")); renderSensors(); };
 
 /* ---------- system ---------- */
 function renderSystem(){

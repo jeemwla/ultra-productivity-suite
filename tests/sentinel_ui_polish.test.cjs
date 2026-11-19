@@ -164,3 +164,10 @@ test('the Sensors search answers to / and Escape clears it',()=>{
  assert.match(html,/if \(e\.key !== "\/" \|\| page !== "sensors"/);
  assert.match(html,/if \(e\.key === "Escape" && \$\("q"\)\.value\)/);
 });
+test('sensor type filters show how many sensors each type has',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function sensorTypeCounts','const setText'),ctx);
+ const c=vm.runInContext('sensorTypeCounts',ctx)([{sensors:[{type:'Temperature'},{type:'Load'},{type:'Temperature'}]},{sensors:[{type:'Fan'}]},{}]);
+ assert.equal(JSON.stringify(c),JSON.stringify({Temperature:2,Load:1,Fan:1}));
+ assert.equal(JSON.stringify(vm.runInContext('sensorTypeCounts',ctx)(null)),'{}');
+ assert.match(html,/id="show-all" aria-pressed="false"/);
+});
