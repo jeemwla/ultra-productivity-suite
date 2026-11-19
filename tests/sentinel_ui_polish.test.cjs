@@ -148,3 +148,9 @@ test('latency rows show lost replies, not only the last reply time',()=>{
  assert.equal(st({latency_ms:null,loss_pct:100}).text,'No reply · 100% lost');
  assert.match(st({latency_ms:16,loss_pct:0,avg_ms:15}).title,/Average 15 ms; 0% of the last minute/);
 });
+test('chart values answer touch and pen, and speed history can be cleared',()=>{
+ assert.match(html,/document\.addEventListener\("pointermove", chartTip\); document\.addEventListener\("pointerdown", chartTip\);/);
+ assert.doesNotMatch(html,/document\.addEventListener\("mousemove"/);
+ assert.match(html,/id="hist-clear">Clear history<\/button>/);
+ assert.match(html,/store\.set\("speedHistory", \[\]\); hist\(\);/);
+});

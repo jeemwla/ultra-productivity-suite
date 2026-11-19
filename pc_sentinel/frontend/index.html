@@ -752,15 +752,17 @@ function lineChart(key, arr, color, fixedMax, unit){
   }
   svg.setAttribute("aria-label", chartLabel(key, vals, u)); // screen readers get the numbers the picture shows
 }
-document.addEventListener("mousemove", (e) => {
-  const c = e.target.closest(".chart"); document.querySelectorAll(".chart .tip,.chart .cursor").forEach(t => { if (!c || t.parentElement !== c) t.remove(); });
+// Pointer events: mouse, pen and touch (a tap on a chart shows that moment's value).
+const chartTip = (e) => {
+  const c = e.target.closest && e.target.closest(".chart"); document.querySelectorAll(".chart .tip,.chart .cursor").forEach(t => { if (!c || t.parentElement !== c) t.remove(); });
   if (!c || !c._data || !c._data.arr.length) return;
   const r = c.getBoundingClientRect(), a = c._data.arr, pos = (e.clientX - r.left) / r.width, i = Math.round(pos * (HMAX - 1)) - (HMAX - a.length);
   if (i < 0 || i >= a.length || a[i] == null) return;
   let t = c.querySelector(".tip"), cur = c.querySelector(".cursor"); if (!t) { t = document.createElement("div"); t.className = "tip"; c.appendChild(t); cur = document.createElement("div"); cur.className = "cursor"; c.appendChild(cur); }
   const px = e.clientX - r.left; t.style.left = `${Math.max(50, Math.min(r.width - 50, px))}px`; cur.style.left = `${px}px`;
   const ago = a.length - 1 - i; t.textContent = `${auto(a[i])}${c._data.unit} · ${ago ? ago + " s ago" : "now"}`;
-});
+};
+document.addEventListener("pointermove", chartTip); document.addEventListener("pointerdown", chartTip);
 
 /* ---------- overview ---------- */
 const lvl = (v, w, c) => v == null ? "good" : v >= c ? "critical" : v >= w ? "warning" : "good";
@@ -1264,9 +1266,10 @@ function drawSpeedChart(){ const W = 800, Hh = 150, n = 50, max = Math.max(10, .
 function extras(m){ if (!m || !m.grade) { $("extras").innerHTML = ""; return; }
   $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is under load"><span class="grade g-${m.grade[0].toLowerCase()}">${esc(m.grade)}</span>Bufferbloat · loaded ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` + Object.entries(m.quality || {}).map(([k, v]) => `<span class="q ${esc(v)}">${esc(k)} <b>${esc(v)}</b></span>`).join(""); }
 function hist(){ const h = store.get("speedHistory", []); $("history").hidden = !h.length; if (!h.length) return; const mx = Math.max(...h.map(x => x.download_mbps), 1);
-  $("history").innerHTML = `<div class="muted" style="margin-bottom:4px">Recent tests (download, upload, ping, grade)</div>` + h.slice(0, 6).map(x => `<div class="hrow"><span>${when(x.at)}</span>
+  $("history").innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px"><span class="muted">Recent tests (download, upload, ping, grade), saved in this browser only</span><button class="btn" type="button" id="hist-clear">Clear history</button></div>` + h.slice(0, 6).map(x => `<div class="hrow"><span>${when(x.at)}</span>
     <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.download_mbps)}<span class="hb" style="flex:1"><i style="width:${x.download_mbps / mx * 100}%;background:var(--series)"></i></span></span>
     <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.upload_mbps)}<span class="hb" style="flex:1"><i style="width:${Math.min(100, x.upload_mbps / mx * 100)}%;background:var(--series-2)"></i></span></span><span class="num">${n0(x.ping_ms)} ms</span><span>${esc(x.grade || "")}</span></div>`).join(""); }
+$("history").addEventListener("click", (e) => { if (!e.target.closest("#hist-clear")) return; store.set("speedHistory", []); hist(); toast("Speed test history cleared. The latest result stays on the Network page."); $("st-go")?.focus(); });
 (function last(){ const l = store.get("lastSpeed", null); if (!l) { $("st-meta").textContent = "Press START to measure ping, download and upload."; return; } setR("r-ping", l.ping_ms, false, n0); setR("r-jitter", l.jitter_ms, false, n1); setR("r-down", l.download_mbps); setR("r-up", l.upload_mbps); extras(l); hist(); $("st-meta").textContent = `Last test ${when(l.at)} · ${l.server}`; })();
 $("st-go").onclick = () => { if (sp.running) { sp.ws && sp.ws.close(); return; } Object.assign(sp, { running: true, down: [], up: [], target: 0, shown: 0 }); drawGauge(); drawSpeedChart(); extras(null);
   ["r-ping", "r-jitter", "r-down", "r-up"].forEach(i => setR(i, null)); $("x-down").textContent = $("x-up").textContent = ""; $("st-go").textContent = "STOP"; $("st-go").classList.add("stop"); $("track").classList.add("running"); $("st-meta").textContent = "Testing… pause other downloads for the most accurate result."; setProg(0, "Connecting…"); requestAnimationFrame(animG);
