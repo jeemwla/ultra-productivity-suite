@@ -14,14 +14,14 @@ import sqlite3
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import List, NoReturn, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .clock import due_day, local_now, next_ring
+from .clock import CATCH_UP, WEEKDAYS, due_day, local_now, missed_occurrence, next_ring, roll_forward, snoozed_until
 
 DB_PATH = os.path.join(os.environ.get("ULTRASUITE_DATA") or os.path.join(os.path.dirname(__file__), "..", "data"), "alarms.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -51,7 +51,14 @@ def init_db():
                 last_triggered_date TEXT
             )
         ''')
+        # Snooze arrived later: add its columns to databases made by earlier versions. Nothing else changes.
+        have = {row[1] for row in conn.execute("PRAGMA table_info(alarms)")}
+        if "snooze_minutes" not in have:
+            conn.execute("ALTER TABLE alarms ADD COLUMN snooze_minutes INTEGER NOT NULL DEFAULT 9")
+        if "snoozed_until" not in have:
+            conn.execute("ALTER TABLE alarms ADD COLUMN snoozed_until TEXT")
         conn.execute("CREATE TABLE IF NOT EXISTS alarm_events (id INTEGER PRIMARY KEY, ts TEXT, alarm_id TEXT, label TEXT, kind TEXT, detail TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS engine_meta (key TEXT PRIMARY KEY, value TEXT)")
         conn.execute('''CREATE TABLE IF NOT EXISTS countdown (
             id INTEGER PRIMARY KEY CHECK (id = 1), run_id TEXT NOT NULL,
             label TEXT NOT NULL, state TEXT NOT NULL, duration_sec INTEGER NOT NULL,
@@ -87,13 +94,26 @@ class AlarmCreate(BaseModel):
     ring_duration_sec: int = 600
     wake_up_check_min: int = 5
     math_mission_difficulty: int = 0
-    snooze_limit: int = 0
+    snooze_limit: int = 0  # 0 keeps snooze off, as before; otherwise how many snoozes each ring allows
+    snooze_minutes: int = 9
 
 
 class DismissRequest(BaseModel):
     alarm_id: str
     typed_phrase: str = ""
     math_answer: Optional[int] = None
+
+
+class SnoozeRequest(BaseModel):
+    alarm_id: str
+
+
+def normalize_phrase(text) -> str:
+    """Compare Code Red phrases the way people type them: phone keyboards swap in curly quotes and dashes, and a
+    double space is easy to miss. Letters, digits and case still have to match exactly."""
+    table = {"‘": "'", "’": "'", "‚": "'", "′": "'", "“": '"', "”": '"', "„": '"',
+             "–": "-", "—": "-", "−": "-", " ": " "}
+    return " ".join("".join(table.get(c, c) for c in str(text or "")).split())
 
 
 MAX_TIMERS = 20
@@ -164,7 +184,6 @@ def claim_due_timer():
     calls this while idle). Timers that finished longer ago than the alarm catch-up window become expired silently."""
     if not alarm_delivery_enabled():
         return None
-    from .clock import CATCH_UP
     with contextlib.closing(_timers_db()) as conn:
         conn.execute("BEGIN IMMEDIATE")
         now = time.time()
@@ -311,27 +330,122 @@ async def trigger_alarm_now(alarm_dict: dict):
     await broadcast_state()
 
 
+HEARTBEAT_EVERY = 30  # seconds between saved "engine was running" marks
+GAP = datetime.timedelta(seconds=90)  # a longer pause between ticks means the PC slept or the engine stalled
+
+
+def _alarm_dict(row) -> dict:
+    alm = dict(row)
+    alm["weekdays"] = json.loads(alm["weekdays"])
+    return alm
+
+
+def read_heartbeat():
+    """The last moment the engine saved as running, or None on a fresh install."""
+    try:
+        with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+            row = conn.execute("SELECT value FROM engine_meta WHERE key = 'heartbeat'").fetchone()
+        return datetime.datetime.fromisoformat(row[0]) if row else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def write_heartbeat(now: datetime.datetime):
+    try:
+        with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+            conn.execute("INSERT OR REPLACE INTO engine_meta (key, value) VALUES ('heartbeat', ?)", (now.isoformat(timespec="seconds"),))
+            conn.commit()
+    except sqlite3.Error as exc:
+        print(f"[SchedulerLoop] heartbeat write failed: {exc}")
+
+
+def record_missed(since: datetime.datetime, now: datetime.datetime, why: str):
+    """Log every alarm whose time fell in a stretch the engine could not cover and that is now too late to catch up
+    on (more than CATCH_UP ago). Each stretch is checked once, so a restart never logs the same miss twice."""
+    until = now - CATCH_UP
+    if until <= since:
+        return []
+    found = []
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        for row in conn.execute("SELECT * FROM alarms WHERE enabled = 1").fetchall():
+            alm = _alarm_dict(row)
+            hit = missed_occurrence(alm, since, until)
+            if hit:
+                found.append(alm["id"])
+                log_event(alm, "missed", f"{hit[0]} {alm['time_hhmm']}: {why}")
+    return found
+
+
+def claim_due_snooze(now: datetime.datetime):
+    """A snoozed alarm whose snooze is over, cleared durably before it rings again. A snooze that ended longer ago
+    than CATCH_UP (PC off) is logged as missed instead of ringing late."""
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute("SELECT * FROM alarms WHERE snoozed_until IS NOT NULL ORDER BY snoozed_until").fetchall()
+        claimed, stale = None, []
+        for row in rows:
+            alm = _alarm_dict(row)
+            at = snoozed_until(alm)
+            if at is not None and at > now:
+                continue
+            conn.execute("UPDATE alarms SET snoozed_until = NULL WHERE id = ?", (alm["id"],))
+            if at is None or now - at > CATCH_UP:
+                stale.append(alm)
+                continue
+            claimed = alm
+            break
+        conn.commit()
+    for alm in stale:  # history goes through its own connection, so only after this write lock is released
+        log_event(alm, "missed", "the snooze ended while the alarm engine wasn't running")
+    return claimed
+
+
 async def scheduler_loop():
     prev = local_now()
     startup_catch_up = True
     print(f"[SchedulerLoop] started, local time {prev:%Y-%m-%d %H:%M:%S}")
+    beat = read_heartbeat()
+    if beat and beat < prev and alarm_delivery_enabled():
+        record_missed(beat, prev, "the alarm engine wasn't running (PC off, asleep or the app closed)")
+    write_heartbeat(prev)
+    last_beat = time.monotonic()
+    covered = prev  # misses before this moment were already looked for
     while True:
         try:
             now = local_now()
             if now < prev:  # clock moved back (DST, manual change): start over from here
-                prev = now
+                if prev - now > datetime.timedelta(minutes=2):
+                    log_event(None, "clock_changed", f"the PC clock moved back from {prev:%H:%M} to {now:%H:%M}")
+                prev = covered = now
                 startup_catch_up = False
+            elif now - prev > GAP and not ring_state.is_ringing and alarm_delivery_enabled():
+                since = max(prev, covered)
+                record_missed(since, now, f"the engine couldn't ring from {since:%H:%M} to {now:%H:%M} (PC asleep, busy or another alarm ringing)")
+                covered = max(covered, now - CATCH_UP)
+            if time.monotonic() - last_beat >= HEARTBEAT_EVERY:
+                write_heartbeat(now)
+                last_beat = time.monotonic()
+            if alarm_delivery_enabled() and not ring_state.is_ringing:
+                snoozed = claim_due_snooze(now)
+                if snoozed:
+                    print(f"[SchedulerLoop] snooze over for {snoozed['id']} at {now:%H:%M:%S}")
+                    log_event(snoozed, "due", f"snooze {snoozed['snoozes_used']} ended, engine time {now:%H:%M:%S}")
+                    await trigger_alarm_now(snoozed)
             if alarm_delivery_enabled() and not ring_state.is_ringing:
                 with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
                     conn.row_factory = sqlite3.Row
                     rows = conn.execute("SELECT * FROM alarms WHERE enabled = 1").fetchall()
                     for row in rows:
-                        alm = dict(row)
-                        alm["weekdays"] = json.loads(alm["weekdays"])
+                        alm = _alarm_dict(row)
                         day_iso = due_day(alm, None if startup_catch_up else prev, now)
                         if not day_iso:
                             continue
-                        conn.execute("UPDATE alarms SET last_triggered_date = ? WHERE id = ?", (day_iso, alm["id"]))
+                        # A fresh occurrence starts with a full set of snoozes and replaces any snooze still pending.
+                        conn.execute("UPDATE alarms SET last_triggered_date = ?, snoozes_used = 0, snoozed_until = NULL WHERE id = ?",
+                                     (day_iso, alm["id"]))
+                        alm["snoozes_used"], alm["snoozed_until"] = 0, None
                         if not alm["recurring"] and alm["target_date"]:
                             conn.execute("UPDATE alarms SET enabled = 0 WHERE id = ?", (alm["id"],))
                         conn.commit()
@@ -539,78 +653,120 @@ async def delete_timer(timer_id: str):
     return timer_snapshot()
 
 
-def _validate(payload: AlarmCreate):
-    if not payload.label.strip():
-        raise HTTPException(status_code=400, detail="Give the alarm a name.")
+MAX_LABEL, MAX_PHRASE, MIN_PHRASE = 80, 120, 4
+
+
+def _bad(detail: str) -> NoReturn:
+    raise HTTPException(status_code=400, detail=detail)
+
+
+def _validate(payload: AlarmCreate) -> dict:
+    """Check an alarm the way the scheduler will read it and return the clean values to store. Anything the
+    scheduler would silently never ring (a misspelled day, an impossible date, a moment already gone) is refused
+    with a plain message instead."""
+    label = payload.label.strip()
+    if not label:
+        _bad("Give the alarm a name.")
+    if len(label) > MAX_LABEL:
+        _bad(f"Keep the name under {MAX_LABEL} characters.")
     hh, mm = (int(x) for x in payload.time_hhmm.split(":"))
     if hh > 23 or mm > 59:
-        raise HTTPException(status_code=400, detail="That isn't a valid time.")
+        _bad("That isn't a valid time.")
     if not (60 <= payload.ring_duration_sec <= 3600):
-        raise HTTPException(status_code=400, detail="Ring duration must be between 1 and 60 minutes.")
-    if not payload.weekdays and not payload.target_date:
-        raise HTTPException(status_code=400, detail="Pick at least one weekday or a specific date.")
-    if payload.code_red and not payload.custom_phrase.strip():
-        raise HTTPException(status_code=400, detail="Code Red alarms require a non-empty verification phrase.")
+        _bad("Ring duration must be between 1 and 60 minutes.")
+    unknown = [d for d in payload.weekdays if d not in WEEKDAYS]
+    if unknown:
+        _bad(f"Unknown day: {unknown[0]}. Use Mon, Tue, Wed, Thu, Fri, Sat or Sun.")
+    weekdays = [d for d in WEEKDAYS if d in payload.weekdays]  # calendar order, no repeats
+    target = payload.target_date or None
+    if target is not None:
+        try:
+            day = datetime.date.fromisoformat(target)
+        except ValueError:
+            day = None
+        if day is None or len(target) != 10:
+            _bad("That date isn't valid. Use a date like 2026-11-25.")
+        if weekdays and WEEKDAYS[day.weekday()] not in weekdays:
+            _bad("That date doesn't fall on one of the chosen days.")
+        if payload.enabled:
+            now = local_now().replace(second=0, microsecond=0)
+            if datetime.datetime.combine(day, datetime.time(hh, mm)) < now:
+                _bad("That date and time already passed. Pick a later one.")
+    if not weekdays and not target:
+        _bad("Pick at least one weekday or a specific date.")
+    phrase = payload.custom_phrase.strip()
+    if len(phrase) > MAX_PHRASE:
+        _bad(f"Keep the phrase under {MAX_PHRASE} characters.")
+    if payload.code_red and len(normalize_phrase(phrase)) < MIN_PHRASE:
+        _bad(f"Code Red needs a phrase of at least {MIN_PHRASE} characters.")
+    if not (0 <= payload.volume_percent <= 100):
+        _bad("Volume must be between 0 and 100 percent.")
+    if not (0 <= payload.wake_up_check_min <= 60):
+        _bad("The wake-up check must be between 0 and 60 minutes.")
+    if payload.math_mission_difficulty not in (0, 1, 2):
+        _bad("Wake-up math is Off, Easy or Hard.")
+    if not (0 <= payload.snooze_limit <= 10):
+        _bad("An alarm can snooze up to 10 times.")
+    if not (1 <= payload.snooze_minutes <= 30):
+        _bad("A snooze lasts between 1 and 30 minutes.")
+    if payload.code_red and payload.snooze_limit:
+        _bad("Code Red alarms can't snooze. Turn snooze off or turn Code Red off.")
+    return {"label": label, "time_hhmm": payload.time_hhmm, "target_date": target, "weekdays": json.dumps(weekdays),
+            "recurring": int(payload.recurring),
+            "enabled": int(payload.enabled), "code_red": int(payload.code_red), "custom_phrase": phrase if payload.code_red else "",
+            "volume_percent": payload.volume_percent, "ring_duration_sec": payload.ring_duration_sec,
+            "wake_up_check_min": payload.wake_up_check_min, "math_mission_difficulty": payload.math_mission_difficulty,
+            "snooze_limit": payload.snooze_limit, "snooze_minutes": payload.snooze_minutes}
 
 
 @app.put("/api/alarms/{alarm_id}")
 async def update_alarm(alarm_id: str, payload: AlarmCreate):
-    """Edit an alarm in place. It counts as new, so it can ring again today."""
-    _validate(payload)
+    """Edit an alarm in place. It counts as new, so it can ring again today, and any pending snooze ends."""
+    clean = _validate(payload)
     with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        cur = conn.execute('''
-            UPDATE alarms SET label = ?, time_hhmm = ?, target_date = ?, weekdays = ?, recurring = ?, enabled = ?,
-                code_red = ?, custom_phrase = ?, volume_percent = ?, ring_duration_sec = ?, wake_up_check_min = ?,
-                math_mission_difficulty = ?, snooze_limit = ?, snoozes_used = 0, last_triggered_date = NULL
+        cur = conn.execute(f'''
+            UPDATE alarms SET {", ".join(k + " = ?" for k in clean)}, snoozes_used = 0, snoozed_until = NULL,
+                last_triggered_date = NULL
             WHERE id = ?
-        ''', (payload.label.strip(), payload.time_hhmm, payload.target_date, json.dumps(payload.weekdays),
-              int(payload.recurring), int(payload.enabled), int(payload.code_red), payload.custom_phrase.strip(),
-              payload.volume_percent, payload.ring_duration_sec, payload.wake_up_check_min,
-              payload.math_mission_difficulty, payload.snooze_limit, alarm_id))
+        ''', (*clean.values(), alarm_id))
         conn.commit()
         if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Alarm not found")
+            raise HTTPException(status_code=404, detail="That alarm is gone. It may have been deleted in another window.")
     return {"ok": True, "id": alarm_id, "alarms": fetch_all_alarms()}
 
 
 @app.post("/api/alarms")
 async def create_alarm(payload: AlarmCreate):
     alarm_id = f"alm-{uuid.uuid4().hex[:8]}"
-    _validate(payload)
+    clean = _validate(payload)
     with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.execute('''
-            INSERT INTO alarms VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            alarm_id,
-            payload.label,
-            payload.time_hhmm,
-            payload.target_date,
-            json.dumps(payload.weekdays),
-            int(payload.recurring),
-            int(payload.enabled),
-            int(payload.code_red),
-            payload.custom_phrase.strip(),
-            payload.volume_percent,
-            payload.ring_duration_sec,
-            payload.wake_up_check_min,
-            payload.math_mission_difficulty,
-            payload.snooze_limit,
-            0,
-            None
-        ))
+        conn.execute(f"INSERT INTO alarms (id, {', '.join(clean)}, snoozes_used, last_triggered_date) "
+                     f"VALUES (?, {', '.join('?' for _ in clean)}, 0, NULL)", (alarm_id, *clean.values()))
         conn.commit()
     return {"ok": True, "id": alarm_id, "alarms": fetch_all_alarms()}
 
 
 @app.patch("/api/alarms/{alarm_id}/toggle")
 async def toggle_alarm(alarm_id: str):
+    """Turn an alarm on or off. Turning on a one-time alarm whose moment already passed moves it to the next time
+    that clock time comes up, so it never sits there switched on and marked missed. Turning off ends a snooze."""
     with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        cur = conn.execute("SELECT enabled FROM alarms WHERE id = ?", (alarm_id,))
-        row = cur.fetchone()
+        row = conn.execute("SELECT enabled, target_date, time_hhmm, weekdays FROM alarms WHERE id = ?", (alarm_id,)).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="Alarm not found")
-        new_val = 0 if row[0] else 1
-        conn.execute("UPDATE alarms SET enabled = ?, last_triggered_date = NULL WHERE id = ?", (new_val, alarm_id))
+            raise HTTPException(status_code=404, detail="That alarm is gone. It may have been deleted in another window.")
+        enabled, target, hhmm, weekdays = row
+        new_val = 0 if enabled else 1
+        if new_val and target and not json.loads(weekdays or "[]"):
+            now = local_now()
+            hh, mm = (int(x) for x in hhmm.split(":"))
+            try:
+                passed = datetime.datetime.combine(datetime.date.fromisoformat(target), datetime.time(hh, mm)) <= now
+            except ValueError:
+                passed = True
+            if passed:
+                target = roll_forward(hhmm, now)
+        conn.execute("UPDATE alarms SET enabled = ?, target_date = ?, last_triggered_date = NULL, snoozes_used = 0, "
+                     "snoozed_until = NULL WHERE id = ?", (new_val, target, alarm_id))
         conn.commit()
     return {"ok": True, "alarms": fetch_all_alarms()}
 
@@ -618,8 +774,10 @@ async def toggle_alarm(alarm_id: str):
 @app.delete("/api/alarms/{alarm_id}")
 async def delete_alarm(alarm_id: str):
     with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.execute("DELETE FROM alarms WHERE id = ?", (alarm_id,))
+        cur = conn.execute("DELETE FROM alarms WHERE id = ?", (alarm_id,))
         conn.commit()
+    if not cur.rowcount:
+        raise HTTPException(status_code=404, detail="That alarm is already gone.")
     return {"ok": True, "alarms": fetch_all_alarms()}
 
 
@@ -694,21 +852,27 @@ async def dismiss_active_alarm(req: DismissRequest):
     if req.alarm_id not in (None, "", "manual") and req.alarm_id != active.get("id"):
         raise HTTPException(status_code=409, detail="That alarm is no longer ringing; a different one is.")
     if active.get("code_red") and not active.get("is_test"):
-        expected = (active.get("custom_phrase") or "").strip()
-        if req.typed_phrase.strip() != expected:
+        expected = normalize_phrase(active.get("custom_phrase"))
+        if normalize_phrase(req.typed_phrase) != expected:
             raise HTTPException(
                 status_code=403,
-                detail="CODE RED LOCK: Exact custom phrase mismatch! Type the phrase character-for-character."
+                detail="CODE RED LOCK: That phrase doesn't match yet. Type it exactly, capitals included."
             )
 
     if ring_state.math_solution is not None and not active.get("is_test"):
         if req.math_answer != ring_state.math_solution:
-            raise HTTPException(
-                status_code=403,
-                detail="Math mission answer incorrect! Solve the arithmetic equation to disarm."
-            )
+            raise HTTPException(status_code=403, detail="That answer isn't right. Work the sum out again.")
 
     log_event(active, "dismissed", f"after {int((local_now() - ring_state.started_at).total_seconds()) if ring_state.started_at else 0} s")
+    if not active.get("is_test") and not active.get("is_timer"):
+        _clear_snooze(active.get("id"))
+    await _end_ring()
+    await broadcast_state()
+    return {"ok": True, "message": "Alarm stopped and your volume restored."}
+
+
+async def _end_ring():
+    """Clear the ringing state and ask the speaker helper to stop and restore the volume."""
     ring_state.is_ringing = False
     ring_state.alarm = None
     ring_state.math_question = None
@@ -718,8 +882,48 @@ async def dismiss_active_alarm(req: DismissRequest):
             await client.post(f"{HOST_AUDIO_BRIDGE_URL}/stop", json={})
     except Exception:
         pass
+
+
+def _clear_snooze(alarm_id):
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute("UPDATE alarms SET snoozes_used = 0, snoozed_until = NULL WHERE id = ?", (alarm_id,))
+        conn.commit()
+
+
+@app.post("/api/alarms/snooze")
+async def snooze_active_alarm(req: SnoozeRequest):
+    """Quiet the ringing alarm for its snooze length. Only alarms with snooze turned on can do this, never a Code Red
+    alarm, a timer or a preview, and only as many times as the alarm allows. The snooze is saved, so it still rings
+    after a restart, and the wake timer covers it."""
+    active = ring_state.alarm
+    if not ring_state.is_ringing or not active:
+        raise HTTPException(409, "Nothing is ringing right now.")
+    if req.alarm_id != active.get("id"):
+        raise HTTPException(409, "That alarm is no longer ringing; a different one is.")
+    if active.get("is_test") or active.get("is_timer"):
+        raise HTTPException(409, "Previews and timers don't snooze.")
+    if active.get("code_red"):
+        raise HTTPException(403, "Code Red alarms can't snooze. Type the phrase to stop it.")
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM alarms WHERE id = ?", (active["id"],)).fetchone()
+        if not row:
+            raise HTTPException(404, "That alarm was deleted. Stop it instead.")
+        limit, used, minutes = int(row["snooze_limit"] or 0), int(row["snoozes_used"] or 0), int(row["snooze_minutes"] or 9)
+        if limit <= 0:
+            raise HTTPException(403, "Snooze is off for this alarm.")
+        if used >= limit:
+            raise HTTPException(403, "No snoozes left. Stop the alarm to turn it off.")
+        until = local_now().replace(microsecond=0) + datetime.timedelta(minutes=minutes)
+        conn.execute("UPDATE alarms SET snoozes_used = ?, snoozed_until = ? WHERE id = ?",
+                     (used + 1, until.isoformat(timespec="seconds"), active["id"]))
+        conn.commit()
+    log_event(active, "snoozed", f"{minutes} min, until {until:%H:%M} ({used + 1} of {limit})")
+    await _end_ring()
     await broadcast_state()
-    return {"ok": True, "message": "Alarm stopped and your volume restored."}
+    return {"ok": True, "until": until.isoformat(timespec="seconds"), "minutes": minutes, "left": limit - used - 1,
+            "message": f"Snoozed until {until:%H:%M}."}
 
 
 @app.websocket("/ws")

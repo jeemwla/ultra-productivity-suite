@@ -36,10 +36,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 _envp = os.path.join(HERE, "..", "..", ".env")
 if os.path.exists(_envp):
-    for _line in open(_envp, encoding="utf-8"):
-        if "=" in _line and not _line.lstrip().startswith("#"):
-            _k, _v = _line.split("=", 1)
-            os.environ.setdefault(_k.strip(), _v.strip())
+    with open(_envp, encoding="utf-8") as _envf:
+        for _line in _envf:
+            if "=" in _line and not _line.lstrip().startswith("#"):
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
 
 IS_WINDOWS = os.name == "nt"
 try:
@@ -111,8 +112,11 @@ def load_config() -> dict:
     cfg = {"output": "default", "lock_volume": False}
     if os.path.exists(CONFIG_PATH):
         try:
-            cfg.update(json.load(open(CONFIG_PATH, encoding="utf-8")))
-            return cfg
+            with open(CONFIG_PATH, encoding="utf-8") as f:
+                saved = json.load(f)
+            if isinstance(saved, dict):
+                cfg.update(saved)
+                return cfg
         except Exception:
             pass
     # First run on a new PC: honor ALARM_SPEAKER_MATCH (older name: PEBBLE_DEVICE_MATCH) if that device exists here
@@ -126,8 +130,14 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+    """Write the speaker choice atomically: a crash or power cut mid-write keeps the previous file whole instead of
+    leaving half a file that would reset the alarm speaker to the default."""
+    tmp = CONFIG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, CONFIG_PATH)
 
 
 def _sd_device_for(name: str):
