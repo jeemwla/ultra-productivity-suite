@@ -155,6 +155,8 @@ a{color:var(--accent);text-decoration:none}
 .fan .nm{font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center}
 .fan .nm button{border:0;background:none;color:var(--accent);font-size:12px;padding:2px 6px;border-radius:6px;opacity:0;transition:opacity .15s}
 .fan:hover .nm button,.fan .nm button:focus-visible{opacity:1}
+@media (hover:none){.fan .nm button{opacity:1}}
+.chart.st-empty{position:relative}.chart.st-empty::after{content:"Download and upload speeds are drawn here while a test runs.";position:absolute;inset:0;display:grid;place-items:center;padding:0 16px;text-align:center;color:var(--ink-3r);font-size:13px;pointer-events:none} /* touch screens cannot hover, so Rename stays visible there */
 .fan .sb{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fan .bars{display:grid;gap:5px}.fan .bl{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3)}
 .fan .rpm{text-align:right;font:600 22px/1 var(--font-display)}.fan .rpm small{display:block;font-size:11px;color:var(--ink-3);font-weight:600;margin-top:3px}
@@ -1251,6 +1253,7 @@ function setProg(p, l){ sp.prog = Math.max(0, Math.min(1, p)); $("prog-fill").st
   [["s-ping", 0, .09], ["s-down", .09, .545], ["s-up", .545, 1], ["s-done", 1, 1.01]].forEach(([id, a, b]) => { $(id).className = sp.prog >= b ? "done" : sp.prog >= a && sp.running ? "on" : ""; }); }
 function drawSpeedChart(){ const W = 800, Hh = 150, n = 50, max = Math.max(10, ...sp.down, ...sp.up) * 1.12, x = (i) => 6 + i / (n - 1) * (W - 12), y = (v) => Hh - 4 - v / max * (Hh - 18);
   const ln = (a, c) => { if (a.length < 2) return ""; const p = a.map((v, i) => [x(i), y(v)]), d = smooth(p); return `<path d="${d} L${p[p.length - 1][0]},${Hh - 4} L${p[0][0]},${Hh - 4} Z" fill="${c}" opacity=".12"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`; };
+  $("st-chart").parentElement.classList.toggle("st-empty", !sp.down.length && !sp.up.length);
   $("st-chart").innerHTML = `<line x1="0" x2="${W}" y1="${Hh - 4}" y2="${Hh - 4}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>` + ln(sp.down, "var(--series)") + ln(sp.up, "var(--series-2)"); }
 function extras(m){ if (!m || !m.grade) { $("extras").innerHTML = ""; return; }
   $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is under load"><span class="grade g-${m.grade[0].toLowerCase()}">${esc(m.grade)}</span>Bufferbloat · loaded ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` + Object.entries(m.quality || {}).map(([k, v]) => `<span class="q ${esc(v)}">${esc(k)} <b>${esc(v)}</b></span>`).join(""); }

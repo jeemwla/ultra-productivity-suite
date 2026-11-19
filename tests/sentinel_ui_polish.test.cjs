@@ -134,3 +134,8 @@ test('Overview quick controls always include the active plan',()=>{
  list[6].active=false;list[1].active=true;assert.equal(q(list).map(p=>p.guid).join(),'g0,g1,g2,g3,g4');
  assert.equal(q([]).length,0);
 });
+test('touch screens see Rename, and an empty speed chart says what it is for',()=>{
+ assert.match(html,/@media \(hover:none\)\{\.fan \.nm button\{opacity:1\}\}/);
+ assert.match(html,/\.chart\.st-empty::after\{content:"Download and upload speeds are drawn here while a test runs\."/);
+ assert.match(cut('function drawSpeedChart','function extras'),/classList\.toggle\("st-empty", !sp\.down\.length && !sp\.up\.length\)/);
+});
