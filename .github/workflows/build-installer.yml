@@ -1,0 +1,110 @@
+name: Build installer (unsigned)
+
+# On-demand Public edition installer build from the selected branch, for testing and comparison.
+# It runs build_release.ps1 exactly as the release owner does, attaches a signed build provenance
+# attestation and keeps the installer as a workflow artifact (14 days, 3 days for pull requests).
+# Pull requests that change the build pipeline also run it, so a broken build shows up before merge.
+# It never creates a release or tag, never builds the Dev edition and never uploads build/ or private/.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/build-installer.yml
+      - build_release.ps1
+      - requirements.txt
+      - requirements-build.txt
+      - tools/build_helpers.ps1
+      - tools/check_build_env.py
+      - tools/package_stage.py
+      - tools/package_manifest.json
+      - ultra_dock/package-lock.json
+      - ultra_dock/src-tauri/tauri.conf.json
+      - ultra_dock/src-tauri/installer-hooks.nsh
+      - ultra_dock/tools/make_icons.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Public installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-build.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: ultra_dock/package-lock.json
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: ultra_dock/src-tauri -> target
+          key: installer
+      - name: Install build requirements
+        shell: pwsh
+        run: python -m pip install -r requirements.txt -r requirements-build.txt
+      - name: Build with build_release.ps1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & .\build_release.ps1 -Edition Public
+          if (-not $?) { throw "build_release.ps1 failed" }
+      - name: Collect installer and checksum
+        id: collect
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $installer = Get-Item -LiteralPath "ultra_dock/src-tauri/target/release/bundle/nsis/Ultra Suite_${version}_x64-setup.exe"
+          if ($installer.Name -match 'Dev') { throw "Refusing to publish a Dev installer as an artifact." }
+          $out = New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/installer"
+          $name = "UltraSuite-Setup-$version-x64-unsigned.exe"
+          Copy-Item -LiteralPath $installer.FullName -Destination (Join-Path $out $name)
+          $hash = (Get-FileHash -LiteralPath (Join-Path $out $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Out-File -Encoding ascii (Join-Path $out "SHA256SUMS.txt")
+          # Forward slashes: the attest and upload actions read these as glob patterns, where a backslash escapes.
+          $dir = $out.FullName -replace '\\', '/'
+          "path=$dir/$name" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+          "dir=$dir" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+          "version=$version" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+          @(
+            "### Unsigned installer $version"
+            ""
+            "- File: ``$name`` ($([math]::Round($installer.Length / 1MB, 1)) MB)"
+            "- SHA-256: ``$hash``"
+            "- Commit: ``$env:GITHUB_SHA``"
+            ""
+            "Not code signed and not a release. Windows SmartScreen will warn before it runs."
+            "Verify the download with: ``gh attestation verify $name --repo $env:GITHUB_REPOSITORY``"
+          ) -join "`n" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+      - name: Attest build provenance
+        # Fork pull requests get no OIDC token, so they skip the attestation.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.collect.outputs.path }}
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: UltraSuite-Setup-${{ steps.collect.outputs.version }}-unsigned
+          path: ${{ steps.collect.outputs.dir }}
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
