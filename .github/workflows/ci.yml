@@ -77,14 +77,19 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements.txt
-      - name: Install runtime requirements
-        run: python -m pip install -r requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-build.txt
+      - name: Install runtime and build requirements
+        # requirements-build.txt pins Pillow, which the icon tests import, and the PyInstaller versions the build checks.
+        run: python -m pip install -r requirements.txt -r requirements-build.txt
       - name: Run unittest suite
         shell: bash
         run: |
           # Tests keep their temporary folders under the gitignored private/ folder, which a fresh checkout lacks.
           mkdir -p private
+          # The build-helper tests keep PowerShell fixtures under D:\claude (the owner's layout). The runner has a D: drive.
+          mkdir -p /d/claude
           set +e
           python -W ignore -m unittest discover -s tests 2>&1 | tee "$RUNNER_TEMP/python-tests.txt"
           code=${PIPESTATUS[0]}
