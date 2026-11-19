@@ -1,7 +1,21 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Starting app</title>
-<style>:root{color-scheme:light dark;font:15px/1.6 "Segoe UI",system-ui,sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;background:Canvas;color:CanvasText}main{max-width:480px;padding:32px}h1{font-size:26px;line-height:1.25}p{opacity:.75}button{font:inherit;padding:9px 18px;border-radius:9px;border:1px solid GrayText;background:ButtonFace;color:ButtonText;cursor:pointer}button:disabled{cursor:wait;opacity:.6}:focus-visible{outline:2px solid Highlight;outline-offset:3px}</style></head>
-<body><main><h1 id="title">Starting app…</h1><p id="status" role="status">Waiting for the local service. This window will open the app when it is ready.</p><button id="retry" disabled>Checking the service…</button></main>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="suite.css">
+<style>
+/* Shown while an app's local service starts. The app replaces the status text and enables Try again through the
+   ids title, status and retry, so those stay as they are. */
+body{min-height:100vh;display:grid;place-items:center;padding:var(--s-6)}
+main{width:min(480px,100%);background:var(--panel);border:1px solid var(--line);border-radius:var(--r-5);padding:var(--s-8);box-shadow:var(--sh-2)}
+h1{font:var(--w-bold) var(--t-6)/var(--lh-tight) var(--font-display);margin-bottom:var(--s-2)}
+p{color:var(--ink-2);margin-bottom:var(--s-5)}
+#retry{gap:var(--s-2)}
+/* While the button is disabled the page is waiting on the service: a small spinner says it is still working */
+#retry:disabled{opacity:1;color:var(--ink-2);cursor:progress}
+#retry:disabled::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#retry:disabled::before{animation:none;border-color:var(--accent)}}
+</style></head>
+<body><main><h1 id="title">Starting app…</h1><p id="status" role="status">Waiting for the local service. This window will open the app when it is ready.</p><button id="retry" class="btn" disabled>Checking the service…</button></main>
 <script>
 const app=new URLSearchParams(location.search).get('app');
 const names={sentinel:'PC Sentinel',alarm:'Code Red Alarm',insights:'Ultra Suite Insights'};
