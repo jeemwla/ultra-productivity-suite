@@ -11,7 +11,7 @@ function page(cap=7){
   const c=vm.createContext({$,Promise,Number,Math,String,document:{activeElement:null},
     S:{cap,cap_max:30,apps:Array(12).fill({}),individual_apps:4,config:{keep:['saved']}},
     autosave:{revision:0},dirty:false,editing:false,dragging:null,
-    status:(...args)=>messages.push(args),renderApps(){},renderCats(){},renderKeep(){},renderAll(){},
+    status:(...args)=>messages.push(args),renderApps(){},renderCats(){},renderKeep(){},renderAll(){},renderBoard(){},
     invoke:(command,args)=>new Promise((resolve,reject)=>requests.push({command,args,resolve,reject}))});
   vm.runInContext(html.slice(html.indexOf('// Cap actions run'),html.indexOf('/* ---------- saving')),c);
   vm.runInContext('function renderTop(){renderCap();}',c);

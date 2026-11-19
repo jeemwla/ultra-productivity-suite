@@ -103,6 +103,7 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
 .tile.preview{outline:3px solid var(--accent);background:var(--panel-3)}
 .tile .members{display:flex;flex-wrap:wrap;gap:8px}.tile .member{display:grid;gap:6px;justify-items:center}
 .tile .remove{font-size:12px;color:var(--accent)}
+.tile button[data-file]:not(:disabled){touch-action:none;user-select:none;cursor:grab}
 #editor-help,#editor-message{margin:8px 0;color:var(--ink-2)}
 </style>
 </head>
@@ -173,6 +174,7 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
   </section>
 </main>
 <div class="status" id="status" role="status" aria-live="polite"></div>
+<script src="dock_layout_preview.js"></script>
 <script src="dock_editor.js"></script>
 <script>
 const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
@@ -242,11 +244,11 @@ function queueCap(action){
     const base = previous === null ? Math.max(0, Math.min(max, Number.isInteger(S.individual_apps) ? S.individual_apps : 0)) : previous;
     const cap = action === "auto" ? null : Math.max(0, Math.min(max, base + action));
     if (cap === previous) return;
-    S.cap = cap; renderCap();
+    S.cap = cap; renderCap(); renderBoard();
     if (!invoke) return;
     try { await invoke("set_dock_cap", { cap }); status("Saved"); }
     catch(e) {
-      S.cap = previous; renderCap();
+      S.cap = previous; renderCap(); renderBoard();
       status(`Could not save app count: ${String(e)}`, true);
       await refresh(true, true);
     }
@@ -267,36 +269,44 @@ function change(next){ S.config = next; autosave.changed(); clearTimeout(saveTim
 function save(){ clearTimeout(saveTimer); return autosave.flush(); }
 
 let editing = false, dragging = null, preview = null;
+function traceEditor(stage){ if(invoke) invoke("dock_editor_event",{stage}).catch(()=>{}); }
 const selectedApps = new Set();
-const hover = DockEditor.dwell(tile => { preview=tile; tile.classList.add("preview"); $("editor-message").textContent="Release to group these apps."; }, () => { if(preview) preview.classList.remove("preview"); preview=null; });
+const hover = { reset(){ if(preview) preview.classList.remove("preview"); preview=null; } };
 function renderBoard(){
   hover.reset();
   const available = new Set(S.apps.map(a=>a.file));
   for(const file of selectedApps) if(!available.has(file)) selectedApps.delete(file);
   const q = $("find").value.trim().toLowerCase();
   $("group-apps").disabled = selectedApps.size<2;
-  $("app-board").innerHTML = DockEditor.board(S.config,S.apps).filter(item=>!q || item.apps.some(a=>a.name.toLowerCase().includes(q)||a.file.toLowerCase().includes(q))).map(item => {
+  $("app-board").innerHTML = DockEditor.board(S.config,S.apps,S.organize?S.cap:S.apps.length).filter(item=>!q || item.apps.some(a=>a.name.toLowerCase().includes(q)||a.file.toLowerCase().includes(q))).map(item => {
     const members = item.apps.map(a=> {
       const u=iconFor(a);
-      return `<div class="member"><button type="button" data-file="${esc(a.file)}" draggable="${editing&&!a.pinned}" aria-pressed="${selectedApps.has(a.file)}" aria-label="Select ${esc(a.name)}" ${!editing||a.pinned?'disabled':''}>${u?`<img src="${esc(u)}" alt="" data-icon="${esc(a.exe)}">`:`<span class="ph" data-icon="${esc(a.exe)}"></span>`}<br>${esc(a.name)}</button>${editing&&item.folder&&!a.pinned?`<button class="remove" data-out="${esc(a.file)}">Move ${esc(a.name)} out</button>`:''}</div>`;
+      return `<div class="member"><button type="button" data-file="${esc(a.file)}" draggable="false" aria-pressed="${selectedApps.has(a.file)}" aria-label="Select ${esc(a.name)}" ${!editing||a.pinned?'disabled':''}>${u?`<img src="${esc(u)}" alt="" draggable="false" data-icon="${esc(a.exe)}">`:`<span class="ph" data-icon="${esc(a.exe)}"></span>`}<br>${esc(a.name)}</button>${editing&&item.folder&&!a.pinned?`<button class="remove" data-out="${esc(a.file)}">Move ${esc(a.name)} out</button>`:''}</div>`;
     }).join('');
-    return `<div class="tile" ${item.folder?`data-folder="${esc(item.category)}"`:''}>${item.folder?`<p>${esc(item.category)} (${item.apps.length})</p>`:''}<div class="members">${members}</div></div>`;
+    return `<div class="tile" ${item.folder&&!item.category.startsWith('__')?`data-folder="${esc(item.category)}"`:''}>${item.folder?`<p>${esc(item.label||item.category)} (${item.apps.length})</p>`:''}<div class="members">${members}</div></div>`;
   }).join('');
 }
-function applyGroup(files, name, existing){
-  try { change(DockEditor.group(S.config,S.apps,files,name,existing)); selectedApps.clear(); renderApps(); renderCats(); renderKeep(); $("editor-message").textContent=`Grouped in ${name}.`; }
+async function applyGroup(files, name, existing){
+  try {
+    change(DockEditor.group(S.config,S.apps,files,name,existing)); selectedApps.clear();
+    await save(); if(dirty)return;
+    if(S.cap!==null) await queueCap('auto');
+    renderApps(); renderCats(); renderKeep();
+    $("editor-message").textContent=S.cap===null?`Grouped in ${name}.`:`Folder saved. Choose Automatic to show it on the taskbar.`;
+  }
   catch(error){ $("editor-message").textContent=error.message; status(error.message,true); }
 }
 $("edit-mode").onclick = () => {
   editing=!editing; dragging=null; selectedApps.clear(); hover.reset();
   $("edit-mode").textContent=editing?'Done':'Edit'; $("edit-mode").setAttribute('aria-pressed',String(editing));
   $("edit-tools").hidden=!editing;
-  $("editor-help").textContent=editing?'Drag an app over another app or folder, wait for the highlight, then release. Or select apps and choose Group selected. Move out keeps an app on its own.':'Edit the app grid to create folders. Category controls remain below.';
+  $("editor-help").textContent=editing?'Drag an app onto another app or folder, or select apps and choose Group selected. Grouping switches the app count to Automatic so your folder appears on the taskbar.':'Edit the app grid to create folders. Category controls remain below.';
   renderBoard(); if(!editing) save();
 };
 $("group-apps").onclick=()=>applyGroup([...selectedApps],$("folder-name").value,false);
 $("retry-save").onclick=save;
 $("app-board").addEventListener('click',e=>{
+  if(suppressAppClick){ suppressAppClick=false; e.preventDefault(); return; }
   if(!editing)return;
   const out=e.target.closest('[data-out]');
   if(out){ const app=S.apps.find(a=>a.file===out.dataset.out); change(DockEditor.moveOut(S.config,app)); renderApps(); renderKeep(); return; }
@@ -304,25 +314,45 @@ $("app-board").addEventListener('click',e=>{
   if(selectedApps.has(b.dataset.file))selectedApps.delete(b.dataset.file);else selectedApps.add(b.dataset.file);
   b.setAttribute('aria-pressed',String(selectedApps.has(b.dataset.file))); $("group-apps").disabled=selectedApps.size<2;
 });
-$("app-board").addEventListener('dragstart',e=>{
-  const b=e.target.closest('button[data-file]'); if(!editing||!b||b.disabled){e.preventDefault();return;}
-  dragging=b.dataset.file; e.dataTransfer.setData('text/plain',dragging); e.dataTransfer.effectAllowed='move';
+// Pointer capture keeps mouse, pen and touch dragging in this window. Native
+// WebView file dragging does not reliably deliver an HTML drop on Windows.
+let dragGesture=null, suppressAppClick=false;
+function cancelDrag(){
+  const previous=dragGesture; dragGesture=null; dragging=null; hover.reset();
+  if(previous&&$("app-board").hasPointerCapture(previous.id)) $("app-board").releasePointerCapture(previous.id);
+}
+function dragTarget(e){
+  const tile=document.elementFromPoint(e.clientX,e.clientY)?.closest('.tile');
+  return tile&&$("app-board").contains(tile)&&!tile.querySelector(`[data-file="${CSS.escape(dragging)}"]`)?tile:null;
+}
+$("app-board").addEventListener('pointerdown',e=>{
+  suppressAppClick=false;
+  const button=e.target.closest('button[data-file]');
+  if(!editing||e.button!==0||!button||button.disabled)return;
+  cancelDrag();
+  dragGesture={id:e.pointerId,file:button.dataset.file,x:e.clientX,y:e.clientY,moved:false};
+  button.focus({preventScroll:true}); $("app-board").setPointerCapture(e.pointerId); e.preventDefault();
 });
-$("app-board").addEventListener('dragover',e=>{
-  const tile=e.target.closest('.tile');
-  if(!editing||!dragging||!tile||tile.querySelector(`[data-file="${CSS.escape(dragging)}"]`)){hover.reset();return;}
-  e.preventDefault(); e.dataTransfer.dropEffect='move'; hover.enter(tile);
+$("app-board").addEventListener('pointermove',e=>{
+  const gesture=dragGesture; if(!gesture||gesture.id!==e.pointerId)return;
+  if(!gesture.moved&&Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)<6)return;
+  if(!gesture.moved){gesture.moved=true;traceEditor('start');}
+  dragging=gesture.file; e.preventDefault(); const tile=dragTarget(e);
+  if(tile===preview)return; hover.reset();
+  if(tile){preview=tile;tile.classList.add('preview');$("editor-message").textContent='Release to group these apps.';traceEditor('over');}
 });
-$("app-board").addEventListener('dragleave',e=>{if(!e.currentTarget.contains(e.relatedTarget))hover.reset();});
-$("app-board").addEventListener('drop',e=>{
-  e.preventDefault(); const tile=e.target.closest('.tile');
-  if(editing&&dragging&&tile&&tile===preview){
-    const files=[dragging,...[...tile.querySelectorAll('[data-file]')].map(b=>b.dataset.file)];
-    applyGroup(files,tile.dataset.folder||$("folder-name").value,!!tile.dataset.folder);
-  }
-  dragging=null; hover.reset();
+$("app-board").addEventListener('pointerup',e=>{
+  const gesture=dragGesture; if(!gesture||gesture.id!==e.pointerId)return;
+  const tile=gesture.moved?dragTarget(e):null;
+  const files=tile?[gesture.file,...[...tile.querySelectorAll('[data-file]')].map(b=>b.dataset.file)]:[];
+  suppressAppClick=gesture.moved; cancelDrag();
+  if(tile){traceEditor('drop');applyGroup(files,tile.dataset.folder||$("folder-name").value,!!tile.dataset.folder);}
+  if(gesture.moved)e.preventDefault();
 });
-$("app-board").addEventListener('dragend',()=>{dragging=null;hover.reset();});
+$("app-board").addEventListener('pointercancel',cancelDrag);
+$("app-board").addEventListener('lostpointercapture',cancelDrag);
+$("app-board").addEventListener('dragstart',e=>e.preventDefault());
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&dragGesture){suppressAppClick=dragGesture.moved;cancelDrag();}});
 
 /* ---------- rendering ---------- */
 function iconFor(app){
