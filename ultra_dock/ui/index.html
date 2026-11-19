@@ -309,7 +309,17 @@ function render(){
   // keep any open tray at its natural width
   $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
   applyFocus();
-  requestAnimationFrame(report);
+  scheduleReport();
+}
+/* Acknowledge a render after layout. A strip that Windows covers (a click raises the
+   taskbar over it) or hides can stop animation frames, and a missing acknowledgement
+   would make the Dock look stale and hand every app back to the native taskbar. */
+function scheduleReport(){
+  let sent = false;
+  const send = () => { if (sent) return; sent = true; report(); };
+  if (document.hidden) { setTimeout(send, 0); return; }
+  requestAnimationFrame(send);
+  setTimeout(send, 250);
 }
 /* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
 function report(){
