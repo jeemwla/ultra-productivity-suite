@@ -1,5 +1,7 @@
 # Ultra Suite
 
+[![CI](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/ci.yml) [![CodeQL](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/codeql.yml) [![Latest release](https://img.shields.io/github/v/release/jeemwla/ultra-productivity-suite?label=release)](https://github.com/jeemwla/ultra-productivity-suite/releases/latest) [![License: MIT](https://img.shields.io/github/license/jeemwla/ultra-productivity-suite)](LICENSE)
+
 Free Windows utilities for organizing open apps, monitoring your PC, and setting local alarms.
 
 [Download the Windows installer, v2.2.16 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.16/UltraSuite-Setup-2.2.16-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
@@ -87,7 +89,7 @@ Optional device integrations remain available for configured setups. Router-spec
 | insights/ | Owner/Dev-only event collector and maintainer dashboard |
 | tests/ | Backend, native-policy and frontend-helper regression tests |
 
-Run backend tests from the repository root (Node.js 22 or newer expands the test glob itself, so the command also works in PowerShell). Some tests create temporary folders under the gitignored `private/` folder, so create it first in a fresh clone:
+Run backend tests from the repository root (Node.js 22 or newer expands the test glob itself, so the command also works in PowerShell). Install `requirements.txt` and `requirements-build.txt` first, as CI does. Some tests create temporary folders under the gitignored `private/` folder, so create it first in a fresh clone:
 
 ~~~powershell
 New-Item -ItemType Directory -Force private | Out-Null
