@@ -136,6 +136,7 @@ fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
         "frontend_errors":FRONTEND_ERRORS.lock().ok().and_then(|e|e.clone()).unwrap_or_default(),
         "coverage_failure":COVERAGE_FAILURE.lock().ok().and_then(|e|e.clone()),
         "health_capture":HEALTH_CAPTURE.get().map(dock_diagnostics::Capture::snapshot),
+        "strip_raises":STRIP_RAISES.load(Ordering::Relaxed),
         "switcher_barrier":{"requested":barrier.requested,"acknowledged":barrier.acknowledged,"barriers":barrier.barriers,"timeouts":barrier.timeouts,"hidden":barrier.hidden,"installed":barrier.installed,"faulted":barrier.faulted},
         "webviews":app.webview_windows().values().map(|w|json!({"label":w.label(),"visible":w.is_visible().ok(),"focused":w.is_focused().ok(),
             "position":w.outer_position().ok().map(|p|vec![p.x,p.y]),"size":w.inner_size().ok().map(|s|vec![s.width,s.height])})).collect::<Vec<_>>(),"events":events});
@@ -1218,7 +1219,31 @@ mod strip_listing_tests {
         let window=OwnedWindow(unsafe{CreateWindowExW(WS_EX_TOOLWINDOW,w!("STATIC"),w!("Dock placement regression"),
             WS_POPUP,100,100,180,48,None,None,None,None).unwrap()});
         let position=dock_surface::Placement{x:100,y:100,width:180,height:48,fits:true,shelf:false};
-        assert!(!strip_placement_applied(window.0,&position),"matching bounds cannot authorize skipping a required show when the HWND is hidden");
+        assert!(!strip_placement_applied(window.0,HWND::default(),&position),"matching bounds cannot authorize skipping a required show when the HWND is hidden");
+    }
+
+    /// Regression for apps and folders vanishing after a click on the taskbar: the click
+    /// activates Shell_TrayWnd, Windows raises it over the older topmost strip, and the
+    /// tracker skipped the unchanged placement, so the strip stayed hidden behind it.
+    /// Uses only hidden test windows owned by this test; nothing is shown on screen.
+    #[cfg(windows)]
+    #[test]
+    fn a_taskbar_raised_by_a_click_over_the_strip_is_not_a_completed_placement() {
+        use windows::Win32::{Foundation::HWND,UI::WindowsAndMessaging::*};
+        use windows::core::w;
+        struct OwnedWindow(HWND);
+        impl Drop for OwnedWindow {fn drop(&mut self){unsafe{let _=DestroyWindow(self.0);}}}
+        let topmost=|title|OwnedWindow(unsafe{CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_NOACTIVATE,w!("STATIC"),title,
+            WS_POPUP,-32000,-32000,180,48,None,None,None,None).unwrap()});
+        let raise=|h:HWND|unsafe{SetWindowPos(h,Some(HWND_TOPMOST),0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE).unwrap()};
+        let taskbar=topmost(w!("Fake taskbar"));
+        let strip=topmost(w!("Fake Dock strip"));
+        raise(strip.0);
+        assert!(!taskbar_covers_strip(strip.0,taskbar.0),"a freshly placed strip is above its taskbar");
+        raise(taskbar.0); // what a click on the native taskbar does
+        assert!(taskbar_covers_strip(strip.0,taskbar.0),"the tracker must see that the taskbar now covers the strip");
+        raise(strip.0); // the tracker's placement, HWND_TOPMOST
+        assert!(!taskbar_covers_strip(strip.0,taskbar.0),"re-raising the strip makes its apps and folders visible again");
     }
 
     #[test]
@@ -2561,11 +2586,21 @@ fn reconcile_pair(taskbar:isize,g:&dock_layout::TaskbarGeom,
     candidate
 }
 #[cfg(windows)]
-fn strip_placement_applied(hwnd:windows::Win32::Foundation::HWND,position:&dock_surface::Placement)->bool {
+fn strip_placement_applied(hwnd:windows::Win32::Foundation::HWND,taskbar:windows::Win32::Foundation::HWND,position:&dock_surface::Placement)->bool {
     use windows::Win32::{Foundation::RECT,UI::WindowsAndMessaging::{GetWindowRect,IsWindowVisible}};
     let mut actual=RECT::default();
     unsafe {IsWindowVisible(hwnd).as_bool() && GetWindowRect(hwnd,&mut actual).is_ok()
-        && position.matches_native_rect((actual.left,actual.top,actual.right,actual.bottom))}
+        && position.matches_native_rect((actual.left,actual.top,actual.right,actual.bottom))
+        && !taskbar_covers_strip(hwnd,taskbar)}
+}
+/// Times the tracker found its taskbar above the strip and raised the strip again.
+static STRIP_RAISES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+#[cfg(windows)]
+fn taskbar_covers_strip(strip:windows::Win32::Foundation::HWND,taskbar:windows::Win32::Foundation::HWND)->bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindow,GW_HWNDPREV};
+    let above=std::iter::successors(unsafe{GetWindow(strip,GW_HWNDPREV)}.ok(),|h|unsafe{GetWindow(*h,GW_HWNDPREV)}.ok())
+        .take_while(|h|!h.is_invalid()).map(|h|h.0 as isize);
+    dock_surface::taskbar_above(above,taskbar.0 as isize)
 }
 
 #[cfg(windows)]
@@ -2660,10 +2695,13 @@ fn taskbar_surface_tracker(label: String, taskbar: isize, strip: isize) {
             let (x,y,w,h)=(position.x,position.y,position.width as u32,position.height as u32);
             let state=(x,y,w,h,show,shell_surface);
             let refresh=shell_refresh.update(shell_surface,shell_clock.elapsed().as_millis() as u64);
-            let placed=!show || strip_placement_applied(hwnd,&position);
+            let placed=!show || strip_placement_applied(hwnd,tb,&position);
             // WM_DPICHANGED may apply a suggested resize after our asynchronous
             // move. Verify physical output, not just the previous request.
+            // A click on the taskbar raises it over the unchanged strip; that
+            // also counts as not placed, so the strip comes back on top.
             if state==last && !refresh && placed {continue;}
+            if state==last && !refresh && show {STRIP_RAISES.fetch_add(1,Ordering::Relaxed);}
             last=state;
             if show {
                 let _=SetWindowPos(hwnd,Some(HWND_TOPMOST),x,y,w as i32,h as i32,SWP_NOACTIVATE|SWP_SHOWWINDOW|SWP_ASYNCWINDOWPOS);
