@@ -310,7 +310,7 @@ select.in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 .shake{animation:shake .32s ease-in-out}
 @keyframes shake{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
 
-@media (max-width:1100px){.grid{grid-template-columns:1fr}#alarms-card{order:-1}}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}.activity-stack{order:-1}} /* the alarm list comes first on narrow screens */
 @media (max-width:640px){
   .wrap{padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
   header.top{margin-bottom:16px}
@@ -648,6 +648,11 @@ function timeAfter(now, minutes){
 }
 
 /* ---------- Summaries ---------- */
+/* A moment as clock text, rounded up to the minute: a snooze that ends at 7:13:20 reads "7:14 AM", never early. */
+function momentText(d){
+  const t = new Date(d.getTime()); if (t.getSeconds() || t.getMilliseconds()) t.setMinutes(t.getMinutes() + 1, 0, 0);
+  return clockText(`${pad2(t.getHours())}:${pad2(t.getMinutes())}`);
+}
 const WEEK = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 /* ["Mon",...,"Fri"] -> "Weekdays"; ["Sat","Sun"] -> "Weekends"; all seven -> "Every day"; otherwise "Mon, Wed". */
 function repeatText(days){
@@ -698,6 +703,8 @@ function historyRow(e, now){
   let detail = String(e.detail || "");
   if (e.kind === "dismissed") detail = detail.replace(/^after (\d+) s$/, (_, s) => `after ${+s < 90 ? s + " s" : Math.round(s / 60) + " min"}`);
   if (/audio_started$/.test(e.kind) || e.kind === "expired") detail = "";
+  detail = detail.replace(/^\d{4}-\d{2}-\d{2} (\d{2}):(\d{2}): /, (_, h, m) => `was due ${clockText(`${h}:${m}`)}; `);
+  detail = detail.replace(/\buntil (\d{2}):(\d{2})\b/, (_, h, m) => `until ${clockText(`${h}:${m}`)}`); // the engine logs 24-hour times
   return {label:k[0], tone:k[1], name:e.label || (e.kind === "clock_changed" ? "PC clock" : "Alarm"), detail, when, iso:ok ? e.ts : ""};
 }
 
@@ -1197,7 +1204,8 @@ function renderTimers(){
   $("timer-count").textContent = timers.length ? `${running.length} running${done ? `, ${done} done` : ""}` : "";
   $("timer-badge").hidden = !running.length; $("timer-badge").textContent = String(running.length);
   const soon = running.map(t => timerRemaining(t, elapsed)).sort((a,b) => a - b)[0];
-  const title = soon !== undefined && fresh ? `${timerText(soon)} · Code Red Alarm` : "Code Red Alarm";
+  const ringing = typeof ringAlarm !== "undefined" && ringAlarm;
+  const title = ringing ? `Ringing: ${ringAlarm.label} · Code Red Alarm` : (soon !== undefined && fresh ? `${timerText(soon)} · Code Red Alarm` : "Code Red Alarm");
   if (document.title !== title) document.title = title;
   tmFormState();
 }
@@ -1368,8 +1376,7 @@ function nextAlarmText(){
   if (!deliveryEnabled) return deliveryNotice();
   const now = engineNow(), next = nextAlarm(alarms, now);
   if (!next) return "";
-  const hhmm = `${pad2(next.at.getHours())}:${pad2(next.at.getMinutes())}`;
-  return `Next alarm ${inText(next.at, now)} · ${next.a.label}, ${dayWord(next.at, now)} ${clockText(hhmm)}`;
+  return `Next alarm ${inText(next.at, now)} · ${next.a.label}, ${dayWord(next.at, now)} ${momentText(next.at)}`;
 }
 function sorted(){
   const now = engineNow();
@@ -1383,7 +1390,7 @@ function sorted(){
 function statusTag(a){
   if (!deliveryEnabled) return `<span class="tag">${deliveryEdition === "Dev" ? "Saved Dev schedule" : "Saved schedule"}</span><span class="tag">${deliveryNotice()}</span>`;
   const snz = snoozedUntil(a);
-  if (snz) return `<span class="tag snz">Snoozed until ${clockText(`${pad2(snz.getHours())}:${pad2(snz.getMinutes())}`)}</span>`;
+  if (snz) return `<span class="tag snz">Snoozed until ${momentText(snz)}</span>`;
   if (missed(a)) return `<span class="tag miss" title="The PC was off or asleep at that time, so it couldn't ring">Missed</span>`;
   if (a.target_date && !a.enabled && a.last_triggered_date) return `<span class="tag ok">Rang</span>`;
   const n = nextRing(a);
@@ -1545,7 +1552,8 @@ function renderHistory(){
   const seen = store.get("missedSeen", ""), recent = historyEvents.filter(e => e.kind === "missed" && e.ts > seen && now - new Date(e.ts) < 12 * 3600000);
   $("missed-warn").hidden = !recent.length || !deliveryEnabled;
   if (recent.length) {
-    const names = [...new Set(recent.map(e => e.label || "An alarm"))].slice(0, 3).join(", ");
+    const all = [...new Set(recent.map(e => e.label || "An alarm"))], more = all.length - 3;
+    const names = all.slice(0, 3).join(", ") + (more > 0 ? ` and ${more} more` : "");
     $("missed-warn-text").textContent = `Missed: ${names}. The PC was off, asleep or busy when ${recent.length > 1 ? "they were" : "it was"} due. `
       + "Alarms can wake a sleeping PC only when it's plugged in and Windows allows wake timers.";
     $("missed-ok").onclick = () => { store.set("missedSeen", recent[0].ts); $("missed-warn").hidden = true; };
@@ -1638,6 +1646,7 @@ function showRing(msg){
     setTimeout(() => (needPhrase ? $("ring-input") : (msg.math_question && !test ? $("ring-math") : $("ring-stop"))).focus(), 50);
   }
   $("ring").classList.add("show"); setBackgroundInert(true);
+  document.getElementById("fbk-bg")?.classList.remove("show"); // the feedback box sits above everything; never over a ring
   $("ring-kind").textContent = test ? "Preview" : (a.is_timer ? "Timer" : (a.code_red ? "Code Red" : "Alarm"));
   $("ring-title").textContent = a.label;
   if (lastClock) $("ring-clock").textContent = clockText(lastClock);
@@ -1663,7 +1672,7 @@ function showRing(msg){
 }
 function hideRing(){
   $("ring").classList.remove("show"); setBackgroundInert(false); ringingId = null; ringAlarm = null; stopBrowserSiren();
-  loadHistory();
+  loadHistory(); loadAlarms(); renderTimers(); // an alarm that rang out may have snoozed itself
 }
 function shake(el){ el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }
 ["paste","drop","copy","cut"].forEach(ev => $("ring-input").addEventListener(ev, (e) => { e.preventDefault(); $("ring-err").textContent = "Paste is blocked. Type it."; }));
@@ -1681,7 +1690,7 @@ $("ring-snooze").onclick = async () => {
   try {
     const d = await api("/api/alarms/snooze", {method:"POST", body:JSON.stringify({alarm_id:a.id})});
     hideRing(); loadAlarms();
-    toast(`Snoozed until ${clockText(d.until.slice(11, 16))}${d.left ? `. ${d.left} snooze${d.left > 1 ? "s" : ""} left` : ". That was the last snooze"}`);
+    toast(`Snoozed until ${momentText(new Date(d.until))}${d.left ? `. ${d.left} snooze${d.left > 1 ? "s" : ""} left` : ". That was the last snooze"}`);
   } catch (err) { $("ring-err").textContent = err.message; }
   finally { b.disabled = false; }
 };

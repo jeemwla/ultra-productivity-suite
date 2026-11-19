@@ -1,5 +1,6 @@
 """Alarm API rules: validation, snooze, toggling and old databases. Disposable data, no real speaker."""
 import ast
+import asyncio
 import contextlib
 import datetime
 import importlib
@@ -33,6 +34,7 @@ class AlarmApiRules(unittest.TestCase):
         sys.modules[spec.name] = package
         spec.loader.exec_module(package)
         cls.m = importlib.import_module("rules_test_pkg.main")
+        cls.real_broadcast = staticmethod(cls.m.broadcast_state)
         cls.clock = importlib.import_module("rules_test_pkg.clock")
 
     @classmethod
@@ -176,6 +178,32 @@ class AlarmApiRules(unittest.TestCase):
         self.assertEqual(self.client.post("/api/alarms/snooze", json={"alarm_id": "other"}).status_code, 409)
         self.m.ring_state.is_ringing = False
         self.assertEqual(self.client.post("/api/alarms/snooze", json={"alarm_id": plain}).status_code, 409)
+
+    def ring_out(self, alarm_id, **extra):
+        self.ring(alarm_id, **extra)
+        self.m.ring_state.expires_at = self.now
+        with patch.object(self.m, "time") as fake_time:
+            fake_time.time.return_value = 1794484800.0
+            asyncio.run(self.real_broadcast())
+        self.assertFalse(self.m.ring_state.is_ringing)
+
+    def test_an_alarm_that_rings_out_takes_its_next_snooze_automatically(self):
+        alarm_id = self.post(snooze_limit=1, snooze_minutes=5).json()["id"]
+        self.ring_out(alarm_id)
+        saved = self.row(alarm_id)
+        self.assertEqual((saved["snoozes_used"], saved["snoozed_until"]), (1, "2026-11-12T07:10:00"))
+        self.ring_out(alarm_id)
+        self.assertEqual(self.row(alarm_id)["snoozes_used"], 1, "with no snoozes left it simply goes quiet")
+        self.assertEqual(self.events(), ["expired", "snoozed", "expired"])
+
+    def test_ringing_out_never_snoozes_without_snooze_code_red_or_a_preview(self):
+        plain = self.post().json()["id"]
+        locked = self.post(code_red=True, custom_phrase="I am up").json()["id"]
+        snoozy = self.post(snooze_limit=3).json()["id"]
+        for alarm_id, extra in ((plain, {}), (locked, {}), (snoozy, {"is_test": True})):
+            self.ring_out(alarm_id, **extra)
+            self.assertIsNone(self.row(alarm_id)["snoozed_until"])
+        self.assertNotIn("snoozed", self.events())
 
     def test_editing_or_switching_off_ends_a_pending_snooze(self):
         alarm_id = self.post(snooze_limit=3).json()["id"]

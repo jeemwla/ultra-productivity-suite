@@ -5,7 +5,7 @@ Alarms for people who sleep through alarms. Works with any speaker or headphones
 - Any output. Pick it under Sound (system default, speakers, headphones, monitor audio). Test plays 3 seconds on it.
 - Optional full volume lock, off by default. When enabled, the chosen output is unmuted and held at 100% while ringing. Its previous volume is restored afterwards.
 - Code Red mode. The alarm only stops when you type your phrase exactly. Paste and drop are blocked. The ringing screen shows how much of the phrase is right so far, and curly quotes or dashes from a phone keyboard count as the plain ones. Code Red alarms never snooze.
-- Snooze, off by default. Choose 5, 9, 10 or 15 minutes, up to 3 times per ring. A snooze is saved, so it still rings after a restart, and the PC wakes for it like any alarm.
+- Snooze, off by default. Choose 5, 9, 10 or 15 minutes, up to 3 times per ring. A snooze is saved, so it still rings after a restart, and the PC wakes for it like any alarm. If nobody stops a ring, the alarm takes its next snooze by itself instead of going quiet.
 - Wake-up math (optional), repeat on chosen days or a single date, ring length from 1 minute to 1 hour, and Preview to hear an alarm for 10 seconds.
 - Edit in place, with a status on every alarm: "Rings in 3h 20m", "Snoozed until 7:14 AM", "Rang" or "Missed". A missed one-time alarm has a Reschedule button, and Delete can be undone for a few seconds.
 - Recent activity lists rings, stops, snoozes and missed alarms. An alarm missed while the PC was off or asleep for more than 30 minutes is logged and shown in a banner instead of being skipped silently.

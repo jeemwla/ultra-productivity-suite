@@ -123,3 +123,21 @@ test('the ringing screen offers snooze only when the alarm allows it',()=>{
  assert.match(html,/setBackgroundInert\(true\)/,'the page behind the ringing screen is inert');
  assert.match(html,/startBrowserSiren\(failed\)/,'a failed speaker helper makes the page ring');
 });
+
+test('snooze times round up to the minute and history shows them in the chosen clock style',()=>{
+ const {ctx}=page();
+ assert.equal(ctx.momentText(new Date(2026,10,12,7,13,20)),'7:14 AM','never earlier than the real moment');
+ assert.equal(ctx.momentText(new Date(2026,10,12,7,14,0)),'7:14 AM');
+ assert.equal(ctx.momentText(new Date(2026,10,12,23,59,30)),'12:00 AM');
+ const r=ctx.historyRow({kind:'snoozed',label:'Gym',detail:'9 min, until 00:42 (1 of 3)',ts:'2026-11-12T00:33:00'},new Date(2026,10,12,7,5));
+ assert.equal(r.detail,'9 min, until 12:42 AM (1 of 3)');
+ assert.match(html,/Ringing: \$\{ringAlarm\.label\}/,'the window title says which alarm is ringing');
+ assert.match(html,/fbk-bg"\)\?\.classList\.remove\("show"\)/,'the feedback box closes when an alarm rings');
+});
+
+test('missed-alarm details name the time it was due',()=>{
+ const {ctx}=page();
+ const r=ctx.historyRow({kind:'missed',label:'Gym',detail:"2026-11-19 05:45: the alarm engine wasn't running (PC off)",ts:'2026-11-19T14:19:00'},new Date(2026,10,19,14,20));
+ assert.equal(r.detail,"was due 5:45 AM; the alarm engine wasn't running (PC off)");
+ assert.match(html,/ and \$\{more\} more/,'the missed banner says when more alarms were missed than it names');
+});

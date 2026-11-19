@@ -229,6 +229,11 @@ async def broadcast_state():
         remaining_sec = max(0, int((ring_state.expires_at - now).total_seconds()))
         if remaining_sec == 0:
             log_event(ring_state.alarm, "expired", "rang for its full length without being stopped")
+            # Someone who slept through the whole ring gets the next snooze automatically, if the alarm has one left.
+            auto = snooze_alarm(ring_state.alarm, now)
+            if isinstance(auto, dict):
+                log_event(ring_state.alarm, "snoozed", f"{auto['minutes']} min, until {auto['until']:%H:%M} "
+                                                       f"({auto['used']} of {auto['limit']}), automatically after ringing out")
             ring_state.is_ringing = False
             ring_state.alarm = None
             ring_state.math_question = None
@@ -580,15 +585,7 @@ async def _stop_ring_for(timer_id: str, why: str):
     if not (ring_state.is_ringing and active.get("timer_id") == timer_id) or active.get("code_red"):
         return
     log_event(active, "dismissed", why)
-    ring_state.is_ringing = False
-    ring_state.alarm = None
-    ring_state.math_question = None
-    ring_state.math_solution = None
-    try:
-        async with httpx.AsyncClient(timeout=2.5, headers=BRIDGE_HEADERS) as client:
-            await client.post(f"{HOST_AUDIO_BRIDGE_URL}/stop", json={})
-    except Exception:
-        pass
+    await _end_ring()
 
 
 @app.post("/api/timers/{timer_id}/{action}")
@@ -890,39 +887,50 @@ def _clear_snooze(alarm_id):
         conn.commit()
 
 
+def snooze_alarm(active, now):
+    """Save the next snooze for a ringing alarm. Returns {until, minutes, used, limit}, or (status, message) when it
+    can't snooze: previews, timers and Code Red alarms never do, and an alarm only snoozes as often as it allows."""
+    if not active:
+        return 409, "Nothing is ringing right now."
+    if active.get("is_test") or active.get("is_timer"):
+        return 409, "Previews and timers don't snooze."
+    if active.get("code_red"):
+        return 403, "Code Red alarms can't snooze. Type the phrase to stop it."
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM alarms WHERE id = ?", (active.get("id"),)).fetchone()
+        if not row:
+            return 404, "That alarm was deleted. Stop it instead."
+        limit, used, minutes = int(row["snooze_limit"] or 0), int(row["snoozes_used"] or 0), int(row["snooze_minutes"] or 9)
+        if limit <= 0:
+            return 403, "Snooze is off for this alarm."
+        if used >= limit:
+            return 403, "No snoozes left. Stop the alarm to turn it off."
+        until = now.replace(microsecond=0) + datetime.timedelta(minutes=minutes)
+        conn.execute("UPDATE alarms SET snoozes_used = ?, snoozed_until = ? WHERE id = ?",
+                     (used + 1, until.isoformat(timespec="seconds"), active["id"]))
+        conn.commit()
+    return {"until": until, "minutes": minutes, "used": used + 1, "limit": limit}
+
+
 @app.post("/api/alarms/snooze")
 async def snooze_active_alarm(req: SnoozeRequest):
-    """Quiet the ringing alarm for its snooze length. Only alarms with snooze turned on can do this, never a Code Red
-    alarm, a timer or a preview, and only as many times as the alarm allows. The snooze is saved, so it still rings
-    after a restart, and the wake timer covers it."""
+    """Quiet the ringing alarm for its snooze length. The snooze is saved, so it still rings after a restart, and the
+    wake timer covers it."""
     active = ring_state.alarm
     if not ring_state.is_ringing or not active:
         raise HTTPException(409, "Nothing is ringing right now.")
     if req.alarm_id != active.get("id"):
         raise HTTPException(409, "That alarm is no longer ringing; a different one is.")
-    if active.get("is_test") or active.get("is_timer"):
-        raise HTTPException(409, "Previews and timers don't snooze.")
-    if active.get("code_red"):
-        raise HTTPException(403, "Code Red alarms can't snooze. Type the phrase to stop it.")
-    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT * FROM alarms WHERE id = ?", (active["id"],)).fetchone()
-        if not row:
-            raise HTTPException(404, "That alarm was deleted. Stop it instead.")
-        limit, used, minutes = int(row["snooze_limit"] or 0), int(row["snoozes_used"] or 0), int(row["snooze_minutes"] or 9)
-        if limit <= 0:
-            raise HTTPException(403, "Snooze is off for this alarm.")
-        if used >= limit:
-            raise HTTPException(403, "No snoozes left. Stop the alarm to turn it off.")
-        until = local_now().replace(microsecond=0) + datetime.timedelta(minutes=minutes)
-        conn.execute("UPDATE alarms SET snoozes_used = ?, snoozed_until = ? WHERE id = ?",
-                     (used + 1, until.isoformat(timespec="seconds"), active["id"]))
-        conn.commit()
-    log_event(active, "snoozed", f"{minutes} min, until {until:%H:%M} ({used + 1} of {limit})")
+    result = snooze_alarm(active, local_now())
+    if not isinstance(result, dict):
+        raise HTTPException(*result)
+    until, minutes = result["until"], result["minutes"]
+    log_event(active, "snoozed", f"{minutes} min, until {until:%H:%M} ({result['used']} of {result['limit']})")
     await _end_ring()
     await broadcast_state()
-    return {"ok": True, "until": until.isoformat(timespec="seconds"), "minutes": minutes, "left": limit - used - 1,
+    return {"ok": True, "until": until.isoformat(timespec="seconds"), "minutes": minutes, "left": result["limit"] - result["used"],
             "message": f"Snoozed until {until:%H:%M}."}
 
 
