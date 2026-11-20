@@ -1,7 +1,7 @@
 # Everything the suite needs to run from source or to build the installer (Windows).
 # Install with:  python -m pip install -r requirements.txt   (building also needs: pyinstaller pillow)
 fastapi>=0.115
-uvicorn[standard]>=0.30
+uvicorn[standard]>=0.54.0
 httpx>=0.27
 pydantic>=2.9
 websockets>=13
