@@ -1247,6 +1247,38 @@ mod strip_listing_tests {
         assert!(!taskbar_covers_strip(strip.0,taskbar.0),"re-raising the strip makes its apps and folders visible again");
     }
 
+    /// Taskbar clicks, Start, tray flyouts and focus changes change none of the listing
+    /// inputs, so hidden apps and their folders must stay listed through all of them.
+    #[test]
+    fn taskbar_clicks_start_tray_and_focus_changes_keep_every_hidden_app_listed() {
+        let mut listing=dock_safety::StripListing::default();
+        let mut snapshot=vec![app(1),app(2),app(3)];
+        let events=["steady","taskbar click","Start open","Start closed","tray flyout","focus change","taskbar click"];
+        for (step,event) in events.iter().enumerate() {
+            let now=step as u64*700;
+            assert!(!dock_surface::switcher_requested(false,false,false,*event=="Start open"),"{event}: Start alone never restores native buttons");
+            let presentation=presentation_allowed(true,true,true,true,false,false,false);
+            for w in &snapshot { assert!(listing.offer(w.hwnd,now,presentation,true,true),"{event}: hidden app {} stays listed",w.hwnd); }
+            if *event=="focus change" { snapshot[1].active=true; }
+            assert_eq!(ids(&offered_snapshot(&snapshot,true,true,true,false,None)),vec![1,2,3],"{event}");
+        }
+    }
+
+    /// Explorer restarts create new taskbar windows and show every native button again.
+    /// Until checked restoration finishes, still-hidden apps stay reachable; afterwards the
+    /// strip lists nothing, so no app shows twice.
+    #[test]
+    fn an_explorer_restart_keeps_access_then_avoids_duplicates() {
+        let old=dock_surface::Surface{required:true,rendered_at:Some(10),shown:true,..dock_surface::Surface::new(100,7,"taskbar".into())};
+        assert!(dock_surface::topology_matches(std::slice::from_ref(&old),&[(100,0,false)]));
+        assert!(!dock_surface::topology_matches(std::slice::from_ref(&old),&[(200,0,false)]),"a new Shell_TrayWnd is not covered by the old strip");
+        let snapshot=vec![app(1),app(2)];
+        assert_eq!(ids(&offered_snapshot(&snapshot,true,false,false,false,Some(&[1]))),vec![1],"an app not yet restored stays in the strip");
+        assert!(offered_snapshot(&snapshot,true,false,false,false,Some(&[])).is_empty(),"restored apps leave the strip");
+        let mut listing=dock_safety::StripListing::default();
+        assert!(!listing.offer(1,0,presentation_allowed(true,true,true,false,false,false,false),false,false));
+    }
+
     #[test]
     fn frontend_health_fallback_keeps_only_unrestored_apps_before_next_organizer_pass() {
         let stale=vec![app(1),app(2)];
