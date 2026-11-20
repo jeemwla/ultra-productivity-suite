@@ -35,9 +35,14 @@ test('page styles use the token values instead of new fixed radii and font sizes
 test('strip button widths still match the widths the Rust layout plans with',()=>{
   const html=ui('index.html');
   const num=name=>Number(rust.match(new RegExp(`pub const ${name}: f64 = ([\\d.]+);`))[1]);
-  assert.match(html,new RegExp(`\\.grp\\{position:relative;height:40px;width:${num('FOLDER_W')}px;`),'folder button width');
-  assert.match(html,new RegExp(`\\.win\\{position:relative;width:${num('APP_W')}px;`),'app button width');
-  assert.match(html,new RegExp(`\\.more\\{width:${num('MENU_W')}px;`),'menu button width');
+  // Every strip button is drawn at the measured native width, falling back to the nominal folder width.
+  const fallback=`var\\(--app-button-width,${num('FOLDER_W')}px\\)`;
+  assert.match(html,new RegExp(`\\.grp\\{position:relative;height:40px;width:${fallback};`),'folder button width');
+  assert.match(html,new RegExp(`\\.win\\{position:relative;width:${fallback};`),'app button width');
+  assert.match(html,new RegExp(`\\.more\\{width:${fallback};`),'menu button width');
+  // The planner works in nominal widths over a room converted by the narrowest nominal button.
+  assert.ok(num('APP_W')<=num('FOLDER_W')&&num('MENU_W')<=num('FOLDER_W'));
+  assert.ok(rust.includes('pub fn nominal_room(avail: f64, button_width_css: Option<f64>) -> f64'));
 });
 
 test('opaque windows paint their first frame in the system theme, and the strip does not',()=>{

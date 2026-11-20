@@ -103,7 +103,7 @@ fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
         "label":s.label,"hwnd":s.hwnd,"taskbar":s.taskbar,"shown":s.shown,"room_css":s.room,
         "requested_width_css":s.width,"rendered":s.rendered,"rendered_at":s.rendered_at,
         "expected_generation":s.expected_generation,"rendered_generation":s.rendered_generation,"required":s.required,
-        "native":native,"geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room))
+        "native":native,"geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room,s.geometry.as_ref().and_then(|g|g.button_width_css)))
     })}).collect();
     let windows: Vec<_> = snapshot.iter().map(|w| json!({"hwnd":w.hwnd,"exe":w.exe,"category":w.category,"active":w.active})).collect();
     let events = DOCK_EVENTS.lock().map(|s| s.clone()).unwrap_or_default();
@@ -1398,12 +1398,14 @@ fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
     let generation = pair.as_ref().map(|p|p.generation).unwrap_or(0);
     let mut layout = if let Some(pair) = pair.as_ref() {
         plan_json(if left {&pair.left} else {&pair.right})
-    } else if left { plan_json(&dock_layout::Plan::default()) } else { strip_plan(&wins, avail) };
+    } else if left { plan_json(&dock_layout::Plan::default()) } else {
+        strip_plan(&wins, avail, surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.button_width_css)) };
     layout["show_menu"] = json!(!left);
     layout["side"] = json!(if left {"left"} else {"right"});
     layout["centered"] = json!(centered);
     layout["generation"] = generation_json(generation);
     layout["icon_size"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.icon_size_css).unwrap_or(24.0));
+    layout["button_width"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.button_width_css).unwrap_or(44.0));
     layout["scale"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).map(|g|g.scale).unwrap_or(1.0));
     let shelf = surface.is_some_and(|s| s.shelf);
     let counts = CANDIDATES.lock().map(|v| v.as_ref().map(|c| (c.groups.iter().map(|g| g.1.len()).sum::<usize>(), c.pending.len(), c.hidden_apps)).unwrap_or_default()).unwrap_or_default();
@@ -1412,14 +1414,14 @@ fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
 }
 
 /// Group the listed windows into the folders and apps the strip shows, sized to the taskbar's free space.
-fn strip_plan(wins: &[WinInfo], available: u32) -> Value {
+fn strip_plan(wins: &[WinInfo], available: u32, button_width_css: Option<f64>) -> Value {
     let mut groups: Vec<(String, Vec<String>)> = vec![];
     for w in wins {  // already sorted by category order, then name
         let pos = match groups.iter().position(|g| g.0 == w.category) { Some(p) => p, None => { groups.push((w.category.clone(), vec![])); groups.len() - 1 } };
         if !groups[pos].1.contains(&w.exe) { groups[pos].1.push(w.exe.clone()); }
     }
     let room = if available == u32::MAX { f64::INFINITY } else { available as f64 };
-    let plan = dock_layout::plan_capped(&groups, room, dock_cap());
+    let plan = dock_layout::plan_capped(&groups, dock_layout::nominal_room(room, button_width_css), dock_cap());
     plan_json(&plan)
 }
 fn plan_json(plan: &dock_layout::Plan) -> Value {
@@ -2939,7 +2941,8 @@ fn individual_apps_now() -> usize {
         return pair.left.items.iter().chain(pair.right.items.iter()).filter(|item|!item.folder).count();
     }
     let snapshot = SNAPSHOT.lock().map(|s|s.clone()).unwrap_or_default();
-    strip_plan(&snapshot,AVAIL_CSS.load(Ordering::Acquire))["items"].as_array()
+    let width = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.required).and_then(|s| s.geometry.as_ref().and_then(|g| g.button_width_css)));
+    strip_plan(&snapshot,AVAIL_CSS.load(Ordering::Acquire),width)["items"].as_array()
         .map(|items|items.iter().filter(|item|item["folder"] == false).count()).unwrap_or(0)
 }
 

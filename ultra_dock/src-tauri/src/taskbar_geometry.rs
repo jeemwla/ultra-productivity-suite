@@ -127,5 +127,6 @@ pub unsafe fn measure(
         // Unknown/legacy settings fail closed; physical bounds still gate fit.
         centered:taskbar_alignment(),
         icon_size_css:Some(crate::icon_geometry::frame_css(bounds.bottom-bounds.top,scale)),
+        button_width_css:crate::icon_geometry::button_pitch_css(&native_buttons,scale),
     })
 }
