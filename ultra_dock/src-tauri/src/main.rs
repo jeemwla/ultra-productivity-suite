@@ -103,7 +103,7 @@ fn write_dock_diagnostics(app: &AppHandle) -> Result<(),String> {
         "label":s.label,"hwnd":s.hwnd,"taskbar":s.taskbar,"shown":s.shown,"room_css":s.room,
         "requested_width_css":s.width,"rendered":s.rendered,"rendered_at":s.rendered_at,
         "expected_generation":s.expected_generation,"rendered_generation":s.rendered_generation,"required":s.required,
-        "native":native,"geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room))
+        "native":native,"geometry":s.geometry,"layout":paired_for(s.taskbar).map(|p|plan_json(if s.label.ends_with("-left") {&p.left} else {&p.right})).unwrap_or_else(||strip_plan(&snapshot,s.room,s.geometry.as_ref().and_then(|g|g.button_width_css)))
     })}).collect();
     let windows: Vec<_> = snapshot.iter().map(|w| json!({"hwnd":w.hwnd,"exe":w.exe,"category":w.category,"active":w.active})).collect();
     let events = DOCK_EVENTS.lock().map(|s| s.clone()).unwrap_or_default();
@@ -248,7 +248,7 @@ mod art {
 }
 
 // ----------------------------------------------------------------------------- organizer config
-struct OrgCfg { keep: Vec<String>, order: Vec<String>, cats: Vec<(String, Vec<String>)>, overrides: HashMap<String, String> }
+struct OrgCfg { keep: Vec<String>, order: Vec<String>, cats: Vec<(String, Vec<String>)>, overrides: HashMap<String, String>, inline_window_list: bool }
 static ORG_CACHE: Mutex<Option<(SystemTime, std::sync::Arc<OrgCfg>)>> = Mutex::new(None);
 
 fn org_path() -> PathBuf { appdata("organizer.json") }
@@ -266,7 +266,7 @@ fn org_config() -> std::sync::Arc<OrgCfg> {
     if let Some(m) = v["categories"].as_object() { for (k, list) in m { cats.push((k.clone(), strs(list))); } }
     cats.sort_by_key(|(k, _)| order.iter().position(|o| o == k).unwrap_or(99));
     let overrides = v["overrides"].as_object().map(|m| m.iter().filter_map(|(k, x)| x.as_str().map(|s| (k.to_lowercase(), s.to_string()))).collect()).unwrap_or_default();
-    let cfg = std::sync::Arc::new(OrgCfg { keep: strs(&v["keep"]), order, cats, overrides });
+    let cfg = std::sync::Arc::new(OrgCfg { keep: strs(&v["keep"]), order, cats, overrides, inline_window_list: v["inline_window_list"].as_bool() == Some(true) });
     if let Ok(mut g) = ORG_CACHE.lock() { *g = Some((mt, cfg.clone())); }
     cfg
 }
@@ -300,7 +300,7 @@ mod category_contract_tests {
         OrgCfg { keep:vec![],order:vec![],cats:vec![
             ("Games".into(),vec!["steam".into()]),
             ("Chat".into(),vec!["discord".into()]),
-        ],overrides:Default::default() }
+        ],overrides:Default::default(),inline_window_list:false }
     }
     #[test]
     fn platform_roots_cover_unlisted_games_before_weak_keywords() {
@@ -656,7 +656,7 @@ fn organizer_loop() {
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
                 ORGANIZER_FAST_STATUS.store(2,Ordering::Relaxed);
-                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
+                // The switcher pauses hiding without restarting the stability wait (owner bug 9).
                 if restore_for_switcher {
                     record_dock_event("switcher-restore-requested");
                     RESTORATION_PENDING.store(true, Ordering::Release);
@@ -672,7 +672,6 @@ fn organizer_loop() {
             }
             if !switcher_barrier::finish_session_if(session) {
                 ORGANIZER_FAST_STATUS.store(3,Ordering::Relaxed);
-                hiding_stability.allow(false,started.elapsed().as_millis() as u64);
                 continue;
             }
             let fast_ready = !SWITCHER_ACTIVE.load(Ordering::Acquire)
@@ -683,7 +682,7 @@ fn organizer_loop() {
                 let flags=[SWITCHER_ACTIVE.load(Ordering::Acquire),SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire),SWITCHER_VISIBLE.load(Ordering::Acquire),
                     LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire),switcher_barrier::faulted(),!may_organize,!ORGANIZE.load(Ordering::Acquire),!HEALTHY.load(Ordering::Acquire),RESTORATION_PENDING.load(Ordering::Acquire)];
                 ORGANIZER_FAST_STATUS.store(4|(flags.iter().enumerate().fold(0,|mask,(i,b)|mask|if *b {1<<i}else{0})<<8),Ordering::Relaxed);
-                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
+                hiding_stability.allow_unless_switching(false, switcher_session_open(), started.elapsed().as_millis() as u64);
                 continue;
             }
             if !hiding_stability.active(started.elapsed().as_millis() as u64) { ORGANIZER_FAST_STATUS.store(5,Ordering::Relaxed); continue; }
@@ -706,7 +705,7 @@ fn organizer_loop() {
         let ready = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && !switcher_barrier::faulted()
             && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire)
             && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
-        let on = hiding_stability.allow(ready, started.elapsed().as_millis() as u64);
+        let on = hiding_stability.allow_unless_switching(ready, switcher_session_open(), started.elapsed().as_millis() as u64);
         let checks=[may_organize,guarded,SWITCHER_EVENTS_READY.load(Ordering::Acquire),all_taskbars_covered(),
             !SWITCHER_ACTIVE.load(Ordering::Acquire),HEALTHY.load(Ordering::Acquire),!RESTORATION_PENDING.load(Ordering::Acquire),
             !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire),!switcher_barrier::faulted(),ready,on];
@@ -865,6 +864,12 @@ fn native_taskbars() -> Vec<isize> {
     let mut bars: Vec<isize> = vec![];
     unsafe { if EnumWindows(Some(scan), LPARAM(&mut bars as *mut _ as isize)).is_err() { return vec![]; } }
     bars
+}
+
+/// The native switcher (Alt+Tab, Task View) is open or its restore is still pending.
+fn switcher_session_open() -> bool {
+    SWITCHER_ACTIVE.load(Ordering::Acquire) || SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+        || SWITCHER_VISIBLE.load(Ordering::Acquire) || switcher_barrier::session_token().pending()
 }
 
 #[cfg(windows)]
@@ -1398,12 +1403,15 @@ fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
     let generation = pair.as_ref().map(|p|p.generation).unwrap_or(0);
     let mut layout = if let Some(pair) = pair.as_ref() {
         plan_json(if left {&pair.left} else {&pair.right})
-    } else if left { plan_json(&dock_layout::Plan::default()) } else { strip_plan(&wins, avail) };
+    } else if left { plan_json(&dock_layout::Plan::default()) } else {
+        strip_plan(&wins, avail, surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.button_width_css)) };
     layout["show_menu"] = json!(!left);
+    layout["inline_window_list"] = json!(org_config().inline_window_list);
     layout["side"] = json!(if left {"left"} else {"right"});
     layout["centered"] = json!(centered);
     layout["generation"] = generation_json(generation);
     layout["icon_size"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.icon_size_css).unwrap_or(24.0));
+    layout["button_width"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.button_width_css).unwrap_or(44.0));
     layout["scale"] = json!(surface.as_ref().and_then(|s|s.geometry.as_ref()).map(|g|g.scale).unwrap_or(1.0));
     let shelf = surface.is_some_and(|s| s.shelf);
     let counts = CANDIDATES.lock().map(|v| v.as_ref().map(|c| (c.groups.iter().map(|g| g.1.len()).sum::<usize>(), c.pending.len(), c.hidden_apps)).unwrap_or_default()).unwrap_or_default();
@@ -1412,14 +1420,14 @@ fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
 }
 
 /// Group the listed windows into the folders and apps the strip shows, sized to the taskbar's free space.
-fn strip_plan(wins: &[WinInfo], available: u32) -> Value {
+fn strip_plan(wins: &[WinInfo], available: u32, button_width_css: Option<f64>) -> Value {
     let mut groups: Vec<(String, Vec<String>)> = vec![];
     for w in wins {  // already sorted by category order, then name
         let pos = match groups.iter().position(|g| g.0 == w.category) { Some(p) => p, None => { groups.push((w.category.clone(), vec![])); groups.len() - 1 } };
         if !groups[pos].1.contains(&w.exe) { groups[pos].1.push(w.exe.clone()); }
     }
     let room = if available == u32::MAX { f64::INFINITY } else { available as f64 };
-    let plan = dock_layout::plan_capped(&groups, room, dock_cap());
+    let plan = dock_layout::plan_capped(&groups, dock_layout::nominal_room(room, button_width_css), dock_cap());
     plan_json(&plan)
 }
 fn plan_json(plan: &dock_layout::Plan) -> Value {
@@ -1438,6 +1446,28 @@ async fn activate(hwnd: isize) -> bool {
     return tauri::async_runtime::spawn_blocking(move || activate_now(hwnd)).await.unwrap_or(false);
     #[cfg(not(windows))]
     false
+}
+
+/// Left click on a Dock app button, as on the native taskbar: bring the app's most recent
+/// window up, or minimize it when it is already in front.
+#[tauri::command]
+async fn app_button_click(hwnd: isize) -> bool {
+    #[cfg(windows)]
+    return tauri::async_runtime::spawn_blocking(move || {
+        use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::{GetForegroundWindow, ShowWindowAsync, SW_MINIMIZE}};
+        let listed: Vec<isize> = app_menu_snapshot().iter().map(|w| w.hwnd).collect();
+        let foreground = unsafe { GetForegroundWindow().0 as isize };
+        match dock_app_menu::button_click(hwnd, foreground, &listed) {
+            dock_app_menu::ButtonClick::Activate => activate_now(hwnd),
+            dock_app_menu::ButtonClick::Minimize => {
+                record_dock_event(&format!("minimize:{hwnd}"));
+                unsafe { ShowWindowAsync(HWND(hwnd as _), SW_MINIMIZE).as_bool() }
+            }
+            dock_app_menu::ButtonClick::Ignore => false,
+        }
+    }).await.unwrap_or(false);
+    #[cfg(not(windows))]
+    { let _ = hwnd; false }
 }
 
 #[tauri::command]
@@ -1956,6 +1986,8 @@ async fn show_app_menu(app: AppHandle, window: WebviewWindow, exe: Option<String
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     let target = dock_app_menu::resolve(&app_menu_snapshot(), exe.as_deref(), hwnd, folder.as_deref(),
         &folder_exes.unwrap_or_default()).ok_or("That app is no longer open.")?;
+    let mut target = target;
+    target.owners = target.windows.iter().filter_map(|&h| window_identity(h).map(|id| (h, id))).collect();
     let menu = Menu::new(&app).map_err(|e| e.to_string())?;
     for row in dock_app_menu::items(&target) {
         match row {
@@ -1982,12 +2014,30 @@ fn activate_now(hwnd: isize) -> bool {
     }
 }
 
+/// The process generation (PID and start time) that owns a window now, if readable.
+fn window_identity(hwnd: isize) -> Option<dock_app_menu::Identity> {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::{GetWindowThreadProcessId, IsWindow}};
+        let h = HWND(hwnd as _);
+        if !IsWindow(Some(h)).as_bool() { return None; }
+        let mut pid = 0u32;
+        if GetWindowThreadProcessId(h, Some(&mut pid)) == 0 || pid == 0 { return None; }
+        return recovery::process_owner(pid).map(|owner| (owner.pid, owner.started));
+    }
+    #[cfg(not(windows))]
+    { let _ = hwnd; None }
+}
+
 fn handle_app_menu(app: &AppHandle, action: dock_app_menu::Action) {
     use dock_app_menu::Action;
     let Some(target) = APP_MENU_TARGET.lock().ok().and_then(|mut t| t.take()) else { return };
     // The snapshot may have changed while the menu was open: act only on windows still listed.
     let live: std::collections::HashSet<isize> = app_menu_snapshot().iter().map(|w| w.hwnd).collect();
-    let windows: Vec<isize> = dock_app_menu::windows_for(action, &target).into_iter().filter(|h| live.contains(h)).collect();
+    let listed: Vec<isize> = dock_app_menu::windows_for(action, &target).into_iter().filter(|h| live.contains(h)).collect();
+    // A handle can be recycled for another app while the menu is open: act only on windows
+    // whose owning process is the one captured when the menu opened.
+    let windows = dock_app_menu::still_owned(&listed, &target.owners, window_identity);
     record_dock_event(&format!("app-menu:{}", action.id()));
     match action {
         Action::Open => {
@@ -2022,10 +2072,11 @@ fn handle_app_menu(app: &AppHandle, action: dock_app_menu::Action) {
         }
         Action::UnpinFromDock => {
             let Some(exe) = target.exe else { return };
-            let current = std::fs::read_to_string(org_path()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())
-                .or_else(|| serde_json::from_str::<Value>(DEFAULT_ORG).ok()).unwrap_or_else(|| json!({}));
-            if let Err(error) = dock_settings_save(dock_app_menu::with_keep(&current, &dock_settings::keep_entry(&exe))) {
-                eprintln!("[dock] {error}"); open_dock_settings_window(app, false);
+            // Never fall back to the defaults over a file that exists but cannot be read or parsed.
+            let saved = dock_app_menu::unpin_config(std::fs::read_to_string(org_path()), DEFAULT_ORG, &dock_settings::keep_entry(&exe))
+                .and_then(dock_settings_save);
+            if let Err(error) = saved {
+                eprintln!("[dock] {error}"); record_dock_event("app-menu:unpin-refused"); open_dock_settings_window(app, false);
             }
         }
         Action::EditFolders => open_dock_settings_window(app, true),
@@ -2939,7 +2990,8 @@ fn individual_apps_now() -> usize {
         return pair.left.items.iter().chain(pair.right.items.iter()).filter(|item|!item.folder).count();
     }
     let snapshot = SNAPSHOT.lock().map(|s|s.clone()).unwrap_or_default();
-    strip_plan(&snapshot,AVAIL_CSS.load(Ordering::Acquire))["items"].as_array()
+    let width = SURFACES.lock().ok().and_then(|v| v.iter().find(|s| s.required).and_then(|s| s.geometry.as_ref().and_then(|g| g.button_width_css)));
+    strip_plan(&snapshot,AVAIL_CSS.load(Ordering::Acquire),width)["items"].as_array()
         .map(|items|items.iter().filter(|item|item["folder"] == false).count()).unwrap_or(0)
 }
 
@@ -3145,7 +3197,7 @@ fn main() {
             Ok(())
         })
         .on_menu_event(handle_dock_menu)
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_editor_event, show_app_menu, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, app_button_click, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_editor_event, show_app_menu, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {

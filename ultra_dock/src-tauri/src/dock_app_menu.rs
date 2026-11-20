@@ -31,6 +31,8 @@ pub struct Target {
     pub folder: Option<String>,
     pub window: Option<isize>,
     pub windows: Vec<isize>,
+    /// Owner of each window when the menu opened; filled by the caller, checked before acting.
+    pub owners: Vec<(isize, Identity)>,
 }
 
 /// Resolve a right-click against the snapshot. An app click names its exe (and the window
@@ -41,14 +43,14 @@ pub fn resolve(snapshot: &[Window], exe: Option<&str>, hwnd: Option<isize>, fold
         let first = windows.first()?;
         let window = hwnd.filter(|h| windows.iter().any(|w| w.hwnd == *h));
         return Some(Target { exe: Some(first.exe.clone()), name: first.name.clone(), folder: None, window,
-            windows: windows.iter().map(|w| w.hwnd).collect() });
+            windows: windows.iter().map(|w| w.hwnd).collect(), owners: vec![] });
     }
     let folder = folder?;
     let windows: Vec<_> = snapshot.iter()
         .filter(|w| folder_exes.iter().any(|e| e.eq_ignore_ascii_case(&w.exe)) || (folder_exes.is_empty() && w.category == folder))
         .map(|w| w.hwnd).collect();
     if windows.is_empty() { return None; }
-    Some(Target { exe: None, name: folder.to_string(), folder: Some(folder.to_string()), window: None, windows })
+    Some(Target { exe: None, name: folder.to_string(), folder: Some(folder.to_string()), window: None, windows, owners: vec![] })
 }
 
 /// Launching the same executable again opens a new window for ordinary desktop apps.
@@ -110,8 +112,54 @@ pub fn with_keep(config: &serde_json::Value, entry: &str) -> serde_json::Value {
     next
 }
 
+/// Unpin's read-modify-write. Only a missing settings file starts from the shipped
+/// defaults. A file that cannot be read, is not valid JSON, or is not an object aborts
+/// the change, so the owner's folders, order and keep list are never replaced.
+pub fn unpin_config(existing: std::io::Result<String>, defaults: &str, entry: &str) -> Result<serde_json::Value, String> {
+    let text = match existing {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => defaults.to_string(),
+        Err(error) => return Err(format!("Could not read the Dock settings, nothing was changed: {error}")),
+    };
+    let config: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|error| format!("The Dock settings file is not valid, nothing was changed: {error}"))?;
+    if !config.is_object() { return Err("The Dock settings file is not valid, nothing was changed.".to_string()); }
+    Ok(with_keep(&config, entry))
+}
+
+/// What a left click on an app button does, as on the native taskbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonClick { Activate, Minimize, Ignore }
+
+/// A click brings the window up, or minimizes it when it is already in front. Only a
+/// window in the organizer's snapshot can be targeted.
+pub fn button_click(hwnd: isize, foreground: isize, listed: &[isize]) -> ButtonClick {
+    if !listed.contains(&hwnd) { ButtonClick::Ignore }
+    else if hwnd == foreground { ButtonClick::Minimize }
+    else { ButtonClick::Activate }
+}
+
+/// A window's owning process generation: process id and process start time.
+pub type Identity = (u32, u64);
+
+/// The handles an action may still touch. Windows recycles window handles, so each one
+/// must still belong to the same process generation it had when the menu opened. A
+/// handle never captured, or whose owner cannot be read now, is never acted on.
+pub fn still_owned(wanted: &[isize], captured: &[(isize, Identity)], current: impl Fn(isize) -> Option<Identity>) -> Vec<isize> {
+    wanted.iter().copied()
+        .filter(|h| captured.iter().find(|(c, _)| c == h).is_some_and(|(_, id)| current(*h) == Some(*id)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    /// Owner item 10: the Dock's app button acts like the native one.
+    #[test]
+    fn an_app_button_click_brings_up_or_minimizes_like_the_native_button() {
+        assert_eq!(button_click(100, 7, &[100, 101]), ButtonClick::Activate, "a background window comes to the front");
+        assert_eq!(button_click(100, 100, &[100, 101]), ButtonClick::Minimize, "the window already in front is minimized");
+        assert_eq!(button_click(5, 5, &[100]), ButtonClick::Ignore, "a window the organizer does not list is never touched");
+    }
     use super::*;
     fn w(hwnd: isize, exe: &str, cat: &str) -> Window {
         Window { hwnd, exe: exe.into(), name: exe.rsplit('\\').next().unwrap().trim_end_matches(".exe").into(), category: cat.into() }
@@ -177,5 +225,37 @@ mod tests {
         assert_eq!(next["order"], config["order"]);
         assert_eq!(with_keep(&next, "\\NOTES.exe")["keep"], next["keep"], "unpinning twice adds nothing");
         assert_eq!(with_keep(&serde_json::json!(null), "\\a.exe")["keep"], serde_json::json!(["\\a.exe"]));
+    }
+
+    /// Codex review 2.2.30 P2: Windows recycles window handles. A handle that now belongs to
+    /// another process (or another start of the same app) is never closed or activated.
+    #[test]
+    fn a_recycled_window_handle_is_never_acted_on() {
+        let captured = [(4, (100, 7)), (5, (100, 7))];
+        let same = |h: isize| match h { 4 | 5 => Some((100, 7)), _ => None };
+        assert_eq!(still_owned(&[4, 5], &captured, same), vec![4, 5]);
+        let other_app = |h: isize| if h == 4 { Some((200, 9)) } else { Some((100, 7)) };
+        assert_eq!(still_owned(&[4, 5], &captured, other_app), vec![5], "handle 4 now belongs to another process");
+        let restarted = |_| Some((100, 8));
+        assert!(still_owned(&[4, 5], &captured, restarted).is_empty(), "same PID, new process start");
+        assert!(still_owned(&[4], &captured, |_| None).is_empty(), "an unreadable owner is not a match");
+        assert!(still_owned(&[6], &captured, |_| Some((100, 7))).is_empty(), "a handle never captured is not acted on");
+    }
+
+    /// Codex review 2.2.30 P2: Unpin must never replace a custom file with the defaults.
+    #[test]
+    fn unpin_never_replaces_settings_it_could_not_read() {
+        use std::io::{Error, ErrorKind};
+        let defaults = r#"{"keep":[],"order":["Web"]}"#;
+        let custom = r#"{"keep":["a.exe"],"order":["Mine"],"categories":{"Mine":["x.exe"]}}"#;
+        let next = unpin_config(Ok(custom.to_string()), defaults, "notes.exe").unwrap();
+        assert_eq!(next["order"], serde_json::json!(["Mine"]), "unrelated settings survive");
+        assert_eq!(next["categories"]["Mine"], serde_json::json!(["x.exe"]));
+        assert_eq!(next["keep"], serde_json::json!(["a.exe", "notes.exe"]));
+        assert!(unpin_config(Ok("{ broken".into()), defaults, "n.exe").is_err(), "malformed JSON aborts");
+        assert!(unpin_config(Ok("[]".into()), defaults, "n.exe").is_err(), "a non-object document aborts");
+        assert!(unpin_config(Err(Error::new(ErrorKind::PermissionDenied, "locked")), defaults, "n.exe").is_err(), "a failed read aborts");
+        let fresh = unpin_config(Err(Error::new(ErrorKind::NotFound, "absent")), defaults, "n.exe").unwrap();
+        assert_eq!(fresh["order"], serde_json::json!(["Web"]), "only a missing file starts from the defaults");
     }
 }

@@ -73,7 +73,7 @@ test('failed app activation keeps its folder open and reports the failure',async
   const strip=fs.readFileSync(path.join(__dirname,'../ultra_dock/ui/index.html'),'utf8');
   const handler=strip.slice(strip.indexOf('let menuOpening = false;'),strip.indexOf('$("strip").addEventListener("click"'));
   const status={textContent:''};let closes=0;
-  const button={dataset:{h:'42'},classList:{add(){}},hasAttribute:()=>false};
+  const button={dataset:{h:'42'},classList:{add(){}},setAttribute(){},hasAttribute:()=>false};
   const context=vm.createContext({invoke:async()=>false,$:()=>status,setTimeout(){closes++;}});
   vm.runInContext(handler,context);
   await context.handleDockClick({target:{closest:s=>s==='.win'?button:null}});

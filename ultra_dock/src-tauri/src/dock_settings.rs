@@ -63,7 +63,10 @@ pub fn sanitize(input: &Value, help: &str) -> Result<Value, String> {
     }
     let mut categories = Map::new();
     for (n, k) in cats { if n != OTHER { categories.insert(n, json!(k)); } }
-    Ok(json!({ "_help": help, "keep": keep, "order": order, "categories": categories, "overrides": overrides }))
+    let mut doc = json!({ "_help": help, "keep": keep, "order": order, "categories": categories, "overrides": overrides });
+    // Optional: several windows of one app open an inline list instead of acting like the native button.
+    if input["inline_window_list"].as_bool() == Some(true) { doc["inline_window_list"] = json!(true); }
+    Ok(doc)
 }
 
 /// The keep-list entry for an app: its file name with a leading backslash, matched against the full path.
@@ -75,6 +78,16 @@ pub fn keep_entry(exe: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Owner item 10: the inline window list is an option, off by default, kept on save.
+    #[test]
+    fn the_inline_window_list_option_is_kept_only_when_on() {
+        let on = sanitize(&json!({"inline_window_list": true}), "").unwrap();
+        assert_eq!(on["inline_window_list"], json!(true));
+        for input in [json!({}), json!({"inline_window_list": false}), json!({"inline_window_list": "yes"})] {
+            assert!(sanitize(&input, "").unwrap().get("inline_window_list").is_none(), "off by default: {input}");
+        }
+    }
 
     #[test]
     fn a_normal_document_round_trips() {

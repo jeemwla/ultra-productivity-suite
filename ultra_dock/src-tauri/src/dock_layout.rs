@@ -119,6 +119,15 @@ fn base_items(groups: &[(String, Vec<String>)], cap: Option<usize>) -> Vec<(Stri
     base
 }
 
+/// The strip draws every button at the measured native width, while planning uses the
+/// nominal widths above. Converting the real room by the narrowest nominal button keeps
+/// any plan inside the real room.
+pub fn nominal_room(avail: f64, button_width_css: Option<f64>) -> f64 {
+    match button_width_css.filter(|w| w.is_finite() && *w > 0.0) {
+        Some(width) => avail * APP_W.min(FOLDER_W).min(MENU_W) / width,
+        None => avail,
+    }
+}
 pub fn plan_capped(groups: &[(String, Vec<String>)], avail: f64, cap: Option<usize>) -> Plan {
     let avail = if avail.is_finite() { avail.max(0.0) } else { f64::MAX };
     let base = base_items(groups, cap);
@@ -173,6 +182,8 @@ pub fn settle_room(used: Option<f64>, new: f64, plan_width: f64) -> f64 {
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct TaskbarGeom {
     pub icon_size_css: Option<f64>,
+    /// Measured native app button width (CSS px); Dock buttons use the same pitch.
+    pub button_width_css: Option<f64>,
     pub left: i32,
     pub right: i32,
     pub start_left: Option<i32>,
@@ -203,9 +214,10 @@ pub fn free_span(g: &TaskbarGeom) -> Span {
         (Some(a), Some(b)) => a.max(b),
         (a, b) => a.or(b).unwrap_or(g.left + (g.right - g.left) / 2),
     };
-    let gap = (2.0 * scale).round() as i32;
+    // Native app buttons are adjacent rectangles with the icon centred inside, so the
+    // first Dock button starts where the last native button ends: same spacing as native.
     let margin = (8.0 * scale).round() as i32;
-    let x = (icons_right + gap).clamp(g.left, g.right);
+    let x = icons_right.clamp(g.left, g.right);
     // Anything left of Start (the Widgets button on a centered taskbar) is not in the way. Anything between Start
     // and the end of the buttons means there is no room at all, which is the safe answer.
     let floor = g.start_left.unwrap_or(icons_right);
@@ -598,12 +610,28 @@ mod tests {
             obstacles: vec![width - tray_w, width - tray_w + 32], scale, ..Default::default() }
     }
 
+    /// Strip buttons are drawn at the measured native width (owner item 7). Planning in
+    /// nominal widths over the converted room can never fill more than the real room.
+    #[test]
+    fn planning_room_follows_the_native_button_width_and_never_overfills() {
+        assert_eq!(nominal_room(440.0,None),440.0,"no measurement keeps nominal widths");
+        assert_eq!(nominal_room(440.0,Some(44.0)),400.0);
+        assert!(nominal_room(f64::INFINITY,Some(44.0)).is_infinite());
+        for width in [40.0,44.0,48.0,56.0] {
+            for avail in [60.0,130.0,300.0,700.0] {
+                let groups:Vec<(String,Vec<String>)>=(0..9).map(|i|(format!("c{}",i%4),vec![format!("app{i}.exe")])).collect();
+                let plan=plan_capped(&groups,nominal_room(avail,Some(width)),None);
+                let real=(plan.items.len()+1) as f64*width;
+                assert!(real<=avail.max(width+SLACK_W)+SLACK_W,"{} buttons of {width}px overfill {avail}px",plan.items.len()+1);
+            }
+        }
+    }
     #[test]
     fn this_desktop_matches_the_measured_taskbar() {
         // Measured on the owner's 2560 px desktop at 100%: Start 994-1039, last button 1567, chevron 2222.
         let g = TaskbarGeom { left: 0, right: 2560, start_left: Some(994), start_right: Some(1039), buttons_right: Some(1567),
             obstacles: vec![2222, 2222, 2254], scale: 1.0, ..Default::default() };
-        assert_eq!(free_span(&g), Span { x: 1569, limit: 2214 });
+        assert_eq!(free_span(&g), Span { x: 1567, limit: 2214 }, "the first Dock button continues the native row (owner item 7)");
         assert!(is_centered(&g));
     }
 
@@ -860,6 +888,20 @@ mod paired_tests {
                 assert!(runtime_paired_plan(&groups(6),&geometry(portrait),cap,150).is_none(),
                     "runtime must not put Dock applications left of Windows Start");
             }
+        }
+    }
+    /// 2026-11-20 owner report on a centered 2560 px taskbar: one strip sat left of Start
+    /// and the other floated after a gap. Runtime placement is one strip, right after the
+    /// last native button, on both monitor shapes.
+    #[test]
+    fn owner_centered_taskbar_keeps_one_strip_right_after_the_last_native_button() {
+        for portrait in [false,true] {
+            let g=geometry(portrait);
+            let span=free_span(&g);
+            assert_eq!(span.x,g.buttons_right.unwrap(),"native buttons are adjacent rectangles; the first Dock button continues the row with no extra gap");
+            assert!(span.x>g.start_right.unwrap(),"nothing is placed left of Start");
+            assert!(span.limit>span.x,"the strip has room");
+            assert!(runtime_paired_plan(&groups(3),&g,None,150).is_none(),"no left flank by default");
         }
     }
     fn geometry(portrait: bool) -> TaskbarGeom {

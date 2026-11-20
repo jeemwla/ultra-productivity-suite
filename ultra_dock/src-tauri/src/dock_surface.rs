@@ -47,6 +47,12 @@ impl HidingStability {
         let since = self.ready_since.get_or_insert(now_ms);
         now_ms.saturating_sub(*since) >= Self::RECOVERY_MS
     }
+    /// A native switcher session pauses hiding but says nothing about the Dock's health,
+    /// so it keeps the stable window: hiding resumes the moment the switcher closes.
+    pub fn allow_unless_switching(&mut self, ready: bool, switching: bool, now_ms: u64) -> bool {
+        if switching { return false; }
+        self.allow(ready, now_ms)
+    }
     pub fn active(&self, now_ms: u64) -> bool {
         self.ready_since.is_some_and(|since| now_ms.saturating_sub(since) >= Self::RECOVERY_MS)
     }
@@ -201,6 +207,21 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 
 #[cfg(test)]
 mod tests {
+    /// Owner bug 9 and defect 4: Alt+Tab restored every button and the 1.5 s stability
+    /// window then started over, so apps showed twice for seconds. A switcher session pauses
+    /// hiding without resetting stability; a health failure still resets it.
+    #[test]
+    fn a_switcher_session_does_not_restart_the_stability_wait() {
+        let mut s = HidingStability::default();
+        assert!(!s.allow(true, 0));
+        assert!(s.allow(true, HidingStability::RECOVERY_MS));
+        assert!(!s.allow_unless_switching(true, true, 1600), "no hiding while the switcher is open");
+        assert!(!s.allow_unless_switching(false, true, 1700), "switcher flags are not a health failure");
+        assert!(s.allow_unless_switching(true, false, 1800), "hiding resumes as soon as the switcher closes");
+        assert!(!s.allow_unless_switching(false, false, 1900), "a real failure still resets");
+        assert!(!s.allow(true, 2000) && s.allow(true, 2000 + HidingStability::RECOVERY_MS));
+    }
+
     use super::*;
     #[cfg(windows)]
     #[test]
@@ -209,6 +230,20 @@ mod tests {
         assert!(!wanted.matches_native_rect((-1016,2054,-753,2129)),"125-percent suggested resize extends outside the measured 60px taskbar");
         assert!(wanted.matches_native_rect((-1016,2054,-806,2114)));
         assert!(!wanted.matches_native_rect((-1015,2054,-805,2114)),"moved native controls also require reflow");
+    }
+    /// Opening and closing a folder only changes the requested width. The strip must stay
+    /// inside its taskbar and keep fitting, so a folder can never cost coverage and
+    /// hand the grouped apps back to the native taskbar.
+    #[test]
+    fn opening_and_closing_a_folder_resizes_the_strip_inside_its_taskbar() {
+        let (left,top,right,bottom)=(0,1392,2560,1440);
+        let closed=place_in_taskbar(left,top,right,bottom,1437,2072,1.0,128);
+        let open=place_in_taskbar(left,top,right,bottom,1437,2072,1.0,400);
+        let huge=place_in_taskbar(left,top,right,bottom,1437,2072,1.0,1800);
+        for p in [closed,open,huge] {
+            assert!(p.fits);assert_eq!(p.x,1437);assert!(p.x+p.width<=2072);assert_eq!((p.y,p.height),(top,48));
+        }
+        assert_eq!((closed.width,open.width,huge.width),(128,400,2072-1437));
     }
     #[test]
     fn a_taskbar_click_that_raises_the_taskbar_over_the_strip_is_detected() {

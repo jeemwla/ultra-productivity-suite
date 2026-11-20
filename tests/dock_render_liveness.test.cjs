@@ -94,3 +94,32 @@ test('render acknowledges through scheduleReport, not a bare animation frame',()
  const source=html.slice(html.indexOf('function render(){'),html.indexOf('function scheduleReport(){'));
  assert.match(source,/scheduleReport\(\);/);assert.doesNotMatch(source,/requestAnimationFrame\(report\)/);
 });
+
+function folderPage(){
+ const source=html.slice(html.indexOf('function setOpen(cat){'),html.indexOf('$("strip").addEventListener("click"'));
+ const frames=[],timers=[],calls=[];
+ const button={classList:{contains:name=>name==='grp',remove:()=>{}},attrs:{},setAttribute(k,v){this.attrs[k]=v;}};
+ const classes=new Set();
+ const tray={style:{width:'0px'},attrs:{},inert:true,classList:{remove:c=>classes.delete(c),add:c=>classes.add(c)},setAttribute(k,v){this.attrs[k]=v;},querySelector:()=>({scrollWidth:80})};
+ const group={dataset:{cat:'Tools'},isConnected:true,querySelector:s=>s==='.tray'?tray:button};
+ const strip={scrollWidth:44,querySelectorAll:()=>[group]};
+ const context=vm.createContext({Math,$:()=>strip,invoke:(name,args)=>calls.push([name,args]),requestAnimationFrame:cb=>frames.push(cb),
+  setTimeout:(cb,ms)=>timers.push([cb,ms]),report:()=>calls.push(['report']),render:()=>{},applyFocus:()=>{},room:()=>Infinity});
+ vm.runInContext("let open=null,pick=null;\n"+source,context);
+ return {context,frames,timers,calls,tray,classes};
+}
+test('a folder opens at full size even when the strip gets no animation frames',()=>{
+ const p=folderPage();
+ p.context.setOpen('Tools');
+ assert.equal(p.calls[0][0],'set_strip_width');assert.equal(p.calls[0][1].width,128,'the window grows for the open folder');
+ p.timers.forEach(([cb])=>cb());
+ assert.equal(p.tray.style.width,'80px');assert.ok(p.classes.has('open'),'no empty bar: the tray opens without a frame');
+ p.frames.forEach(cb=>cb());assert.equal(p.tray.style.width,'80px');
+});
+test('closing a folder before the fallback fires keeps it closed and restores nothing',()=>{
+ const p=folderPage();
+ p.context.setOpen('Tools');p.context.setOpen(null);
+ p.timers.forEach(([cb])=>cb());p.frames.forEach(cb=>cb());
+ assert.equal(p.tray.style.width,'0px');assert.ok(!p.classes.has('open'));
+ assert.deepEqual(p.calls.map(c=>c[0]).filter(n=>n!=='set_strip_width'&&n!=='report'),[],'closing a folder only resizes the strip; it never turns grouping off');
+});

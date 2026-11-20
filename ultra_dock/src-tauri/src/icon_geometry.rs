@@ -1,6 +1,18 @@
 //! One icon content and DIP frame rule for every app and monitor.
 pub struct Canvas { pub edge: u32, pub rgba: Vec<u8> }
 
+/// Native app button width in CSS pixels: the median measured button, so one wider
+/// or animating button cannot change the pitch. Labelled (uncombined) buttons are
+/// wider than any icon button and give no icon pitch.
+pub fn button_pitch_css(buttons: &[(i32, i32)], scale: f64) -> Option<f64> {
+    let scale = if scale.is_finite() && scale > 0.0 {scale} else {1.0};
+    let mut widths: Vec<f64> = buttons.iter().map(|&(a,b)| f64::from(b.saturating_sub(a))/scale).filter(|w| *w > 0.0).collect();
+    if widths.is_empty() { return None; }
+    widths.sort_by(|a,b| a.total_cmp(b));
+    let median = widths[widths.len()/2].round();
+    (32.0..=64.0).contains(&median).then_some(median)
+}
+
 pub fn frame_css(taskbar_height: i32, scale: f64) -> f64 {
     let scale = if scale.is_finite() && scale > 0.0 {scale} else {1.0};
     let height = (f64::from(taskbar_height)/scale).max(0.0);
@@ -39,6 +51,16 @@ pub fn normalize(width: u32, height: u32, rgba: &[u8]) -> Option<Canvas> {
 
 #[cfg(test)]
 mod tests {
+    use super::button_pitch_css;
+    /// Dock buttons use the measured native button width, so the gap between the
+    /// last native button and the first Dock item equals native spacing.
+    #[test]
+    fn dock_buttons_follow_the_measured_native_button_pitch() {
+        assert_eq!(button_pitch_css(&[(1171,1215),(1215,1259),(1259,1303)],1.0),Some(44.0));
+        assert_eq!(button_pitch_css(&[(0,55),(55,110),(110,150)],1.25),Some(44.0),"median physical width at 125 percent");
+        assert_eq!(button_pitch_css(&[(0,400)],1.0),None,"a wide labelled button is not an icon pitch");
+        assert_eq!(button_pitch_css(&[],1.0),None);
+    }
     use super::*;
     #[test]
     fn padding_is_removed_without_changing_artwork_aspect_ratio() {

@@ -40,7 +40,7 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 /* A category with a single app shows that app directly, always visible */
 .solo .win{opacity:1;transform:none}
 .group{display:flex;align-items:center;height:100%}
-.grp{position:relative;height:40px;width:44px;min-width:0;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;overflow:hidden;transition:background .12s,width .32s var(--ease),padding .32s var(--ease)}
+.grp{position:relative;height:40px;width:var(--app-button-width,44px);min-width:0;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;overflow:hidden;transition:background .12s,width .32s var(--ease),padding .32s var(--ease)}
 .grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
 /* A pressed folder or menu button sinks a little, the same feedback app buttons give */
 .grp:not([aria-expanded=true]):active .folder{transform:scale(.92);transition-duration:.12s}
@@ -56,11 +56,11 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .grp.now,.grp.now .folder,.grp.now .collapse-mark{transition:none}
 @media(prefers-reduced-motion:reduce){.grp,.grp .folder,.grp .collapse-mark,.tray,.tray.open .win{transition:none!important}}
 /* Phone-style folder tile: up to 4 real app icons in a 2x2 grid, fully opaque, no overlap */
-.folder{position:relative;width:calc(var(--app-icon-size,24px)*4/3);height:calc(var(--app-icon-size,24px)*4/3);border-radius:8px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
-  display:grid;grid-template-columns:repeat(2,calc(var(--app-icon-size,24px)*13/24));grid-template-rows:repeat(2,calc(var(--app-icon-size,24px)*13/24));gap:calc(var(--app-icon-size,24px)/12);padding:calc(var(--app-icon-size,24px)/12);place-content:center}
-.folder img,.folder .ph{width:calc(var(--app-icon-size,24px)*13/24);height:calc(var(--app-icon-size,24px)*13/24);border-radius:3px;display:block}
-.folder:not(:has(> :nth-child(3))){grid-template-rows:calc(var(--app-icon-size,24px)*13/24)}
-.folder.n1{grid-template-columns:24px;grid-template-rows:24px}.folder.n1 img,.folder.n1 .ph{width:24px;height:24px;border-radius:6px}
+.folder{position:relative;width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);border-radius:6px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+  display:grid;grid-template-columns:repeat(2,calc(var(--app-icon-size,24px)*3/8));grid-template-rows:repeat(2,calc(var(--app-icon-size,24px)*3/8));gap:calc(var(--app-icon-size,24px)/12);padding:calc(var(--app-icon-size,24px)/12);place-content:center}
+.folder img,.folder .ph{width:calc(var(--app-icon-size,24px)*3/8);height:calc(var(--app-icon-size,24px)*3/8);border-radius:3px;display:block}
+.folder:not(:has(> :nth-child(3))){grid-template-rows:calc(var(--app-icon-size,24px)*3/8)}
+.folder.n1{grid-template-columns:var(--app-icon-size,24px);grid-template-rows:var(--app-icon-size,24px);padding:0}.folder.n1 img,.folder.n1 .ph{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);border-radius:6px}
 .folder .more-n{position:absolute;right:-7px;top:-6px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#3a3a3a;color:#fff;
   font:600 9px/14px var(--font);text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px #1c1c1c}
 @media (prefers-color-scheme: light){.folder{background:rgba(0,0,0,.07);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}.folder .more-n{background:#e8e8e8;color:#000;box-shadow:0 0 0 2px #f3f3f3}}
@@ -69,10 +69,10 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .strip img{-webkit-user-drag:none}
 .cnt{font-size:11px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:8px}
 .grp .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease),background .2s}
-.grp.has-active .runbar{width:14px;background:var(--bar-active)}
+.grp.has-active .runbar{width:16px;background:var(--bar-active)}
 .tray{display:flex;align-items:center;height:100%;width:0;overflow:hidden;transition:width .32s var(--ease)}
 .tray .inner{display:flex;align-items:center;gap:0;padding:0 2px}
-.win{position:relative;width:40px;height:40px;border-radius:4px;display:grid;place-items:center;flex:none;transition:background .12s,transform .15s var(--ease);opacity:0;transform:translateX(-6px)}
+.win{position:relative;width:var(--app-button-width,44px);height:40px;border-radius:4px;display:grid;place-items:center;flex:none;transition:background .12s,transform .15s var(--ease);opacity:0;transform:translateX(-6px)}
 .tray.open .win{opacity:1;transform:none;transition:background .12s,opacity .25s var(--ease),transform .3s var(--ease)}
 .win:hover{background:var(--hover)} .win:active{background:var(--press);transform:scale(.94)}
 .win img{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);display:block;object-fit:contain}
@@ -94,7 +94,7 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .wt.active{color:var(--ink);font-weight:600}
 .pick.dense .wt{max-width:104px;padding:0 7px}
 @media (prefers-reduced-motion:reduce){.pick{animation:none}}
-.more{width:40px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-2);transition:background .12s,color .12s}
+.more{width:var(--app-button-width,44px);height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-2);transition:background .12s,color .12s}
 .more:hover{background:var(--hover);color:var(--ink)}
 .more:active{background:var(--press)}
 .more svg{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px)}
@@ -206,7 +206,7 @@ window.addEventListener("pointerup", finishStripPointer, true);
 window.addEventListener("pointercancel", finishStripPointer, true);
 window.addEventListener("lostpointercapture", finishStripPointer, true);
 window.addEventListener("blur", finishStripPointer);
-const CHEV = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
+const CHEV = '<svg viewBox="3 3 18 18" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
 
 function iconFor(exe, hwnd){
   const size = iconRequestSize(), key = `${exe}\u0000${size}`;
@@ -235,13 +235,16 @@ function shortTitle(t, n){
 }
 let pick = null;  // exe whose window list is showing
 function appButton(exe, wins){
-  const active = wins.some(w => w.active), many = wins.length > 1, shown = many && pick === exe;
+  // Like the native button: one click brings up the most recently used window (the first
+  // listed). The inline window list is an option (inline_window_list), off by default.
+  const active = wins.some(w => w.active), many = wins.length > 1;
+  const listable = many && state.layout?.inline_window_list === true, shown = listable && pick === exe;
   const name = exe.split(/[\\/]/).pop().replace(/\.exe$/i, "");
-  const btn = `<button class="win ${active ? "active" : ""}" data-exe="${esc(exe)}" data-h="${wins[0].hwnd}" ${many ? `aria-expanded="${shown}"` : ""}
-    title="${esc(many ? `${name}: ${wins.length} windows` : wins[0].title)}">${img(exe)}${many ? `<span class="wn">${wins.length}</span>` : ""}<span class="runbar"></span></button>`;
+  const btn = `<button class="win ${active ? "active" : ""}" data-exe="${esc(exe)}" data-h="${wins[0].hwnd}" ${listable ? `aria-expanded="${shown}"` : ""}
+    aria-label="${esc(many ? `${name}: ${wins.length} windows` : wins[0].title)}">${img(exe)}${many ? `<span class="wn">${wins.length}</span>` : ""}<span class="runbar"></span></button>`;
   if (!shown) return btn;
   return btn + `<span class="pick ${wins.length > 4 ? "dense" : ""}" role="menu" aria-label="${esc(name)} windows">${wins.map((w, i) =>
-    `<button class="wt ${w.active ? "active" : ""}" role="menuitem" data-h="${w.hwnd}" title="${esc(w.title)}">${esc(shortTitle(w.title, i + 1))}</button>`).join("")}</span>`;
+    `<button class="wt ${w.active ? "active" : ""}" role="menuitem" data-h="${w.hwnd}" aria-label="${esc(w.title)}">${esc(shortTitle(w.title, i + 1))}</button>`).join("")}</span>`;
 }
 
 /* Free taskbar space for the strip in CSS pixels, measured by the app (Infinity until measured) */
@@ -278,7 +281,7 @@ function capControl(){
     : `Up to ${c} app${c === 1 ? "" : "s"} show on their own, the rest go into folders. Click to go back to Automatic.`;
   return `<span class="capctl" role="group" aria-label="Apps shown on their own">
     <button class="act step" data-act="cap-" aria-label="Fewer apps on their own" ${c === 0 ? "disabled" : ""}>−</button>
-    <button class="act ${c === null ? "" : "on"}" data-act="capauto" title="${esc(tip)}">${label}</button>
+    <button class="act ${c === null ? "" : "on"}" data-act="capauto" aria-description="${esc(tip)}">${label}</button>
     <button class="act step" data-act="cap+" aria-label="More apps on their own" ${c === CAP_MAX ? "disabled" : ""}>+</button></span>`;
 }
 function nextCap(c, dir, shown){
@@ -293,6 +296,7 @@ async function setCap(c){
 }
 function render(){
   $("strip").style.setProperty("--app-icon-size",`${state.layout?.icon_size || 24}px`);
+  $("strip").style.setProperty("--app-button-width",`${state.layout?.button_width || 44}px`);
   const activeElement = document.activeElement;
   const focusKey = el => [el.classList.contains("grp") ? "grp" : el.classList.contains("more") ? "more" : el.classList.contains("wt") ? "wt" : el.classList.contains("win") ? "win" : "act",el.dataset.cat,el.dataset.exe,el.dataset.h,el.dataset.act].join("|");
   const oldFocus = $("strip").contains(activeElement) && activeElement.tagName === "BUTTON" ? focusKey(activeElement) : null;
@@ -307,13 +311,13 @@ function render(){
     // One app: a folder would only add a click, so show the app itself (never a one-app folder)
     if (!it.folder || uniq.length === 1) return `<div class="group solo" data-cat="${esc(cat)}">${appButton(uniq[0].exe, ws.filter(w => w.exe === uniq[0].exe))}</div>`;
     return `<div class="group" data-cat="${esc(cat)}">
-      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" data-label="${esc(label)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + label)}" title="${esc(open === cat ? `Collapse ${label} back into a folder` : label + ': ' + ws.map(w => w.title).slice(0,6).join(' · '))}">
+      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" data-label="${esc(label)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + label)}">
         <span class="folder" aria-hidden="true">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${uniq.length > 4 ? `<span class="more-n">${uniq.length}</span>` : ""}</span><span class="collapse-mark" aria-hidden="true"></span><span class="runbar"></span></button>
       <div id="group-tray-${index}" class="tray ${open === cat ? "open now" : ""}" aria-hidden="${open !== cat}" ${open !== cat ? "inert" : ""}><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
   shownHwnds = [...shown];
-  const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
-  const menu = state.layout?.show_menu === false ? "" : `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
+  const upAct = update ? `<button class="act upd" data-act="update" aria-description="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
+  const menu = state.layout?.show_menu === false ? "" : `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" aria-description="${esc(state.fallback_reason || "")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
   const popup = $("dock-menu");
   popup.hidden = open !== "__menu";
   popup.style.width = Math.min(520, room()) + "px";
@@ -373,7 +377,6 @@ function setOpen(cat){
       b.classList.remove("now");
       const label = (b.dataset && b.dataset.label) || g.dataset.cat;
       b.setAttribute("aria-label", (isOpen ? "Collapse " : "Expand ") + label);
-      b.title = isOpen ? `Collapse ${label} back into a folder` : `Expand ${label}`;
     }
     tray.inert = !isOpen;
     tray.setAttribute("aria-hidden", !isOpen);
@@ -382,7 +385,11 @@ function setOpen(cat){
       const w = tray.querySelector(".inner").scrollWidth;
       applyFocus();
       if (invoke) invoke("set_strip_width", { width: Math.min(Math.ceil($("strip").scrollWidth + w) + 4, room() + 2) });
-      requestAnimationFrame(() => { if (!g.isConnected || open !== g.dataset.cat) return; tray.style.width = w + "px"; tray.classList.add("open"); });
+      // A covered or hidden strip can stop animation frames; the timer still opens
+      // the folder at full size instead of leaving an empty bar.
+      let slid = false;
+      const slide = () => { if (slid || !g.isConnected || open !== g.dataset.cat) return; slid = true; tray.style.width = w + "px"; tray.classList.add("open"); };
+      requestAnimationFrame(slide); setTimeout(slide, 120);
     } else { tray.style.width = "0px"; tray.classList.remove("open"); }
   });
   if (cat === null) applyFocus();
@@ -390,10 +397,10 @@ function setOpen(cat){
 }
 
 let menuOpening = false;
-async function activateTarget(hwnd, button){
-  try { if (!invoke || await invoke("activate", { hwnd }) !== false) return true; } catch {}
+async function activateTarget(hwnd, button, command = "activate"){
+  try { if (!invoke || await invoke(command, { hwnd }) !== false) return true; } catch {}
   const message = "Windows could not switch to this app. Try again.";
-  button.title = message; button.classList.add("activation-error");
+  button.setAttribute("aria-description", message); button.classList.add("activation-error");
   $("activation-status").textContent = message;
   return false;
 }
@@ -413,7 +420,8 @@ async function handleDockClick(e){
   if (t) { if (!await activateTarget(+t.dataset.h,t)) return; setTimeout(closeAll, 220); return; }
   if (w) {
     if (w.hasAttribute("aria-expanded")) { pick = pick === w.dataset.exe ? null : w.dataset.exe; render(); return; }  // several windows: show or hide the list
-    if (!await activateTarget(+w.dataset.h,w)) return; setTimeout(() => setOpen(null), 220); return;
+    // Native app button: bring the window up, or minimize it when it is already in front.
+    if (!await activateTarget(+w.dataset.h,w,"app_button_click")) return; setTimeout(() => setOpen(null), 220); return;
   }
   if (a) {
     const k = a.dataset.act;
