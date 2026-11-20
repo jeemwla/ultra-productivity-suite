@@ -235,13 +235,16 @@ function shortTitle(t, n){
 }
 let pick = null;  // exe whose window list is showing
 function appButton(exe, wins){
-  const active = wins.some(w => w.active), many = wins.length > 1, shown = many && pick === exe;
+  // Like the native button: one click brings up the most recently used window (the first
+  // listed). The inline window list is an option (inline_window_list), off by default.
+  const active = wins.some(w => w.active), many = wins.length > 1;
+  const listable = many && state.layout?.inline_window_list === true, shown = listable && pick === exe;
   const name = exe.split(/[\\/]/).pop().replace(/\.exe$/i, "");
-  const btn = `<button class="win ${active ? "active" : ""}" data-exe="${esc(exe)}" data-h="${wins[0].hwnd}" ${many ? `aria-expanded="${shown}"` : ""}
-    title="${esc(many ? `${name}: ${wins.length} windows` : wins[0].title)}">${img(exe)}${many ? `<span class="wn">${wins.length}</span>` : ""}<span class="runbar"></span></button>`;
+  const btn = `<button class="win ${active ? "active" : ""}" data-exe="${esc(exe)}" data-h="${wins[0].hwnd}" ${listable ? `aria-expanded="${shown}"` : ""}
+    aria-label="${esc(many ? `${name}: ${wins.length} windows` : wins[0].title)}">${img(exe)}${many ? `<span class="wn">${wins.length}</span>` : ""}<span class="runbar"></span></button>`;
   if (!shown) return btn;
   return btn + `<span class="pick ${wins.length > 4 ? "dense" : ""}" role="menu" aria-label="${esc(name)} windows">${wins.map((w, i) =>
-    `<button class="wt ${w.active ? "active" : ""}" role="menuitem" data-h="${w.hwnd}" title="${esc(w.title)}">${esc(shortTitle(w.title, i + 1))}</button>`).join("")}</span>`;
+    `<button class="wt ${w.active ? "active" : ""}" role="menuitem" data-h="${w.hwnd}" aria-label="${esc(w.title)}">${esc(shortTitle(w.title, i + 1))}</button>`).join("")}</span>`;
 }
 
 /* Free taskbar space for the strip in CSS pixels, measured by the app (Infinity until measured) */
@@ -278,7 +281,7 @@ function capControl(){
     : `Up to ${c} app${c === 1 ? "" : "s"} show on their own, the rest go into folders. Click to go back to Automatic.`;
   return `<span class="capctl" role="group" aria-label="Apps shown on their own">
     <button class="act step" data-act="cap-" aria-label="Fewer apps on their own" ${c === 0 ? "disabled" : ""}>−</button>
-    <button class="act ${c === null ? "" : "on"}" data-act="capauto" title="${esc(tip)}">${label}</button>
+    <button class="act ${c === null ? "" : "on"}" data-act="capauto" aria-description="${esc(tip)}">${label}</button>
     <button class="act step" data-act="cap+" aria-label="More apps on their own" ${c === CAP_MAX ? "disabled" : ""}>+</button></span>`;
 }
 function nextCap(c, dir, shown){
@@ -308,13 +311,13 @@ function render(){
     // One app: a folder would only add a click, so show the app itself (never a one-app folder)
     if (!it.folder || uniq.length === 1) return `<div class="group solo" data-cat="${esc(cat)}">${appButton(uniq[0].exe, ws.filter(w => w.exe === uniq[0].exe))}</div>`;
     return `<div class="group" data-cat="${esc(cat)}">
-      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" data-label="${esc(label)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + label)}" title="${esc(open === cat ? `Collapse ${label} back into a folder` : label + ': ' + ws.map(w => w.title).slice(0,6).join(' · '))}">
+      <button class="grp ${active ? "has-active" : ""} ${open === cat ? "now" : ""}" data-cat="${esc(cat)}" data-label="${esc(label)}" aria-expanded="${open === cat}" aria-controls="group-tray-${index}" aria-label="${esc((open === cat ? "Collapse " : "Expand ") + label)}">
         <span class="folder" aria-hidden="true">${uniq.slice(0, 4).map(w => img(w.exe)).join("")}${uniq.length > 4 ? `<span class="more-n">${uniq.length}</span>` : ""}</span><span class="collapse-mark" aria-hidden="true"></span><span class="runbar"></span></button>
       <div id="group-tray-${index}" class="tray ${open === cat ? "open now" : ""}" aria-hidden="${open !== cat}" ${open !== cat ? "inert" : ""}><div class="inner">${uniq.map(u => appButton(u.exe, ws.filter(w => w.exe === u.exe))).join("")}</div></div></div>`;
   }).join("");
   shownHwnds = [...shown];
-  const upAct = update ? `<button class="act upd" data-act="update" title="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
-  const menu = state.layout?.show_menu === false ? "" : `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" title="${esc(state.fallback_reason || "Dock menu")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
+  const upAct = update ? `<button class="act upd" data-act="update" aria-description="You have ${esc(update.current)}">${esc(update.label || `Update to ${update.latest}`)}</button>` : "";
+  const menu = state.layout?.show_menu === false ? "" : `<div class="group solo" data-cat="__menu"><button class="more" data-cat="__menu" aria-label="Dock menu" aria-expanded="${open === "__menu"}" aria-description="${esc(state.fallback_reason || "")}">${CHEV}${update ? '<span class="udot"></span>' : ""}</button></div>`;
   const popup = $("dock-menu");
   popup.hidden = open !== "__menu";
   popup.style.width = Math.min(520, room()) + "px";
@@ -374,7 +377,6 @@ function setOpen(cat){
       b.classList.remove("now");
       const label = (b.dataset && b.dataset.label) || g.dataset.cat;
       b.setAttribute("aria-label", (isOpen ? "Collapse " : "Expand ") + label);
-      b.title = isOpen ? `Collapse ${label} back into a folder` : `Expand ${label}`;
     }
     tray.inert = !isOpen;
     tray.setAttribute("aria-hidden", !isOpen);
@@ -395,10 +397,10 @@ function setOpen(cat){
 }
 
 let menuOpening = false;
-async function activateTarget(hwnd, button){
-  try { if (!invoke || await invoke("activate", { hwnd }) !== false) return true; } catch {}
+async function activateTarget(hwnd, button, command = "activate"){
+  try { if (!invoke || await invoke(command, { hwnd }) !== false) return true; } catch {}
   const message = "Windows could not switch to this app. Try again.";
-  button.title = message; button.classList.add("activation-error");
+  button.setAttribute("aria-description", message); button.classList.add("activation-error");
   $("activation-status").textContent = message;
   return false;
 }
@@ -418,7 +420,8 @@ async function handleDockClick(e){
   if (t) { if (!await activateTarget(+t.dataset.h,t)) return; setTimeout(closeAll, 220); return; }
   if (w) {
     if (w.hasAttribute("aria-expanded")) { pick = pick === w.dataset.exe ? null : w.dataset.exe; render(); return; }  // several windows: show or hide the list
-    if (!await activateTarget(+w.dataset.h,w)) return; setTimeout(() => setOpen(null), 220); return;
+    // Native app button: bring the window up, or minimize it when it is already in front.
+    if (!await activateTarget(+w.dataset.h,w,"app_button_click")) return; setTimeout(() => setOpen(null), 220); return;
   }
   if (a) {
     const k = a.dataset.act;

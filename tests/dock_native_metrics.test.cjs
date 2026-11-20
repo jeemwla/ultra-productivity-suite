@@ -32,3 +32,17 @@ test('render applies the measured icon size and button width',()=>{
   assert.ok(body.includes('setProperty("--app-icon-size",`${state.layout?.icon_size || 24}px`)'));
   assert.ok(body.includes('setProperty("--app-button-width",`${state.layout?.button_width || 44}px`)'));
 });
+
+// Owner defect 3 remainder (Dev 2.2.30 test): an empty dark bar about 210 x 15 px sat above
+// the strip for 1 to 3 s after a folder opened. It was the browser tooltip of the folder
+// button ("Collapse ... back into a folder"), which the no-activate strip window draws blank.
+// Strip buttons carry accessible names instead of browser tooltips.
+test('strip buttons never show a browser tooltip', () => {
+  assert.ok(!/\stitle="/.test(html), 'no title attribute in the strip markup');
+  assert.ok(!/\.title\s*=/.test(html), 'no tooltip set from script');
+  for (const cls of ['win', 'grp', 'more', 'wt']) {
+    const i = html.indexOf(`class="${cls} `) >= 0 ? html.indexOf(`class="${cls} `) : html.indexOf(`class="${cls}"`);
+    assert.ok(i >= 0, cls);
+    assert.ok(html.slice(i, html.indexOf('>', html.indexOf('aria-label', i)) + 1).includes('aria-label'), `${cls} keeps an accessible name`);
+  }
+});

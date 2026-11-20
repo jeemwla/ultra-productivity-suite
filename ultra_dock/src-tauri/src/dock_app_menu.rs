@@ -127,6 +127,18 @@ pub fn unpin_config(existing: std::io::Result<String>, defaults: &str, entry: &s
     Ok(with_keep(&config, entry))
 }
 
+/// What a left click on an app button does, as on the native taskbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonClick { Activate, Minimize, Ignore }
+
+/// A click brings the window up, or minimizes it when it is already in front. Only a
+/// window in the organizer's snapshot can be targeted.
+pub fn button_click(hwnd: isize, foreground: isize, listed: &[isize]) -> ButtonClick {
+    if !listed.contains(&hwnd) { ButtonClick::Ignore }
+    else if hwnd == foreground { ButtonClick::Minimize }
+    else { ButtonClick::Activate }
+}
+
 /// A window's owning process generation: process id and process start time.
 pub type Identity = (u32, u64);
 
@@ -141,6 +153,13 @@ pub fn still_owned(wanted: &[isize], captured: &[(isize, Identity)], current: im
 
 #[cfg(test)]
 mod tests {
+    /// Owner item 10: the Dock's app button acts like the native one.
+    #[test]
+    fn an_app_button_click_brings_up_or_minimizes_like_the_native_button() {
+        assert_eq!(button_click(100, 7, &[100, 101]), ButtonClick::Activate, "a background window comes to the front");
+        assert_eq!(button_click(100, 100, &[100, 101]), ButtonClick::Minimize, "the window already in front is minimized");
+        assert_eq!(button_click(5, 5, &[100]), ButtonClick::Ignore, "a window the organizer does not list is never touched");
+    }
     use super::*;
     fn w(hwnd: isize, exe: &str, cat: &str) -> Window {
         Window { hwnd, exe: exe.into(), name: exe.rsplit('\\').next().unwrap().trim_end_matches(".exe").into(), category: cat.into() }

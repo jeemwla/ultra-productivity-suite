@@ -134,6 +134,10 @@ code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-b
       <button class="sw" role="switch" id="organize" aria-checked="false" aria-label="Group apps into folders"></button>
     </div>
     <div class="row">
+      <label class="txt" for="window-list"><b>Window list on click</b><span>Off: clicking an app with several windows works like the taskbar button and brings up its latest window.</span></label>
+      <button class="sw" role="switch" id="window-list" aria-checked="false" aria-label="Window list on click"></button>
+    </div>
+    <div class="row">
       <div class="txt"><b id="cap-label">Apps shown on their own</b><span id="cap-help">The first apps get their own button; the rest go into folders. Automatic groups apps by category.</span></div>
       <div class="cap-controls" role="group" aria-labelledby="cap-label" aria-describedby="cap-help">
         <div class="cap-stepper"><button type="button" id="cap-minus" aria-label="Fewer apps on their own">−</button><output id="cap-count" aria-live="polite" aria-atomic="true">Automatic</output><button type="button" id="cap-plus" aria-label="More apps on their own">+</button></div>
@@ -378,6 +382,7 @@ function renderTop(){
   $("note").textContent = S.note || "The Dock is organizing your taskbar.";
   $("dock-on").setAttribute("aria-checked", String(on));
   $("organize").setAttribute("aria-checked", String(S.organize)); $("organize").disabled = !on;
+  $("window-list").setAttribute("aria-checked", String(S.config.inline_window_list === true));
   renderCap();
   $("path").textContent = S.path || "";
 }
@@ -441,6 +446,7 @@ async function refresh(keepConfig, readCap = false){
 
 /* ---------- events ---------- */
 $("dock-on").onclick = async () => { if (!invoke) return; const on = !S.dock_on; S.dock_on = on; renderTop(); try { await invoke("hub_set_dock", { on }); } catch {} refresh(true); };
+$("window-list").onclick = () => { change({ ...S.config, inline_window_list: S.config.inline_window_list !== true }); renderTop(); };
 $("organize").onclick = async () => { if (!invoke || !S.dock_on) return; S.organize = !S.organize; renderTop(); try { await invoke("set_organize", { on: S.organize }); } catch {} refresh(true); };
 $("cap-minus").onclick = () => queueCap(-1);
 $("cap-plus").onclick = () => queueCap(1);
