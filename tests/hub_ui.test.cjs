@@ -42,5 +42,7 @@ test('sensor picking prefers Tctl, GPU Core and CPU Total, and copes with missin
 });
 
 test('hidden cards stay hidden even though cards use flex layout',()=>{
- assert.match(html,/\[hidden\]\{display:none!important\}/);
+ const suite=fs.readFileSync(path.join(__dirname,'../ultra_dock/ui/suite.css'),'utf8');
+ assert.match(html,/<link rel="stylesheet" href="tokens\.css" \/>\s*<link rel="stylesheet" href="suite\.css" \/>/);
+ assert.match(suite,/\[hidden\]\{display:none!important\}/);
 });

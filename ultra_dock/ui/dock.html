@@ -3,108 +3,118 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>Dock settings</title>
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="suite.css" />
 <style>
-/* Dock settings: every option of Ultra Dock in one window. Same look as the Ultra Suite hub. */
-:root{
-  --bg:#0f1115; --panel:#171a21; --panel-2:#1e222b; --panel-3:#252a35; --line:rgba(255,255,255,.08);
-  --ink:#f2f4f8; --ink-2:rgba(242,244,248,.74); --ink-3:rgba(242,244,248,.52);
-  --accent:#60cdff; --accent-ink:#00131c; --ok:#4cc38a; --warn:#f2b84b; --bad:#ff6b6b;
-  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; --radius:12px;
-}
-@media (prefers-color-scheme: light){:root{
-  --bg:#f3f4f7; --panel:#ffffff; --panel-2:#f6f7fa; --panel-3:#eceef3; --line:rgba(0,0,0,.09);
-  --ink:#111318; --ink-2:rgba(17,19,24,.72); --ink-3:rgba(17,19,24,.55);
-  --accent:#005fb8; --accent-ink:#ffffff; --ok:#1d7f52; --warn:#9a6300; --bad:#c42b1c; }}
-*{box-sizing:border-box;margin:0;padding:0}
-[hidden]{display:none!important}
-html,body{min-height:100%;background:var(--bg)}
-body{font:14px/1.45 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased}
-button,input,select{font:inherit;color:inherit}
-button{border:0;background:none;cursor:pointer}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-main{max-width:980px;margin:0 auto;padding:24px 24px 48px}
-.hero{display:flex;align-items:center;gap:16px;border-radius:16px;padding:20px 22px;margin-bottom:18px;border:1px solid var(--line);
+/* Dock settings: every option of Ultra Dock in one window. Spacing, type, radius, color, shadow and motion come
+   from tokens.css; buttons, pills, switches and fields from suite.css, so it matches the Ultra Suite hub. */
+html{scrollbar-gutter:stable}
+html,body{min-height:100%}
+main{max-width:980px;margin:0 auto;padding:var(--s-6) var(--s-6) var(--s-8)}
+.hero{display:flex;align-items:center;gap:var(--s-4);border-radius:var(--r-5);padding:var(--s-5) var(--s-6);margin-bottom:var(--s-4);border:1px solid var(--line);
   background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 20%,transparent) 0%,transparent 55%),var(--panel)}
-.hero img{width:48px;height:48px;border-radius:12px}
-.hero h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
-.hero p{color:var(--ink-2);font-size:13.5px}
+.hero{position:relative}
+.hero img{width:48px;height:48px;border-radius:var(--r-4);flex:none}
+/* Dev edition: the hero icon is swapped to hubicons/dev/; a badge under the switch says which edition this is */
+.hero:has(img[src^="hubicons/dev/"]){padding-bottom:var(--s-6)}
+.hero:has(img[src^="hubicons/dev/"])::after{content:"Dev edition";position:absolute;right:var(--s-6);bottom:var(--s-2);font-size:var(--t-1);font-weight:var(--w-medium);color:var(--ink-3);letter-spacing:.02em}
+.hero h1{font:var(--w-bold) var(--t-6)/var(--lh-tight) var(--font-display);letter-spacing:-.01em}
+.hero p{color:var(--ink-2);font-size:var(--t-2);margin-top:2px}
 .hero .grow{flex:1;min-width:0}
-.pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--panel-2);color:var(--ink-2);white-space:nowrap}
-.pill.on{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.off{color:var(--ink-3)}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
-.card h2{font-size:16px;font-weight:650;margin-bottom:2px}
-.card .lead{color:var(--ink-3);font-size:13px;margin-bottom:12px}
-.row{display:flex;align-items:center;gap:14px;padding:11px 0;border-top:1px solid var(--line)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-4);padding:var(--s-5);margin-bottom:var(--s-4);box-shadow:var(--sh-1)}
+.card h2{font-size:var(--t-4);font-weight:var(--w-medium);line-height:var(--lh-tight);margin-bottom:var(--s-1)}
+.card .lead{color:var(--ink-3);font-size:var(--t-2);margin-bottom:var(--s-3);max-width:96ch}
+.row{display:flex;align-items:center;gap:var(--s-4);padding:var(--s-3) 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
 .row .txt{flex:1;min-width:0}
-.row .txt b{display:block;font-weight:600}
-.row .txt span{display:block;color:var(--ink-3);font-size:12.5px}
-select,input[type=text]{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
-select{min-width:170px}
-.cap-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.cap-stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);overflow:hidden}
-.cap-stepper button{width:36px;height:36px;font-size:20px}
-.cap-stepper button:hover:not(:disabled){background:var(--hover,var(--panel-3))}
-.cap-stepper button:disabled{opacity:.35;cursor:default}
+.row .txt b{display:block;font-weight:var(--w-medium)}
+.row .txt span{display:block;color:var(--ink-3);font-size:var(--t-2)}
+label.txt{cursor:pointer}
+/* The row under the pointer is highlighted, so a picker on the right is easy to match with its app */
+#apps .row{margin:0 calc(-1 * var(--s-3));padding-left:var(--s-3);padding-right:var(--s-3);border-radius:var(--r-3);transition:background var(--d-1) var(--ease)}
+#apps .row:hover{background:var(--hover)}
+/* App count: minus, the count in use and plus, then Automatic as a toggle that reads as on, not as a call to action */
+.cap-controls{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.cap-stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--r-3);background:var(--panel-2);overflow:hidden}
+.cap-stepper button{width:34px;height:34px;font-size:var(--t-4);color:var(--ink-2);transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.cap-stepper button:hover:not(:disabled){background:var(--panel-3);color:var(--ink)}
+.cap-stepper button:disabled{opacity:var(--disabled)}
 .cap-stepper button:focus-visible{outline-offset:-3px}
-.cap-stepper output{min-width:72px;text-align:center;font-variant-numeric:tabular-nums;font-size:13px}
-.cap-auto{height:36px;padding:0 12px;border:1px solid var(--line);border-radius:10px}
-.cap-auto[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-/* Switch */
-.sw{position:relative;width:44px;height:24px;border-radius:99px;background:var(--panel-3);border:1px solid var(--line);flex:none;transition:background .15s}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--ink-2);transition:transform .18s cubic-bezier(.2,.9,.25,1),background .15s}
-.sw[aria-checked=true]{background:var(--accent);border-color:transparent}
-.sw[aria-checked=true]::after{transform:translateX(20px);background:var(--accent-ink)}
-.sw:disabled{opacity:.45;cursor:default}
-.btn{padding:7px 14px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);font-weight:600;white-space:nowrap}
-.btn:hover{border-color:var(--ink-3)}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
-.btn.danger{color:var(--bad)}
-.btn.small{padding:4px 10px;font-size:12.5px}
-.icon-btn{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:var(--ink-2);flex:none}
-.icon-btn:hover{background:var(--panel-2);color:var(--ink)}
-.icon-btn:disabled{opacity:.3;cursor:default}
+.cap-stepper output{min-width:84px;text-align:center;font-variant-numeric:tabular-nums;font-size:var(--t-2);font-weight:var(--w-medium)}
+.cap-stepper output[data-auto=true]{color:var(--ink-2);font-weight:var(--w-regular)}
+.cap-auto[aria-pressed=true]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent);opacity:1}
+.icon-btn{width:30px;height:30px;border-radius:var(--r-3);display:grid;place-items:center;color:var(--ink-2);flex:none;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.icon-btn:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.icon-btn:active:not(:disabled){background:var(--press)}
+.icon-btn:disabled{opacity:.25}
 .icon-btn svg{width:16px;height:16px}
+.icon-btn[data-act=delete]:hover{color:var(--bad);background:var(--bad-soft)}
 /* Open apps */
-.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.toolbar{display:flex;gap:var(--s-2);align-items:center;margin-bottom:var(--s-2);flex-wrap:wrap}
 .toolbar input{flex:1;min-width:160px}
-.app img,.app .ph{width:28px;height:28px;border-radius:6px;flex:none}
+.toolbar label{color:var(--ink-2);font-size:var(--t-2)}
+.toolbar.add-cat{margin:var(--s-3) 0 0}
+.edit-mode-on,#edit-mode[aria-pressed=true]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
+.app img,.app .ph{width:28px;height:28px;border-radius:var(--r-2);flex:none}
 .app .ph{background:var(--panel-3)}
-.app .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
-.tag{font-size:11.5px;color:var(--ink-3);background:var(--panel-2);border-radius:6px;padding:1px 7px}
-.tag.pin{color:var(--accent)}
-.keepbox{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);flex:none}
+.app .meta{display:flex;gap:var(--s-1);flex-wrap:wrap;margin-top:2px}
+.app select{width:220px;flex:none}
+.tag{font-size:var(--t-1);color:var(--ink-3);background:var(--panel-2);border-radius:var(--r-2);padding:1px var(--s-2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag.pin{color:var(--accent);background:var(--accent-soft)}
+#apps > p.muted:only-child{display:flex;justify-content:center;padding:var(--s-6) var(--s-4);border:1px dashed var(--line-2);border-radius:var(--r-4);font-size:var(--t-2)}
+#app-board:empty{display:none}
+.keepbox{display:flex;align-items:center;gap:var(--s-2);font-size:var(--t-2);color:var(--ink-2);flex:none}
 /* Categories */
-.cat{display:grid;grid-template-columns:auto 1fr auto;gap:10px 12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+.cat{display:grid;grid-template-columns:auto 1fr auto;gap:var(--s-2) var(--s-3);align-items:start;padding:var(--s-3) 0;border-top:1px solid var(--line)}
 .cat:first-of-type{border-top:0}
 .cat .moves{display:flex;flex-direction:column;gap:2px}
-.cat .name{display:flex;gap:8px;align-items:center}
-.cat .name input{font-weight:600;max-width:240px}
-.cat .count{font-size:12px;color:var(--ink-3)}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.chip{display:inline-flex;align-items:center;gap:4px;background:var(--panel-2);border:1px solid var(--line);border-radius:99px;padding:2px 4px 2px 10px;font-size:12.5px}
-.chip button{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3);font-size:13px;line-height:1}
+.cat .name{display:flex;gap:var(--s-2);align-items:center;min-height:34px}
+.cat .name input{font-weight:var(--w-medium);max-width:240px}
+.cat .count{font-size:var(--t-1);color:var(--ink-3)}
+.cat > .icon-btn{margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2);align-items:center}
+.chip{display:inline-flex;align-items:center;gap:var(--s-1);height:28px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-full);padding:0 var(--s-1) 0 var(--s-3);font-size:var(--t-2)}
+.chip button{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3);font-size:var(--t-3);line-height:1;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
 .chip button:hover{background:var(--panel-3);color:var(--ink)}
-.chips input{width:150px;padding:3px 10px;border-radius:99px;font-size:12.5px}
+.chips input{width:160px;min-height:28px;padding:0 var(--s-3);border-radius:var(--r-full);font-size:var(--t-2)}
 .muted{color:var(--ink-3)}
-.status{position:fixed;right:20px;bottom:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;
-  box-shadow:0 10px 28px rgba(0,0,0,.25);opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none}
+.status{position:fixed;right:var(--s-5);bottom:var(--s-5);max-width:min(420px,calc(100vw - 40px));background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-3);padding:var(--s-2) var(--s-4);font-size:var(--t-2);
+  box-shadow:var(--sh-3);opacity:0;transform:translateY(6px);transition:opacity var(--d-2) var(--ease),transform var(--d-2) var(--ease);pointer-events:none}
 .status.show{opacity:1;transform:none}
-.status.err{color:var(--bad)}
-.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--ink-2);word-break:break-all}
-@media (max-width:640px){main{padding:16px}.hero{flex-wrap:wrap}.hero .grow{flex:1 1 calc(100% - 64px)}.row{flex-wrap:wrap}.cat{grid-template-columns:1fr auto}.cat .moves{flex-direction:row;grid-column:1/-1}select{min-width:0;width:100%}}
-@media (prefers-reduced-motion:reduce){.sw,.sw::after,.status{transition:none}}
-.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin:14px 0}
-.tile{padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--panel-2);min-width:0}
-.tile button{overflow-wrap:anywhere;max-width:100%}.tile img,.tile .ph{width:32px;height:32px;display:inline-block;background:var(--panel-3);border-radius:8px}
-.tile [aria-pressed=true]{outline:2px solid var(--accent)}
-.tile.preview{outline:3px solid var(--accent);background:var(--panel-3)}
+.status.err{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent);pointer-events:auto;user-select:text}
+.confirm{display:flex;gap:var(--s-2);align-items:center;flex-wrap:wrap}
+/* While Reset asks to confirm, its row is tinted so the destructive choice is unmistakable */
+.row:has(#reset-yes){background:var(--bad-soft);margin:0 calc(-1 * var(--s-3));padding-left:var(--s-3);padding-right:var(--s-3);border-radius:var(--r-3);border-top-color:transparent}
+.row:has(#reset-yes) .muted{color:var(--ink)}
+#reset-yes{background:var(--bad);color:var(--bg);border-color:transparent}
+#reset-yes:hover{background:color-mix(in srgb,var(--bad) 86%,#000)}
+code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-break:break-all}
+/* One click selects the whole settings file path for copying */
+#path{user-select:all;cursor:text;background:var(--panel-2);border-radius:var(--r-2);padding:1px var(--s-1)}
+#path:empty{display:none}
+@media (max-width:640px){main{padding:var(--s-4)}.row .txt{flex:1 1 200px}.cap-controls{margin-left:auto}.hero{flex-wrap:wrap;padding:var(--s-4)}.hero .grow{flex:1 1 calc(100% - 64px)}.row{flex-wrap:wrap}.cat{grid-template-columns:1fr auto}.cat .moves{flex-direction:row;grid-column:1/-1}select,.app select{min-width:0;width:100%}}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--s-3);margin:var(--s-3) 0 var(--s-4)}
+.tile{padding:var(--s-3);border:1px solid var(--line);border-radius:var(--r-4);background:var(--panel-2);min-width:0;transition:background var(--d-2) var(--ease),border-color var(--d-2) var(--ease)}
+.tile button{overflow-wrap:anywhere;max-width:100%}.tile img,.tile .ph{width:32px;height:32px;display:inline-block;background:var(--panel-3);border-radius:var(--r-3)}
+.tile [aria-pressed=true]{outline:2px solid var(--accent);outline-offset:1px;background:var(--accent-soft)}
+.tile.preview{outline:2px solid var(--accent);outline-offset:2px;border-color:transparent;background:var(--accent-soft)}
 .tile .members{display:flex;flex-wrap:wrap;gap:8px}.tile .member{display:grid;gap:6px;justify-items:center}
 .tile .remove{font-size:12px;color:var(--accent)}
 .tile button[data-file]:not(:disabled){touch-action:none;user-select:none;cursor:grab}
 #editor-help,#editor-message{margin:8px 0;color:var(--ink-2)}
+/* Board polish: folder titles, centered app labels and a visible button shape while editing */
+.tile > p{font-size:var(--t-2);font-weight:var(--w-medium);color:var(--ink-2);margin-bottom:var(--s-2)}
+.tile .member > button[data-file]{display:grid;justify-items:center;gap:var(--s-1);padding:var(--s-1) var(--s-2);border-radius:var(--r-3);font-size:var(--t-1);color:var(--ink-2);text-align:center;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.tile .member > button[data-file] br{display:none}
+.tile .member > button[data-file]:not(:disabled):hover{background:var(--hover);color:var(--ink)}
+.tile .member .remove{padding:2px var(--s-2);border-radius:var(--r-2);transition:background var(--d-1) var(--ease)}
+.tile .member .remove:hover{background:var(--accent-soft)}
+#editor-help{font-size:var(--t-2)}
+/* In edit mode (app buttons enabled) every tile shows a dashed edge: each one is a place an app can be dropped */
+.board:has(button[data-file]:not(:disabled)) .tile{border-style:dashed;border-color:var(--line-2)}
+#editor-message:empty{display:none}
 </style>
 </head>
 <body>
@@ -120,14 +130,14 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
     <h2 id="h-layout">Layout</h2>
     <p class="lead">How the Dock shows the apps you have open. Folders hold up to 6 apps and never just one.</p>
     <div class="row">
-      <div class="txt"><b>Group apps into folders</b><span>Off: every app keeps its normal taskbar button.</span></div>
+      <label class="txt" for="organize"><b>Group apps into folders</b><span>Off: every app keeps its normal taskbar button.</span></label>
       <button class="sw" role="switch" id="organize" aria-checked="false" aria-label="Group apps into folders"></button>
     </div>
     <div class="row">
       <div class="txt"><b id="cap-label">Apps shown on their own</b><span id="cap-help">The first apps get their own button; the rest go into folders. Automatic groups apps by category.</span></div>
       <div class="cap-controls" role="group" aria-labelledby="cap-label" aria-describedby="cap-help">
         <div class="cap-stepper"><button type="button" id="cap-minus" aria-label="Fewer apps on their own">−</button><output id="cap-count" aria-live="polite" aria-atomic="true">Automatic</output><button type="button" id="cap-plus" aria-label="More apps on their own">+</button></div>
-        <button type="button" id="cap-auto" class="cap-auto" aria-pressed="true" disabled>Automatic</button>
+        <button type="button" id="cap-auto" class="btn small cap-auto" aria-pressed="true" disabled>Automatic</button>
       </div>
     </div>
   </section>
@@ -135,13 +145,12 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
   <section class="card" aria-labelledby="h-apps">
     <h2 id="h-apps">Open apps</h2>
     <p class="lead">Choose each app's folder, or keep it as a normal taskbar button. Apps you pinned in Windows always stay as they are.</p>
-    <div class="toolbar"><input type="text" id="find" placeholder="Find an app" aria-label="Find an app" />
-      <button class="btn small" id="refresh">Refresh</button></div>
-    <div class="toolbar"><button class="btn" id="edit-mode" aria-pressed="false">Edit</button></div>
+    <div class="toolbar"><input type="search" id="find" placeholder="Find an app" aria-label="Find an app" />
+      <button class="btn" id="refresh">Refresh</button><button class="btn" id="edit-mode" aria-pressed="false">Edit</button></div>
     <p id="editor-help">Edit the app grid to create folders. Category controls remain below.</p>
     <div id="edit-tools" class="toolbar" hidden><label for="folder-name">Folder name</label><input id="folder-name" type="text" maxlength="120" value="New folder">
       <button class="btn" id="group-apps" disabled>Group selected</button></div>
-    <button class="btn small" id="retry-save">Save again</button>
+    <button class="btn small" id="retry-save" title="Saves your folder changes again if the last save failed">Save again</button>
     <p id="editor-message" role="status" aria-live="polite"></p>
     <div id="app-board" class="board" aria-label="Editable app grid"></div>
     <div id="apps"></div>
@@ -151,8 +160,8 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--i
     <h2 id="h-cats">Categories</h2>
     <p class="lead">Folders appear in this order. An app goes into the category whose word matches the most of its file path (for example "steam" or "discord"). Apps that match nothing go to Other.</p>
     <div id="cats"></div>
-    <div class="toolbar" style="margin-top:12px"><input type="text" id="new-cat" placeholder="New category name" aria-label="New category name" />
-      <button class="btn small" id="add-cat">Add category</button></div>
+    <div class="toolbar add-cat"><input type="text" id="new-cat" placeholder="New category name" aria-label="New category name" />
+      <button class="btn" id="add-cat">Add category</button></div>
   </section>
 
   <section class="card" aria-labelledby="h-keep">

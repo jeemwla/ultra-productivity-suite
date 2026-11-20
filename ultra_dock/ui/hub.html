@@ -3,85 +3,109 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>Ultra Suite</title>
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="suite.css" />
 <style>
-/* Ultra Suite hub: one launcher window for every app in the suite, with live status cards. */
-:root{
-  --bg:#0f1115; --panel:#171a21; --panel-2:#1e222b; --line:rgba(255,255,255,.08);
-  --ink:#f2f4f8; --ink-2:rgba(242,244,248,.74); --ink-3:rgba(242,244,248,.52);
-  --accent:#60cdff; --accent-ink:#00131c; --ok:#4cc38a; --warn:#f2b84b; --bad:#ff6b6b;
-  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; --radius:12px;
-}
-@media (prefers-color-scheme: light){:root{
-  --bg:#f3f4f7; --panel:#ffffff; --panel-2:#f6f7fa; --line:rgba(0,0,0,.09);
-  --ink:#111318; --ink-2:rgba(17,19,24,.72); --ink-3:rgba(17,19,24,.55);
-  --accent:#005fb8; --accent-ink:#ffffff; --ok:#1d7f52; --warn:#9a6300; --bad:#c42b1c; }}
-*{box-sizing:border-box;margin:0;padding:0}
-[hidden]{display:none!important}
-html,body{min-height:100%;background:var(--bg)}
-body{font:14px/1.45 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;display:grid;grid-template-columns:220px 1fr;min-height:100vh}
-button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-nav{background:var(--panel);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:4px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:0 8px 18px}
-.brand img{width:28px;height:28px;border-radius:7px}
-.navitem{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--ink-2);text-align:left;width:100%}
-.navitem img{width:22px;height:22px;border-radius:5px}
-.navitem:hover{background:var(--panel-2);color:var(--ink)}
-.navitem .dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
-.dot.on{background:var(--ok)} .dot.warn{background:var(--warn)}
-nav .foot{margin-top:auto;color:var(--ink-3);font-size:12.5px;padding:8px}
-main{padding:26px 30px 40px;overflow:auto}
-h1{font-size:26px;font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
-.sub{color:var(--ink-2);margin-bottom:20px}
+/* Ultra Suite hub: one launcher window for every app in the suite, with live status cards.
+   Spacing, type, radius, color, shadow and motion come from tokens.css; buttons, pills and fields from suite.css. */
+html{scrollbar-gutter:stable}
+html,body{min-height:100%}
+body{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+nav{position:sticky;top:0;height:100vh;background:var(--panel);border-right:1px solid var(--line);padding:var(--s-5) var(--s-3);display:flex;flex-direction:column;gap:2px}
+.brand{display:flex;align-items:center;gap:var(--s-3);font:var(--w-bold) var(--t-4)/var(--lh-tight) var(--font-display);padding:0 var(--s-2) var(--s-5)}
+.brand img{width:28px;height:28px;border-radius:var(--r-3)}
+.navitem{display:flex;align-items:center;gap:var(--s-3);min-height:38px;padding:0 var(--s-2);border-radius:var(--r-3);color:var(--ink-2);text-align:left;width:100%;
+  transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.navitem img{width:22px;height:22px;border-radius:var(--r-2);flex:none}
+.navitem:hover{background:var(--hover);color:var(--ink)}
+.navitem:active{background:var(--press)}
+.navitem .dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--ink-3);opacity:.6;flex:none;transition:background var(--d-2) var(--ease)}
+.dot.on{background:var(--ok);opacity:1} .dot.warn{background:var(--warn);opacity:1}
+/* Windows contrast themes would blank the dots: draw them in system colors, filled when running, ringed when not */
+@media (forced-colors: active){.navitem .dot{forced-color-adjust:none;background:Canvas;box-shadow:inset 0 0 0 1.5px GrayText;opacity:1}.dot.on{background:Highlight;box-shadow:none}.dot.warn{background:CanvasText;box-shadow:none}.status{border:1px solid GrayText}}
+nav .foot{margin-top:auto;color:var(--ink-3);font-size:var(--t-1);padding:var(--s-2)}
+main{padding:var(--s-6) var(--s-8) var(--s-8);min-width:0}
+.wrap{max-width:1400px;margin:0 auto}
+h1{font:var(--w-bold) var(--t-6)/var(--lh-tight) var(--font-display);letter-spacing:-.01em;margin-bottom:var(--s-1)}
+.sub{color:var(--ink-2)}
 /* Launcher-style header: a soft accent glow behind the greeting */
-.hero{position:relative;overflow:hidden;border-radius:16px;padding:24px 26px 6px;margin-bottom:20px;border:1px solid var(--line);
-  background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 22%,transparent) 0%,transparent 55%),
-             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,var(--ok) 14%,transparent) 0%,transparent 60%),var(--panel)}
-.hero .sub{margin-bottom:18px}
-.banner{display:none;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--radius);padding:12px 16px;margin-bottom:18px}
+.hero{position:relative;overflow:hidden;border-radius:var(--r-5);padding:var(--s-6);margin-bottom:var(--s-5);border:1px solid var(--line);
+  background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 20%,transparent) 0%,transparent 55%),
+             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,var(--ok) 12%,transparent) 0%,transparent 60%),var(--panel)}
+/* Dev edition: its windows load the black and white icons from hubicons/dev/; the header then shows a badge */
+.hero:has(img[src^="hubicons/dev/"])::after,body:has(.brand img[src^="hubicons/dev/"]) .hero::after{content:"Dev edition";position:absolute;top:var(--s-4);right:var(--s-4);height:22px;padding:0 var(--s-2);display:inline-flex;align-items:center;border-radius:var(--r-full);border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);font-size:var(--t-1);font-weight:var(--w-medium);letter-spacing:.02em}
+.banner{display:none;align-items:center;gap:var(--s-4);background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:var(--r-4);padding:var(--s-3) var(--s-4);margin-bottom:var(--s-5)}
 .banner.show{display:flex}
-.banner p{flex:1}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:12px;min-height:200px;
-  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
-.card::before{content:"";position:absolute;left:18px;right:18px;top:0;height:2px;border-radius:0 0 2px 2px;background:var(--app,var(--accent));opacity:.85}
-.card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--app,var(--accent)) 40%,var(--line));box-shadow:0 10px 28px rgba(0,0,0,.22)}
+.banner p{flex:1;min-width:0}
+.banner svg{width:20px;height:20px;color:var(--accent);flex:none}
+/* Cards: two across at laptop and default window sizes, four across on wide screens, never a lone card on a row */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-4)}
+@media (min-width:1560px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (min-width:1100px){.grid:has(> #c-insights[hidden]){grid-template-columns:repeat(3,minmax(0,1fr))}}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-4);padding:var(--s-5);display:flex;flex-direction:column;gap:var(--s-3);min-height:216px;
+  box-shadow:inset 0 3px 0 color-mix(in srgb,var(--app,var(--accent)) 85%,transparent),var(--sh-1);
+  transition:transform var(--d-2) var(--ease),box-shadow var(--d-2) var(--ease),border-color var(--d-2) var(--ease)}
+/* Lift on hover only with a mouse or pen, so a tap on a touch screen does not leave a card raised */
+@media (hover:hover){.card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--app,var(--accent)) 35%,var(--line));
+  box-shadow:inset 0 3px 0 var(--app,var(--accent)),var(--sh-2)}}
+/* Keyboard users see which card they are in */
+.card:focus-within{border-color:color-mix(in srgb,var(--app,var(--accent)) 55%,var(--line))}
+@media (prefers-reduced-motion:reduce){.card:hover{transform:none}}
 #c-sentinel{--app:#4cc38a} #c-alarm{--app:#ff6b6b} #c-dock{--app:#60cdff} #c-insights{--app:#b48cff}
-@media (prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
-.head{display:flex;align-items:center;gap:12px}
-.head img{width:44px;height:44px;border-radius:10px}
-.head h2{font-size:16.5px;font-weight:650}
-.head .ed{font-size:12.5px;color:var(--ink-3)}
-.pill{margin-left:auto;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--panel-2);color:var(--ink-2);white-space:nowrap}
-.pill.on{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.off{color:var(--ink-3)}
-.status{background:var(--panel-2);border-radius:9px;padding:11px 13px;min-height:64px}
-.status .big{font-size:15.5px;font-weight:600}
-.status .small{font-size:13px;color:var(--ink-2);margin-top:3px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
-.stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
-.stat span{font-size:12px;color:var(--ink-3)}
-.actions{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
-.btn{padding:8px 18px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);font-weight:600}
-.btn:hover{border-color:var(--ink-3)}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;min-width:112px}
-.btn.primary:hover{filter:brightness(1.08)}
-.btn:disabled{opacity:.5;cursor:default}
-.capline{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px;color:var(--ink-2)}
-.capline select{font:inherit;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:150px}
-.capline select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.capnote{font-size:12.5px;color:var(--ink-3);margin-top:-6px}
-h3{font-size:14px;font-weight:650;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin:28px 0 12px}
-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:top}
-th{color:var(--ink-3);font-weight:600;font-size:12.5px}
+.card{container-type:inline-size}
+.head{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:var(--s-3)}
+.head img{width:44px;height:44px;border-radius:var(--r-3)}
+.head > div{min-width:0}
+/* A narrow card puts the status pill under the title instead of squeezing the title into a column */
+@container (max-width:340px){.head{grid-template-columns:44px minmax(0,1fr)}.head .pill{grid-column:2;justify-self:start;margin-top:calc(-1 * var(--s-2))}}
+.head h2{font-size:var(--t-4);font-weight:var(--w-medium);line-height:var(--lh-tight)}
+.head .ed{font-size:var(--t-2);color:var(--ink-3);margin-top:2px}
+.status{background:var(--panel-2);border-radius:var(--r-3);padding:var(--s-3) var(--s-4);min-height:76px}
+.status .big{font-size:var(--t-3);font-weight:var(--w-medium)}
+.status .small{font-size:var(--t-2);color:var(--ink-2);margin-top:2px;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-2);margin-top:var(--s-2)}
+.stat b{display:block;font-size:var(--t-5);font-weight:var(--w-medium);line-height:var(--lh-tight);font-variant-numeric:tabular-nums;transition:opacity var(--d-2) var(--ease)}
+.stat span{font-size:var(--t-1);color:var(--ink-3)}
+.status.stale .stat b{opacity:.4}
+.actions{margin-top:auto;display:flex;gap:var(--s-2);flex-wrap:wrap}
+.actions .btn.primary{min-width:112px}
+/* These buttons are disabled only while they work, so a disabled one shows the shared spinner instead of fading out */
+[data-launch]:disabled::before,[data-ed-launch]:disabled::before,#upd-btn:disabled::before{content:"";width:12px;height:12px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:btn-spin .8s linear infinite;flex:none}
+[data-launch]:disabled,[data-ed-launch]:disabled,#upd-btn:disabled{opacity:.85;cursor:progress}
+/* Dock app count: minus, the count and plus, then Automatic, as in Dock settings and the Dock menu */
+.capline{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;font-size:var(--t-2);color:var(--ink-2)}
+.capctl{display:flex;align-items:center;gap:var(--s-2)}
+.stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--r-3);background:var(--panel-2);overflow:hidden}
+.stepper button{width:32px;height:32px;font-size:var(--t-4);color:var(--ink-2);transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.stepper button:hover:not(:disabled){background:var(--panel-3);color:var(--ink)}
+.stepper button:disabled{opacity:var(--disabled)}
+.stepper button:focus-visible{outline-offset:-3px}
+.stepper output{min-width:84px;text-align:center;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:var(--w-medium)}
+.capctl .btn[aria-pressed=true]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent);opacity:1}
+.capnote{font-size:var(--t-1);color:var(--ink-3);margin-top:calc(-1 * var(--s-1))}
+.capnote.err{color:var(--bad)}
+h3{font-size:var(--t-1);font-weight:var(--w-medium);color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;margin:var(--s-8) 0 var(--s-3)}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-4);overflow:hidden}
+th,td{text-align:left;padding:var(--s-3) var(--s-4);border-bottom:1px solid var(--line);font-size:var(--t-2);vertical-align:top;width:50%}
+th{color:var(--ink-3);font-weight:var(--w-medium);font-size:var(--t-1);background:var(--panel-2)}
 tr:last-child td{border-bottom:0}
+tbody tr{transition:background var(--d-1) var(--ease)}
+tbody tr:hover{background:color-mix(in srgb,var(--panel-2) 60%,transparent)}
 td.muted{color:var(--ink-3)}
-td .edc{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)}
-td .edc img{width:22px;height:22px}
-td .small{display:block;margin:4px 0 8px;color:var(--ink-3)}
-td .btn{padding:5px 12px;font-size:12.5px}
-@media (max-width:760px){body{grid-template-columns:1fr} nav{flex-direction:row;flex-wrap:wrap;padding:12px} nav .foot,.brand{display:none} main{padding:18px 16px}}
+td .edc{display:flex;align-items:center;gap:var(--s-2);font-weight:var(--w-medium);color:var(--ink)}
+td.muted .edc{color:var(--ink-2)}
+/* An edition app that is not installed shows a grey icon */
+td.muted .edc img{filter:grayscale(1);opacity:.55}
+td .edc img{width:22px;height:22px;border-radius:var(--r-2)}
+td .btn{min-height:28px;padding:0 var(--s-3);font-size:var(--t-1)}
+td .small{display:block;margin:var(--s-1) 0 var(--s-2);color:var(--ink-3)}
+td .small:last-child{margin-bottom:0}
+td.empty-row{text-align:center;color:var(--ink-3);padding:var(--s-6) var(--s-4)}
+.note{color:var(--ink-3);font-size:var(--t-2);margin-top:var(--s-3);max-width:72ch}
+@media (max-width:760px){body{grid-template-columns:1fr} nav{position:static;height:auto;flex-direction:row;flex-wrap:wrap;padding:var(--s-3);border-right:0;border-bottom:1px solid var(--line)} nav .navitem{width:auto} nav .foot,.brand{display:none}
+  main{padding:var(--s-5) var(--s-4)} .grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -93,44 +117,46 @@ td .btn{padding:5px 12px;font-size:12.5px}
   <button class="navitem" data-go="insights" id="n-insights" hidden><img src="hubicons/insights.png" alt="" />Insights<span class="dot" id="d-insights"></span></button>
   <div class="foot" id="ver">Ultra Suite</div>
 </nav>
-<main>
+<main aria-labelledby="greet"><div class="wrap">
   <div class="hero"><h1 id="greet">Ultra Suite</h1>
   <p class="sub">Every app in the suite, with what each one is doing right now.</p></div>
-  <div class="banner" id="upd"><p id="upd-text"></p><button class="btn primary" id="upd-btn">Update now</button></div>
+  <div class="banner" id="upd" role="status"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M4 15.5h12"/></svg><p id="upd-text"></p><button class="btn primary" id="upd-btn">Update now</button></div>
   <div class="grid" id="cards">
-    <section class="card" id="c-sentinel">
-      <div class="head"><img src="hubicons/sentinel.png" alt="" /><div><h2>PC Sentinel</h2><div class="ed">Hardware health and performance</div></div><span class="pill" id="p-sentinel">Checking</span></div>
+    <section class="card" id="c-sentinel" aria-labelledby="h-sentinel">
+      <div class="head"><img src="hubicons/sentinel.png" alt="" /><div><h2 id="h-sentinel">PC Sentinel</h2><div class="ed">Hardware health and performance</div></div><span class="pill" id="p-sentinel">Checking</span></div>
       <div class="status"><div class="big" id="s-sentinel">Reading sensors…</div>
         <div class="stats"><div class="stat"><b id="cpu-t">--</b><span>CPU temp</span></div><div class="stat"><b id="gpu-t">--</b><span>GPU temp</span></div><div class="stat"><b id="cpu-l">--</b><span>CPU load</span></div></div></div>
-      <div class="actions"><button class="btn primary" data-launch="sentinel">Launch</button></div>
+      <div class="actions"><button class="btn primary" data-launch="sentinel" aria-describedby="h-sentinel">Launch</button></div>
     </section>
-    <section class="card" id="c-alarm">
-      <div class="head"><img src="hubicons/alarm.png" alt="" /><div><h2>Code Red Alarm</h2><div class="ed">Alarms that make sure you get up</div></div><span class="pill" id="p-alarm">Checking</span></div>
+    <section class="card" id="c-alarm" aria-labelledby="h-alarm">
+      <div class="head"><img src="hubicons/alarm.png" alt="" /><div><h2 id="h-alarm">Code Red Alarm</h2><div class="ed">Alarms that make sure you get up</div></div><span class="pill" id="p-alarm">Checking</span></div>
       <div class="status"><div class="big" id="s-alarm">Checking alarms…</div><div class="small" id="s-alarm-2"></div></div>
-      <div class="actions"><button class="btn primary" data-launch="alarm">Launch</button></div>
+      <div class="actions"><button class="btn primary" data-launch="alarm" aria-describedby="h-alarm">Launch</button></div>
     </section>
-    <section class="card" id="c-dock">
-      <div class="head"><img src="hubicons/dock.png" alt="" /><div><h2>Ultra Dock</h2><div class="ed">Taskbar folders</div></div><span class="pill" id="p-dock">Checking</span></div>
+    <section class="card" id="c-dock" aria-labelledby="h-dock">
+      <div class="head"><img src="hubicons/dock.png" alt="" /><div><h2 id="h-dock">Ultra Dock</h2><div class="ed">Taskbar folders</div></div><span class="pill" id="p-dock">Checking</span></div>
       <div class="status"><div class="big" id="s-dock">Checking the Dock…</div><div class="small" id="s-dock-2"></div></div>
-      <label class="capline" for="dock-cap">Apps shown on their own
-        <select id="dock-cap" aria-describedby="dock-cap-help"></select></label>
+      <div class="capline"><span id="dock-cap-label">Apps shown on their own</span>
+        <div class="capctl" role="group" aria-labelledby="dock-cap-label" aria-describedby="dock-cap-help">
+          <div class="stepper"><button type="button" id="dock-cap-minus" aria-label="Fewer apps on their own">−</button><output id="dock-cap-count" aria-live="polite" aria-atomic="true">Automatic</output><button type="button" id="dock-cap-plus" aria-label="More apps on their own">+</button></div>
+          <button type="button" class="btn small" id="dock-cap-auto" aria-pressed="true">Automatic</button></div></div>
       <div class="small capnote" id="dock-cap-help">The rest go into folders. Automatic groups apps by category.</div>
-      <div class="actions"><button class="btn primary" id="dock-btn">Turn on</button><button class="btn" id="dock-settings-btn">Settings</button></div>
+      <div class="actions"><button class="btn primary" id="dock-btn" aria-describedby="h-dock">Turn on</button><button class="btn" id="dock-settings-btn" aria-describedby="h-dock">Settings</button></div>
     </section>
-    <section class="card" id="c-insights" hidden>
-      <div class="head"><img src="hubicons/insights.png" alt="" /><div><h2>Ultra Suite Insights</h2><div class="ed">Owner dashboard</div></div><span class="pill" id="p-insights">Checking</span></div>
+    <section class="card" id="c-insights" aria-labelledby="h-insights" hidden>
+      <div class="head"><img src="hubicons/insights.png" alt="" /><div><h2 id="h-insights">Ultra Suite Insights</h2><div class="ed">Owner dashboard</div></div><span class="pill" id="p-insights">Checking</span></div>
       <div class="status"><div class="big" id="s-insights">Checking…</div><div class="small">Installs, versions and feedback.</div></div>
-      <div class="actions"><button class="btn primary" data-launch="insights">Launch</button></div>
+      <div class="actions"><button class="btn primary" data-launch="insights" aria-describedby="h-insights">Launch</button></div>
     </section>
   </div>
 
-  <h3>Editions</h3>
+  <h3 id="h-editions">Editions</h3>
   <table aria-label="Public and Dev editions">
     <thead><tr><th>Public edition (GitHub release)</th><th>Dev edition (built from source)</th></tr></thead>
     <tbody id="eds"></tbody>
   </table>
-  <p class="sub" style="margin-top:10px" id="ed-note"></p>
-</main>
+  <p class="note" id="ed-note"></p>
+</div></main>
 <script src="no_context_menu.js"></script>
 <script>
 const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
@@ -225,20 +251,28 @@ async function sentinelCard() {
     $("cpu-t").textContent = cpuT == null ? "--" : `${Math.round(cpuT)}°C`;
     $("gpu-t").textContent = gpuT == null ? "--" : `${Math.round(gpuT)}°C`;
     $("cpu-l").textContent = cpuL == null ? "--" : `${Math.round(cpuL)}%`;
+    $("s-sentinel").parentElement.classList.remove("stale");
     const hot = (cpuT != null && cpuT >= 90) || (gpuT != null && gpuT >= 85);
     if (!hw.live) { pill("p-sentinel", "Limited", "warn"); $("s-sentinel").textContent = "Live sensors are not available"; }
     else if (hot) { pill("p-sentinel", "Running hot", "warn"); $("s-sentinel").textContent = "Temperatures are high"; }
     else { pill("p-sentinel", "Healthy", "on"); $("s-sentinel").textContent = "Temperatures look normal"; }
-  } catch { pill("p-sentinel", "Not running", "off"); $("s-sentinel").textContent = "The Sentinel service is not answering"; }
+  } catch {
+    pill("p-sentinel", "Not running", "off"); $("s-sentinel").textContent = "The Sentinel service is not answering";
+    $("s-sentinel").parentElement.classList.add("stale");
+  }
 }
 
+let dockBusy = false;
 async function dockCard() {
-  let on = info.dock_on;
-  if (invoke) { try { const d = await invoke("hub_info"); info = d; on = d.dock_on; } catch {} }
+  let on = info.dock_on, failed = false;
+  if (invoke) { try { const d = await invoke("hub_info"); info = { ...d, dock_cap: info.dock_cap, dock_shown: info.dock_shown }; on = d.dock_on; } catch { failed = true; on = null; } }
+  // The switch button is usable whenever the Dock state is known (it may have been unknown on an earlier pass)
+  $("dock-btn").disabled = dockBusy || on == null;
   if (on === true && info.dock_grouping === false) { pill("p-dock", "Standing by", "warn"); $("s-dock").textContent = "The Dock is on, your taskbar looks as usual"; $("s-dock-2").textContent = info.dock_note || "Every taskbar button stays visible for now."; $("dock-btn").textContent = "Turn off"; }
   else if (on === true) { pill("p-dock", "On", "on"); $("s-dock").textContent = "The Dock is organizing your taskbar"; $("s-dock-2").textContent = "Apps are grouped into folders next to Start."; $("dock-btn").textContent = "Turn off"; }
   else if (on === false) { pill("p-dock", "Off", "off"); $("s-dock").textContent = "The Dock is off"; $("s-dock-2").textContent = "Your taskbar shows every button as usual."; $("dock-btn").textContent = "Turn on"; }
-  else { pill("p-dock", "Unknown", "off"); $("s-dock").textContent = "Open this window from the Ultra Suite app to control the Dock"; $("dock-btn").disabled = true; }
+  else if (failed) { pill("p-dock", "Not answering", "warn"); $("s-dock").textContent = "The Dock is not answering yet"; $("s-dock-2").textContent = "This card checks again every few seconds."; }
+  else { pill("p-dock", "Unknown", "off"); $("s-dock").textContent = "Open this window from the Ultra Suite app to control the Dock"; $("s-dock-2").textContent = ""; }
 }
 
 async function insightsCard() {
@@ -278,12 +312,17 @@ async function editions() {
     return `<td><span class="edc"><img src="${icon}" alt="" />${label}</span><span class="small">${status}</span>` +
       `<button class="btn" data-ed-launch="${ed.edition}:${app}">Launch</button></td>`;
   }
+  if (!pub && !dev) {
+    $("eds").innerHTML = `<tr><td class="empty-row" colspan="2">${invoke ? "Edition details load when the Dock answers. This table checks again every few seconds." : "Edition details appear when this window is opened from the Ultra Suite app."}</td></tr>`;
+    $("ed-note").textContent = "";
+    return;
+  }
   const out = [];
   for (const [app, portKey] of apps) {
     if (app === "insights" && !info.insights_installed && !(dev && dev.installed)) continue;
     out.push(`<tr>${await cell(pub, app, portKey)}${await cell(dev, app, portKey)}</tr>`);
   }
-  const dockCell = (ed) => !ed ? `<td class="muted">--</td>` : `<td>${(ed.names && ed.names.dock) || "Ultra Dock"}<span class="small">${
+  const dockCell = (ed) => !ed ? `<td class="muted">--</td>` : `<td${ed.current || ed.installed ? "" : ` class="muted"`}><span class="edc"><img src="hubicons/${ed.edition === "Dev" ? "dev/" : ""}dock.png" alt="" />${(ed.names && ed.names.dock) || "Ultra Dock"}</span><span class="small">${
     ed.current ? (info.dock_on ? (info.dock_grouping ? "On, managing the taskbar" : "On, standing by") : "Off") : (ed.installed ? "Only one Dock manages the taskbar at a time" : "Not installed")}</span></td>`;
   out.push(`<tr>${dockCell(pub)}${dockCell(dev)}</tr>`);
   out.push(`<tr><td><span class="small">Rings your alarms, updates from GitHub</span></td><td class="muted"><span class="small">Alarms never ring, updates from local builds</span></td></tr>`);
@@ -306,36 +345,54 @@ document.addEventListener("click", async (e) => {
   const l = e.target.closest("[data-launch]"), g = e.target.closest("[data-go]");
   const name = l ? l.dataset.launch : g ? g.dataset.go : null;
   if (!name) return;
-  if (name === "dock") { $("c-dock").scrollIntoView({ behavior: "smooth", block: "nearest" }); return; }
-  if (invoke) await invoke("open_app_view", { name }).catch(() => {});
+  if (name === "dock") { $("c-dock").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" }); return; }
+  if (!invoke) return;
+  // Launch says it is working until the app window has had time to open, and cannot be double-clicked meanwhile
+  if (l && l.disabled) return;
+  if (l) { l.disabled = true; l.dataset.label = l.textContent; l.textContent = "Opening…"; }
+  await invoke("open_app_view", { name }).catch(() => {});
+  if (l) setTimeout(() => { l.disabled = false; l.textContent = l.dataset.label || "Launch"; }, 1200);
 });
-/* "Show up to N apps" for the Dock: Automatic or 0 to 30 */
-(function capPicker(){
-  const sel = $("dock-cap");
-  sel.innerHTML = `<option value="auto">Automatic</option>` + Array.from({ length: 31 }, (_, n) =>
-    `<option value="${n}">${n === 0 ? "None (all in folders)" : n === 1 ? "1 app" : n + " apps"}</option>`).join("");
-  sel.onchange = async () => {
-    if (!invoke) return;
-    const cap = sel.value === "auto" ? null : Number(sel.value);
-    try { const r = await invoke("set_dock_cap", { cap }); info.dock_cap = r && "cap" in r ? r.cap : cap; } catch {}
-  };
-})();
+/* Dock app count: minus, the count, plus and Automatic (0 to 30), the same stepper as Dock settings and the Dock
+   menu. From Automatic, minus and plus start at the number of apps the taskbar shows on their own right now. */
+const CAP_MAX = 30;
+let capBusy = false;
+const capNow = () => (typeof info.dock_cap === "number" ? info.dock_cap : null);
 function showCap(){
-  const sel = $("dock-cap"); if (document.activeElement === sel) return;
-  sel.value = typeof info.dock_cap === "number" ? String(info.dock_cap) : "auto";
-  sel.disabled = !invoke;
+  const c = capNow(), shown = Math.max(0, Math.min(CAP_MAX, Number.isInteger(info.dock_shown) ? info.dock_shown : 0));
+  const value = c === null ? shown : c, off = !invoke || capBusy;
+  $("dock-cap-count").textContent = c === null ? "Automatic" : `${c} ${c === 1 ? "app" : "apps"}`;
+  $("dock-cap-minus").disabled = off || value <= 0;
+  $("dock-cap-plus").disabled = off || value >= CAP_MAX;
+  $("dock-cap-auto").setAttribute("aria-pressed", String(c === null));
+  $("dock-cap-auto").disabled = off || c === null;
 }
+async function stepCap(action){
+  if (!invoke || capBusy) return;
+  const previous = capNow(), shown = Number.isInteger(info.dock_shown) ? info.dock_shown : 0;
+  const base = previous === null ? shown : previous;
+  const cap = action === "auto" ? null : Math.max(0, Math.min(CAP_MAX, base + action));
+  if (cap === previous) return;
+  capBusy = true; info.dock_cap = cap; showCap();
+  const help = $("dock-cap-help"); help.classList.remove("err");
+  try { const r = await invoke("set_dock_cap", { cap }); info.dock_cap = r && "cap" in r ? r.cap : cap; help.textContent = "The rest go into folders. Automatic groups apps by category."; }
+  catch (e) { info.dock_cap = previous; help.textContent = `Could not save the app count. ${String(e || "Try again.")}`; help.classList.add("err"); }
+  finally { capBusy = false; showCap(); }
+}
+$("dock-cap-minus").onclick = () => stepCap(-1);
+$("dock-cap-plus").onclick = () => stepCap(1);
+$("dock-cap-auto").onclick = () => stepCap("auto");
 $("dock-settings-btn").onclick = () => { if (invoke) invoke("open_dock_settings").catch(() => {}); };
 $("dock-btn").onclick = async () => {
-  if (!invoke) return; const b = $("dock-btn"); b.disabled = true;
+  if (!invoke || dockBusy) return; const b = $("dock-btn"); dockBusy = true; b.disabled = true;
   try { await invoke("hub_set_dock", { on: !info.dock_on }); } catch {}
-  b.disabled = false; await dockCard(); editions();
+  dockBusy = false; await dockCard(); editions();
 };
 
 async function tick() {
   greet();
   await dockCard();
-  if (invoke) { try { const r = await invoke("dock_cap_info"); info.dock_cap = r ? r.cap : null; } catch {} }
+  if (invoke && !capBusy) { try { const r = await invoke("dock_cap_info"); if (!capBusy) { info.dock_cap = r ? r.cap : null; info.dock_shown = r ? r.shown : 0; } } catch {} }
   showCap();
   $("ver").textContent = info.version ? `${ED.product} ${info.version}` : ED.product;
   await Promise.all([alarmCard(), sentinelCard(), insightsCard()]);
