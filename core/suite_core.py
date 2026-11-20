@@ -59,8 +59,64 @@ if __name__ == "__main__" and "--describe" in sys.argv[1:]:
 os.makedirs(CONF_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
+import threading  # noqa: E402
+import time  # noqa: E402
+
+LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def rotate_log(path, max_bytes=LOG_MAX_BYTES):
+    """Keep core.log small: past max_bytes it becomes core.log.1 (replacing the older copy) before writing starts."""
+    try:
+        if os.path.getsize(path) > max_bytes:
+            os.replace(path, path + ".1")
+            return True
+    except OSError:
+        pass
+    return False
+
+
+class TimestampedLog:
+    """A text stream that starts every line with the local date and time, so core.log says when things happened.
+    Thread-safe: services on several threads write here."""
+
+    def __init__(self, handle, clock=None):
+        self.handle = handle
+        self.clock = clock or (lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+        self.at_line_start = True
+        self.lock = threading.Lock()
+
+    def write(self, text):
+        if not text:
+            return 0
+        with self.lock:
+            out = []
+            for part in str(text).splitlines(keepends=True):
+                if self.at_line_start:
+                    out.append(self.clock() + " ")
+                out.append(part)
+                self.at_line_start = part.endswith(("\n", "\r"))
+            self.handle.write("".join(out))
+        return len(text)
+
+    def flush(self):
+        self.handle.flush()
+
+    def isatty(self):
+        return False
+
+    def fileno(self):
+        return self.handle.fileno()
+
+    @property
+    def encoding(self):
+        return "utf-8"
+
+
 if sys.stdout is None or sys.stderr is None:  # windowed exe: log to file
-    _log = open(os.path.join(DATA_DIR, "core.log"), "a", buffering=1, encoding="utf-8")
+    _log_path = os.path.join(DATA_DIR, "core.log")
+    rotate_log(_log_path)
+    _log = TimestampedLog(open(_log_path, "a", buffering=1, encoding="utf-8", errors="replace"))
     sys.stdout = sys.stdout or _log
     sys.stderr = sys.stderr or _log
 
@@ -97,6 +153,25 @@ def _gateway():
         return ""
 
 
+def parse_settings(lines):
+    """KEY=value lines from settings.env. Blank lines and # comments are skipped, an optional 'export ' prefix and
+    matching quotes around a value are removed, and a later line wins over an earlier one."""
+    values = {}
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip(), v.strip()
+        if k.startswith("export "):
+            k = k[len("export "):].strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        if k:
+            values[k] = v
+    return values
+
+
 def load_settings():
     """Dev: repo .env. Installed: %APPDATA%\\UltraSuite\\settings.env (created with safe defaults)."""
     path = edition_runtime.settings_file(PROFILE, ROOT, FROZEN, CONF_DIR)  # Dev never reads the repo's .env
@@ -107,11 +182,12 @@ def load_settings():
                     f"GLINET_ROUTER_IP={_gateway()}\n"
                     "GLINET_ADMIN_PASSWORD=\nONESCRIPT_PATH=\nALARM_SPEAKER_MATCH=\nDEFAULT_RING_DURATION_SEC=600\n"
                     "TELEMETRY=ask\n")
-    values = {}
-    for line in open(path, encoding="utf-8-sig"):
-        if "=" in line and not line.lstrip().startswith("#"):
-            k, v = line.split("=", 1)
-            values[k.strip()] = v.strip()  # a later line wins over an earlier one
+    try:
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
+            values = parse_settings(f)
+    except OSError as exc:  # unreadable settings must not stop alarms and monitoring from starting
+        print(f"[core] couldn't read {path} ({exc.__class__.__name__}); using built-in defaults")
+        values = {}
     for k, v in values.items():
         if k == "TZ" and os.name == "nt":
             continue  # Docker-only setting; on Windows it would push every clock in the suite to UTC
@@ -150,7 +226,52 @@ def port_busy(port):
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def port_free(label, port, busy=port_busy):
+    """True when this core can serve label on port. A busy port is logged by name, so a skipped service is visible
+    in core.log instead of silently missing."""
+    if busy(port):
+        print(f"[core] port {port} is already in use, so {label} was not started by this core")
+        return False
+    return True
+
+
+STOP = threading.Event()
+
+
+def install_stop_signals(event=STOP):
+    """Ctrl+Break and SIGTERM ask the core to stop its services in order (alarm last) instead of dying mid-write.
+    Ctrl+C keeps working through KeyboardInterrupt. Returns the signal names that were hooked."""
+    import signal
+    hooked = []
+    for name in ("SIGTERM", "SIGBREAK"):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            signal.signal(sig, lambda *_: event.set())
+            hooked.append(name)
+        except (ValueError, OSError):  # not the main thread, or not supported here
+            pass
+    return hooked
+
+
+def start_http_thread(server, name):
+    threading.Thread(target=server.serve_forever, name=f"ultrasuite-{name}", daemon=True).start()
+    return server
+
+
+def close_http_servers(servers):
+    """Stop helper HTTP servers (speaker helper, add-on) and release their ports. Never raises."""
+    for srv in servers:
+        try:
+            srv.shutdown()
+            srv.server_close()
+        except Exception as exc:
+            print(f"[core] helper server did not close cleanly: {exc!r}")
+
+
 def run_services():
+    started_at = time.monotonic()
     alarm_port, sentinel_port, audio_port = PORTS["alarm"], PORTS["sentinel"], PORTS["audio"]
     if port_busy(alarm_port) and port_busy(sentinel_port):
         print("[core] already running")
@@ -161,9 +282,12 @@ def run_services():
     from http.server import ThreadingHTTPServer
     bridge = load_module("ultra_audio_bridge", os.path.join(ROOT, "code_red_alarm", "backend", "audio_enforcer.py"))
     handler = bridge.Handler if delivery else edition_runtime.gated_bridge_handler(bridge.Handler, getattr(bridge, "siren", None))
-    if not port_busy(audio_port):
-        threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", audio_port), handler).serve_forever, daemon=True).start()
-    start_local_addons(ThreadingHTTPServer)
+    helpers = []
+    if port_free("the speaker helper", audio_port):
+        helpers.append(start_http_thread(ThreadingHTTPServer(("127.0.0.1", audio_port), handler), "speaker"))
+    addon = start_local_addons(ThreadingHTTPServer)
+    if addon is not None:
+        helpers.append(addon)
 
     load_package("alarm_backend", os.path.join(ROOT, "code_red_alarm", "backend"))
     load_package("sentinel_backend", os.path.join(ROOT, "pc_sentinel", "backend"))
@@ -185,21 +309,34 @@ def run_services():
             print(f"[core] insights not loaded: {exc}")
 
     def server(app_, port, lifespan="auto"):
-        return uvicorn.Server(uvicorn.Config(app_, host="127.0.0.1", port=port, log_level="warning",
-                                             log_config=None, lifespan=lifespan))
+        return uvicorn.Server(uvicorn.Config(app_, **server_options(port), lifespan=lifespan))
 
     # The alarm gets its own thread and event loop, so a slow or blocking Sentinel/Insights handler can't delay the
     # alarm scheduler. This is thread isolation inside one process: a crash of the whole core still stops both.
-    alarm_servers = [] if port_busy(alarm_port) else [server(alarm_app, alarm_port, "on")]
-    other_servers = [] if port_busy(sentinel_port) else [server(sentinel_app, sentinel_port, "on")]
+    alarm_servers = [server(alarm_app, alarm_port, "on")] if port_free("Code Red Alarm", alarm_port) else []
+    other_servers = [server(sentinel_app, sentinel_port, "on")] if port_free("PC Sentinel", sentinel_port) else []
     if insights:
-        other_servers += [server(app_, port) for app_, port in ((insights.collector, PORTS["insights_collector"]),
-                                                                (insights.dashboard, PORTS["insights_dashboard"]))
-                          if not port_busy(port)]
+        other_servers += [server(app_, port) for app_, label, port in
+                          ((insights.collector, "the Insights collector", PORTS["insights_collector"]),
+                           (insights.dashboard, "the Insights dashboard", PORTS["insights_dashboard"]))
+                          if port_free(label, port)]
     groups = [g for g in (ServiceLoop("alarm", alarm_servers), ServiceLoop("services", other_servers)) if g.servers]
 
-    print("[core] services starting")
-    return supervise(groups)
+    hooked = install_stop_signals()
+    print(f"[core] services starting ({time.monotonic() - started_at:.1f} s after launch"
+          + (f"; {' and '.join(hooked)} stop it cleanly)" if hooked else ")"))
+    try:
+        return supervise(groups, should_stop=STOP.is_set)
+    finally:
+        close_http_servers(helpers)
+        print("[core] stopped")
+
+
+def server_options(port):
+    """uvicorn settings shared by every service: loopback only, quiet logs, no Server header, and at most 5 s for
+    open requests to finish when the core stops."""
+    return {"host": "127.0.0.1", "port": port, "log_level": "warning", "log_config": None,
+            "server_header": False, "timeout_graceful_shutdown": 5}
 
 
 class ServiceLoop:
@@ -352,9 +489,11 @@ def supervise(groups, *, start_timeout=20.0, poll=0.5, stop_timeout=10.0, should
                     print(f"[core] {g.name} stopped" + (f": {g.error!r}" if g.error else ""))
                     return 0 if g.error is None else 1
             if should_stop is not None and should_stop():
+                print("[core] stop requested; stopping services")
                 return 0
             time.sleep(poll)
     except KeyboardInterrupt:
+        print("[core] Ctrl+C; stopping services")
         return 0
     finally:
         for g in reversed(started):
@@ -366,19 +505,21 @@ def start_local_addons(server_cls):
     """Optional personal extras that are not part of Ultra Suite and never ship with it.
 
     If %APPDATA%\\UltraSuite\\local\\volume_knob_daemon.py exists (or ULTRASUITE_LOCAL_ADDON names a file), it is
-    served on 127.0.0.1:8093. When no such file exists, nothing runs.
+    served on 127.0.0.1:8093. When no such file exists, nothing runs. Returns the running server, or None.
     """
     places = [os.environ.get("ULTRASUITE_LOCAL_ADDON", ""), os.path.join(CONF_DIR, "local", "volume_knob_daemon.py")]
     path = next((p for p in places if p and os.path.isfile(p)), None)
     port = PORTS["addon"]  # 8093, Dev 18093 (Dev ignores the inherited ULTRASUITE_LOCAL_ADDON)
-    if not path or port_busy(port):
-        return
+    if not path or not port_free("the local add-on", port):
+        return None
     try:
         knobs = load_module("ultra_knob_daemon", path)
-        threading.Thread(target=server_cls(("127.0.0.1", port), knobs.KnobDaemonHandler).serve_forever, daemon=True).start()
+        srv = start_http_thread(server_cls(("127.0.0.1", port), knobs.KnobDaemonHandler), "addon")
         print(f"[core] local add-on: knob service from {path}")
+        return srv
     except Exception as exc:
         print(f"[core] local add-on failed: {exc}")
+        return None
 
 
 if __name__ == "__main__":

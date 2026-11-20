@@ -1,5 +1,7 @@
 # Ultra Suite
 
+[![CI](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/ci.yml) [![CodeQL](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/jeemwla/ultra-productivity-suite/actions/workflows/codeql.yml) [![Latest release](https://img.shields.io/github/v/release/jeemwla/ultra-productivity-suite?label=release)](https://github.com/jeemwla/ultra-productivity-suite/releases/latest) [![License: MIT](https://img.shields.io/github/license/jeemwla/ultra-productivity-suite)](LICENSE)
+
 Free Windows utilities for organizing open apps, monitoring your PC, and setting local alarms.
 
 [Download the Windows installer, v2.2.16 (x64)](https://github.com/jeemwla/ultra-productivity-suite/releases/download/v2.2.16/UltraSuite-Setup-2.2.16-x64.exe) · [Latest release and notes](https://github.com/jeemwla/ultra-productivity-suite/releases/latest)
@@ -47,7 +49,7 @@ Desktop, sleep/wake, multi-monitor, laptop and clean-PC acceptance remain separa
 
 The Dev edition is for the owner's local testing and is not offered here as a public download. Its app identities, data directories and service ports are separate from Public. Dev disables alarm delivery, wake scheduling, GitHub self-updates and production reporting; Dock grouping defaults to off.
 
-Ultra Suite Insights is a maintainer dashboard for collected usage/feedback events and GitHub statistics. Its services load in owner mode or Dev. It is not a fourth consumer app or a requirement for the three public utilities.
+Ultra Suite Insights is a maintainer dashboard for collected usage/feedback events and GitHub statistics. Its services load in owner mode or Dev. It is not a fourth consumer app or a requirement for the three public utilities. See [docs/INSIGHTS.md](docs/INSIGHTS.md).
 
 The [roadmap](ROADMAP.md) tracks planned work. Roadmap entries are not released features.
 
@@ -57,13 +59,24 @@ The apps provide light/dark appearance options and additional themes, with motio
 
 ## Privacy and optional connections
 
-Core services bind to loopback and run locally. Alarm scheduling and local hardware monitoring do not require a hosted account.
+Core services bind to loopback and run locally. They answer only requests addressed to this PC, and accept changes from a browser only when they come from the suite's own pages. Alarm scheduling and local hardware monitoring do not require a hosted account. [docs/CORE.md](docs/CORE.md) lists every port and protection.
 
 Network-dependent features include update checks, optional sensor setup downloads, latency probes, the on-demand speed test, configured VPN controls, optional usage reporting and submitted feedback.
 
-Usage reporting is opt-in. Feedback sends the entered message and category with app/version information, Windows version and a random local identifier to the configured maintainer collector. Feedback and reporting are not required to use the local apps. The identifier is pseudonymous; it should not be described as proving anonymity.
+Usage reporting is opt-in. Feedback (3 to 1,000 characters) sends the entered message and category with app/version information, Windows version and a random local identifier to the configured maintainer collector. Feedback and reporting are not required to use the local apps. The identifier is pseudonymous; it should not be described as proving anonymity.
 
 Optional device integrations remain available for configured setups. Router-specific VPN controls require separate setup.
+
+## Documentation
+
+| Document | Covers |
+|---|---|
+| [docs/SCREENS.md](docs/SCREENS.md) | What each app's main screens show, in text |
+| [docs/SETTINGS.md](docs/SETTINGS.md) | PC Sentinel's Settings / Extras page |
+| [docs/PSU_CATALOG.md](docs/PSU_CATALOG.md) | The offline PSU catalog, its source and limits |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Empty windows, busy ports, silent alarms, missing sensors |
+| [docs/CORE.md](docs/CORE.md) | The background core: ports, folders, logs, stopping, local-only protections |
+| [docs/INSIGHTS.md](docs/INSIGHTS.md) | The maintainer dashboard and event collector |
 
 ## For developers
 
@@ -76,12 +89,15 @@ Optional device integrations remain available for configured setups. Router-spec
 | insights/ | Owner/Dev-only event collector and maintainer dashboard |
 | tests/ | Backend, native-policy and frontend-helper regression tests |
 
-Run backend tests from the repository root:
+Run backend tests from the repository root (Node.js 22 or newer expands the test glob itself, so the command also works in PowerShell). Install `requirements.txt` and `requirements-build.txt` first, as CI does. Some tests create temporary folders under the gitignored `private/` folder, so create it first in a fresh clone:
 
 ~~~powershell
+New-Item -ItemType Directory -Force private | Out-Null
 python -W ignore -m unittest discover -s tests
 node --test tests/*.test.cjs
 ~~~
+
+To run the core from source with its logs in the console, use `python core/suite_core.py` (Public) or `python core/suite_core.py --edition Dev`; Ctrl+C stops the services in order. `--describe` prints the edition's folders and ports without starting anything.
 
 Run native tests in ultra_dock/src-tauri:
 
