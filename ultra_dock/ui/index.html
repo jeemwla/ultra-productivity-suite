@@ -167,6 +167,7 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
     <small>Anonymous: only your answer, the app version and Windows are sent.</small>
   </form>
 </div>
+<script src="no_context_menu.js"></script>
 <script>
 const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
 const view = new URLSearchParams(location.search).get("view") || "strip";
@@ -330,7 +331,17 @@ function render(){
   // keep any open tray at its natural width
   $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
   applyFocus();
-  requestAnimationFrame(report);
+  scheduleReport();
+}
+/* Acknowledge a render after layout. A strip that Windows covers (a click raises the
+   taskbar over it) or hides can stop animation frames, and a missing acknowledgement
+   would make the Dock look stale and hand every app back to the native taskbar. */
+function scheduleReport(){
+  let sent = false;
+  const send = () => { if (sent) return; sent = true; report(); };
+  if (document.hidden) { setTimeout(send, 0); return; }
+  requestAnimationFrame(send);
+  setTimeout(send, 250);
 }
 /* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
 function report(){
@@ -420,6 +431,31 @@ async function handleDockClick(e){
 }
 $("strip").addEventListener("click", handleDockClick);
 $("dock-menu").addEventListener("click", handleDockClick);
+/* Right-click works like the native taskbar: an app or folder gets its app menu, and
+   empty strip space gets the Dock menu. The browser menu never appears. */
+let contextMenuOpening = false;
+async function handleDockContextMenu(e){
+  e.preventDefault();
+  if (!invoke || contextMenuOpening) return;
+  const t = e.target.closest?.(".wt"), w = e.target.closest?.(".win"), g = e.target.closest?.(".grp");
+  contextMenuOpening = true;
+  try {
+    if (t || w) {
+      const b = t || w, hwnd = +b.dataset.h;
+      const exe = w ? w.dataset.exe : (state.windows.find(x => x.hwnd === hwnd) || {}).exe;
+      // A button for several windows names none of them, like a grouped native button.
+      const named = t || !w.hasAttribute("aria-expanded");
+      await invoke("show_app_menu", { exe: exe || null, hwnd: named && Number.isFinite(hwnd) ? hwnd : null, folder: null, folderExes: null });
+    } else if (g) {
+      const item = layoutItems().find(i => i.key === g.dataset.cat);
+      await invoke("show_app_menu", { exe: null, hwnd: null, folder: g.dataset.cat, folderExes: item ? item.exes : [] });
+    } else {
+      closeAll();
+      await invoke("show_dock_menu");
+    }
+  } catch {} finally { contextMenuOpening = false; }
+}
+if (view === "strip") document.addEventListener("contextmenu", handleDockContextMenu);
 /* Close any open folder and window list (a single app's list lives outside any folder) */
 function closeAll(){
   if (open) { setOpen(null); return; }  // setOpen also clears a list inside the folder

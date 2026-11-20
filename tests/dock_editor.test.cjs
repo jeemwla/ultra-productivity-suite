@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const E=require('../ultra_dock/ui/dock_editor.js');
+const fs=require('node:fs'),vm=require('node:vm');
 const app=(n,extra={})=>({file:`${n}.exe`,exe:`C:\\Apps\\${n}.exe`,keep_entry:`\\${n}.exe`,name:n,...extra});
 const cfg=()=>({categories:{Work:['apps']},order:['Work','Other'],overrides:{},keep:[]});
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
@@ -56,6 +57,73 @@ test('dwell waits 450 ms, does not restart over the same target, and cancels on 
   d.enter('a');assert.equal(queued,first);assert.deepEqual(ready,[]);
   queued();assert.deepEqual(ready,['a']);
   d.enter('b');assert.notEqual(queued,first);d.reset();assert.ok(cancels>=3);
+});
+
+function pointerPage(){
+  const html=fs.readFileSync(require('node:path').join(__dirname,'../ultra_dock/ui/dock.html'),'utf8');
+  const handlers={},groups=[],captured=new Set(),keys={};
+  const board={addEventListener:(name,fn)=>handlers[name]=fn,contains:()=>true,
+    setPointerCapture:id=>captured.add(id),hasPointerCapture:id=>captured.has(id),releasePointerCapture:id=>captured.delete(id)};
+  const tile={dataset:{folder:'Other'},querySelector:()=>null,querySelectorAll:()=>[{dataset:{file:'b.exe'}}]};
+  tile.classList={add:()=>{},remove:()=>{}};
+  const button={dataset:{file:'a.exe'},disabled:false,focus:()=>{}};
+  const c=vm.createContext({$:id=>id==='app-board'?board:{value:'New',textContent:''},CSS:{escape:x=>x},editing:true,dragging:null,preview:null,
+    document:{elementFromPoint:()=>({closest:()=>tile})},window:{addEventListener:(name,fn)=>keys[name]=fn},
+    traceEditor:()=>{},hover:{reset:()=>{c.preview=null;}},applyGroup:(...args)=>groups.push(args)});
+  const start=html.indexOf('let dragGesture=');
+  vm.runInContext(html.slice(start,html.indexOf('/* ---------- rendering')),c);
+  const event=(x=0,y=0,id=1)=>({preventDefault:()=>{},button:0,pointerId:id,clientX:x,clientY:y,target:{closest:()=>button}});
+  return {c,handlers,groups,captured,tile,button,keys,event};
+}
+test('captured pointer drag groups on release without a hover delay',()=>{
+  const p=pointerPage();p.handlers.pointerdown(p.event());assert.ok(p.captured.has(1));
+  p.handlers.pointermove(p.event(20,20));assert.equal(p.groups.length,0);
+  p.handlers.pointerup(p.event(20,20));assert.equal(p.groups.length,1);assert.equal(p.captured.size,0);
+  assert.deepEqual(Array.from(p.groups[0][0]),['a.exe','b.exe']);assert.equal(p.groups[0][1],'Other');assert.equal(p.groups[0][2],true);
+  assert.equal(vm.runInContext('suppressAppClick',p.c),true);
+  p.handlers.pointerdown({...p.event(),target:{closest:()=>null}});
+  assert.equal(vm.runInContext('suppressAppClick',p.c),false,'the next deliberate click must work on its first attempt');
+});
+test('clicks, pinned handles, self drops and cancelled gestures do not group',()=>{
+  const p=pointerPage();p.handlers.pointerdown(p.event());p.handlers.pointerup(p.event(2,2));assert.equal(p.groups.length,0);
+  p.button.disabled=true;p.handlers.pointerdown(p.event());assert.equal(p.captured.size,0);p.button.disabled=false;
+  p.handlers.pointerdown(p.event());p.tile.querySelector=()=>({});p.handlers.pointermove(p.event(20,20));p.handlers.pointerup(p.event(20,20));assert.equal(p.groups.length,0);
+  p.tile.querySelector=()=>null;p.handlers.pointerdown(p.event());p.handlers.pointermove(p.event(20,20));p.handlers.pointercancel();p.handlers.pointerup(p.event(20,20));assert.equal(p.groups.length,0);
+  p.handlers.pointerdown(p.event());p.handlers.pointermove(p.event(20,20));p.keys.keydown({key:'Escape'});p.handlers.pointerup(p.event(20,20));assert.equal(p.groups.length,0);
+});
+test('another pointer cannot move or finish a captured app gesture',()=>{
+  const p=pointerPage();p.handlers.pointerdown(p.event());p.handlers.pointermove(p.event(20,20,2));p.handlers.pointerup(p.event(20,20,2));assert.equal(p.groups.length,0);assert.ok(p.captured.has(1));
+  p.handlers.lostpointercapture();assert.equal(p.captured.size,0);
+});
+
+test('editor uses platform evidence for unknown titles while manual folders win',()=>{
+  const next={categories:{Games:[],Chat:['discord']},overrides:{},keep:[],order:['Games','Chat','Other']};
+  const game=app('discordquest',{game_install:true});
+  assert.equal(E.category(next,game),'Games');
+  next.overrides['discordquest.exe']='Custom';assert.equal(E.category(next,game),'Custom');
+  delete next.overrides['discordquest.exe'];delete next.categories.Games;
+  assert.equal(E.category(next,game),'Chat');
+});
+
+test('settings board follows the taskbar app count and excludes pins from that count',()=>{
+  const next={categories:{AI:['chatgpt'],Create:['obs'],Other:[]},order:['AI','Create','Other'],keep:[],overrides:{}};
+  const apps=[app('chatgpt'),app('obs'),app('photos'),app('ulanzideck'),app('opera',{pinned:true})];
+  const five=E.board(next,apps,5);assert.equal(five.length,5);assert.ok(five.every(item=>!item.folder));
+  const auto=E.board(next,apps,null);assert.equal(auto.length,4);assert.deepEqual(auto.find(item=>item.folder).apps.map(a=>a.file),['photos.exe','ulanzideck.exe']);
+});
+
+test('creating a folder saves its membership before switching to Automatic',async()=>{
+  const html=fs.readFileSync(require('node:path').join(__dirname,'../ultra_dock/ui/dock.html'),'utf8');
+  const calls=[],message={textContent:''},apps=[app('a'),app('b')];
+  const c=vm.createContext({DockEditor:E,S:{config:cfg(),apps,cap:5},dirty:false,selectedApps:new Set(),
+    change:config=>{c.S.config=config;calls.push('change');},save:async()=>calls.push('save'),
+    queueCap:async action=>{calls.push(action);c.S.cap=null;},renderApps:()=>{},renderCats:()=>{},renderKeep:()=>{},
+    $:()=>message,status:()=>{}});
+  vm.runInContext(html.slice(html.indexOf('async function applyGroup'),html.indexOf('$("edit-mode").onclick')),c);
+  await c.applyGroup(['a.exe','b.exe'],'Friends',false);
+  assert.deepEqual(calls,['change','save','auto']);assert.equal(c.S.cap,null);assert.match(message.textContent,/Grouped in Friends/);
+  calls.length=0;c.S.cap=5;c.dirty=true;await c.applyGroup(['a.exe','b.exe'],'Friends2',false);
+  assert.deepEqual(calls,['change','save']);assert.equal(c.S.cap,5,'failed or pending membership saves must not change the app count');
 });
 test('delayed save acknowledgements cannot overwrite edits and writes are serialized',async()=>{
   let current={value:1};const requests=[],writes=[],states=[];

@@ -1,0 +1,67 @@
+name: CodeQL
+
+# Code scanning for Python, JavaScript (including scripts inside the HTML pages), GitHub Actions
+# workflows and Rust. Results appear under Security > Code scanning and on pull requests.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 09:23 UTC, so new queries also run against code that has not changed.
+    - cron: "23 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            runner: ubuntu-latest
+          - language: javascript-typescript
+            runner: ubuntu-latest
+          - language: actions
+            runner: ubuntu-latest
+          # Most native code is behind cfg(windows), so Rust is extracted on Windows.
+          - language: rust
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create bundle resource folders
+        if: matrix.language == 'rust'
+        shell: pwsh
+        run: |
+          # build.rs runs tauri-build, which checks that bundle resources exist.
+          New-Item -ItemType Directory -Force -Path build/dist/ultrasuite-core, ultra_dock/src-tauri/appicons | Out-Null
+          Set-Content -Path build/dist/ultrasuite-core/README.txt -Value "CI placeholder"
+          Set-Content -Path ultra_dock/src-tauri/appicons/README.txt -Value "CI placeholder"
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - build
+              - ultra_dock/src-tauri/target
+              - "**/node_modules"
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
