@@ -73,3 +73,24 @@ test('paired strips report the partition generation and diagnostics only once pe
  assert.equal(calls[0].diagnostics.dpr,2);
  assert.equal(calls[1].diagnostics,undefined);
 });
+
+test('a render while the strip is covered or hidden is still acknowledged once',()=>{
+ const source=html.slice(html.indexOf('function scheduleReport(){'),html.indexOf('/* Only windows the strip actually shows'));
+ const run=(hidden,frameRuns)=>{
+  const timers=[],frames=[],context=vm.createContext({document:{hidden},reports:0,
+   requestAnimationFrame:cb=>frames.push(cb),setTimeout:cb=>timers.push(cb)});
+  vm.runInContext('function report(){reports++;}\n'+source,context);
+  context.scheduleReport();
+  if(frameRuns)frames.forEach(cb=>cb());
+  timers.forEach(cb=>cb());
+  return {reports:context.reports,frames:frames.length};
+ };
+ assert.equal(run(false,false).reports,1,'no animation frame while covered: the timer still acknowledges the render');
+ assert.equal(run(false,true).reports,1,'frame and timer together report only once');
+ const hidden=run(true,false);
+ assert.equal(hidden.reports,1);assert.equal(hidden.frames,0,'a hidden page does not wait for a frame');
+});
+test('render acknowledges through scheduleReport, not a bare animation frame',()=>{
+ const source=html.slice(html.indexOf('function render(){'),html.indexOf('function scheduleReport(){'));
+ assert.match(source,/scheduleReport\(\);/);assert.doesNotMatch(source,/requestAnimationFrame\(report\)/);
+});

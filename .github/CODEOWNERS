@@ -1,0 +1,5 @@
+# The maintainer reviews every change. GitHub requests this review automatically on pull requests,
+# including Dependabot updates. Workflows and repository automation are listed separately so a
+# future second maintainer can be added for app code without gaining review rights over CI.
+*           @jeemwla
+/.github/   @jeemwla

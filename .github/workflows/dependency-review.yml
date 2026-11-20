@@ -1,0 +1,29 @@
+name: Dependency review
+
+# Flags pull requests that add dependencies with known vulnerabilities (moderate or worse)
+# and posts a summary comment only when something is found.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
+          show-patched-versions: true

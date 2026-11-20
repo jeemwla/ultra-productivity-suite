@@ -1,0 +1,39 @@
+name: Label issues
+
+# Reads the "App" answer from the issue forms and adds the matching app label, so new reports
+# are sorted by app without manual triage. The issue text is untrusted, so it is passed through
+# an environment variable and only compared against fixed strings.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: Label by app
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Add the app label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          # Issue forms render each answer under its "### <label>" heading.
+          app=$(printf '%s\n' "$BODY" | tr -d '\r' | awk '/^### App[[:space:]]*$/{found=1; next} found && NF {print; exit}')
+          case "$app" in
+            "Ultra Dock"*) label=dock ;;
+            "PC Sentinel"*) label=sentinel ;;
+            "Code Red Alarm"*) label=alarm ;;
+            "Installer or updates"*) label=installer ;;
+            "Insights"*) label=insights ;;
+            *) echo "No app label for answer: ${app:-none}"; exit 0 ;;
+          esac
+          gh issue edit "$NUMBER" --add-label "$label"
+          echo "Added label $label"
