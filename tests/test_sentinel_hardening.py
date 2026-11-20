@@ -103,6 +103,45 @@ class PollLoop(unittest.TestCase):
         self.assertTrue(main.history_sample({"hardware": {"stale": True}})["stale"])
         main.history.clear()
 
+    def test_polls_slowly_only_when_nobody_is_watching(self):
+        saved = dict(main.viewers)
+        try:
+            main.viewers.update(sockets=0, last=1000)
+            self.assertEqual(main.poll_interval(1010), main.POLL_SECONDS)
+            self.assertEqual(main.poll_interval(1000 + main.IDLE_AFTER_SECONDS + 1), main.IDLE_POLL_SECONDS)
+            main.viewers["sockets"] = 1
+            self.assertEqual(main.poll_interval(5000), main.POLL_SECONDS, "an open window always gets one-second readings")
+            main.viewers["sockets"] = 0
+            TestClient(main.app, base_url="http://127.0.0.1:8084").get("/api/snapshot")
+            self.assertEqual(main.poll_interval(), main.POLL_SECONDS, "the hub asking for the snapshot counts as watching")
+        finally:
+            main.viewers.update(saved)
+
+    def test_open_windows_are_counted(self):
+        # A window that closed in an earlier test is noticed within about 2 s (its next send fails); wait for that first.
+        deadline = time.monotonic() + 5
+        while main.viewers["sockets"] and time.monotonic() < deadline:
+            time.sleep(0.02)
+        client = TestClient(main.app, base_url="http://127.0.0.1:8084")
+        with patch.dict(main.viewers, {"sockets": 0, "last": 0}):
+            with client.websocket_connect("ws://127.0.0.1:8084/ws", headers={"Origin": "http://127.0.0.1:8084"}) as ws:
+                ws.receive_json()
+                self.assertEqual(main.viewers["sockets"], 1)
+            deadline = time.monotonic() + 5
+            while main.viewers["sockets"] and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertEqual(main.viewers["sockets"], 0)
+            self.assertGreater(main.viewers["last"], 0)
+
+    def test_health_checks_do_not_count_as_watching(self):
+        saved = dict(main.viewers)
+        try:
+            main.viewers.update(sockets=0, last=0)
+            TestClient(main.app, base_url="http://127.0.0.1:8084").get("/api/health")
+            self.assertEqual(main.viewers["last"], 0)
+        finally:
+            main.viewers.update(saved)
+
     def test_health_before_the_first_snapshot_has_no_age(self):
         main.latest["ts"] = 0
         body = TestClient(main.app, base_url="http://127.0.0.1:8084").get("/api/health").json()

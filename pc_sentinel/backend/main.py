@@ -26,6 +26,21 @@ latest = {"hardware": {"live": False, "source": "starting", "groups": [], "summa
           "network": {"online": False, "targets": []}, "vpn": dict(VPN_OFF), "ts": 0}
 
 POLL_SECONDS = 1.0
+# With no window open and nobody asking for the snapshot, sensors are read every 5 s instead of every second;
+# the next window to connect wakes the loop at once. Nothing on the page depends on readings taken while unseen.
+IDLE_POLL_SECONDS = 5.0
+IDLE_AFTER_SECONDS = 30.0
+viewers = {"sockets": 0, "last": 0.0}
+
+
+def mark_viewer(now=None):
+    viewers["last"] = time.time() if now is None else now
+
+
+def poll_interval(now=None):
+    now = time.time() if now is None else now
+    watched = viewers["sockets"] > 0 or now - viewers["last"] < IDLE_AFTER_SECONDS
+    return POLL_SECONDS if watched else IDLE_POLL_SECONDS
 # A collector that hangs (an unresponsive sensor web server, a stuck WMI query) must not freeze every open window.
 # Each part gets its own deadline; on a miss the last good value stays and is marked stale.
 JOB_TIMEOUT = {"hardware": 8.0, "network": 5.0, "vpn": 8.0}
@@ -49,7 +64,43 @@ def _load_preview():
 
 
 PREVIEW_KIND, PREVIEW = _load_preview()
-_changed = asyncio.Event()
+class LoopSignal:
+    """An asyncio.Event per running event loop. A module-level Event binds to the first loop that waits on it, and a
+    socket served on any other loop (a test client, an embedding server) would then end at once."""
+
+    def __init__(self):
+        self._events = {}
+
+    def _event(self):
+        loop = asyncio.get_running_loop()
+        event = self._events.get(loop)
+        if event is None:
+            self._events = {l: e for l, e in self._events.items() if not l.is_closed()}
+            event = self._events[loop] = asyncio.Event()
+        return event
+
+    def set(self):
+        for loop, event in list(self._events.items()):
+            if loop.is_closed():
+                continue
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if loop is running:
+                event.set()
+            else:
+                loop.call_soon_threadsafe(event.set)
+
+    def clear(self):
+        self._event().clear()
+
+    async def wait(self):
+        await self._event().wait()
+
+
+_changed = LoopSignal()  # a new snapshot is ready
+_wake = LoopSignal()  # a window opened: poll now
 # The last two minutes of the numbers the charts draw, so a page opened now shows full charts instead of empty ones.
 HISTORY_SAMPLES = 120
 history = deque(maxlen=HISTORY_SAMPLES)
@@ -123,7 +174,11 @@ async def poll_loop():
             await poll_once()
         except Exception as exc:
             log_error("poll", f"{type(exc).__name__}: {exc}")
-        await asyncio.sleep(max(0.2, POLL_SECONDS - (time.monotonic() - started)))
+        _wake.clear()
+        try:
+            await asyncio.wait_for(_wake.wait(), max(0.2, poll_interval() - (time.monotonic() - started)))
+        except asyncio.TimeoutError:
+            pass
 
 
 @asynccontextmanager
@@ -187,12 +242,17 @@ async def serve_ui_script(name: str):
 
 @app.get("/api/snapshot")
 async def get_full_snapshot():
+    if poll_interval() != POLL_SECONDS:
+        _wake.set()  # coming back from idle: the next reading follows at once instead of after the 5 s pause
+    mark_viewer()
     return latest
 
 
 @app.get("/api/history")
 async def get_history():
-    """Oldest first, about one sample a second. Stale samples repeat the last good reading and are marked."""
+    """Oldest first, about one sample a second while watched (every 5 s while no window is open)."""
+    mark_viewer()
+    _wake.set()
     return {"interval_s": POLL_SECONDS, "samples": list(history)}
 
 
@@ -266,6 +326,9 @@ async def speedtest_ws(ws: WebSocket):
 async def telemetry_ws(ws: WebSocket):
     await ws.accept()
     last = -1
+    viewers["sockets"] += 1
+    mark_viewer()
+    _wake.set()  # a window just opened: fresh readings now, not after an idle pause
     try:
         while True:
             if latest["ts"] != last:
@@ -280,6 +343,9 @@ async def telemetry_ws(ws: WebSocket):
                     pass
     except (WebSocketDisconnect, RuntimeError):
         pass
+    finally:
+        viewers["sockets"] = max(0, viewers["sockets"] - 1)
+        mark_viewer()
 
 # Send feedback (forwards to the owner's collector)
 try:
