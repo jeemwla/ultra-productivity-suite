@@ -187,3 +187,15 @@ test('Show hidden counts hidden sensors and health warnings link to Performance'
  assert.equal(l(false,0),'Show hidden');assert.equal(l(false,4),'Show hidden (4)');assert.equal(l(true,4),'Hide hidden');
  assert.match(html,/hv\.cls !== "good" \? ` <a href="#performance">See Performance<\/a>`/);
 });
+test('a failed battery read never says No battery reported, and keeps the last good reading',async()=>{
+ const els={};const $=id=>els[id]??={textContent:'',innerHTML:''};let fail=false;
+ const ctx=vm.createContext({$,snap:{hardware:{groups:[]}},page:'other',document:{activeElement:null},setTimeout:()=>0,clearTimeout:()=>{},toast(){},
+  BatteryView:{html:(p)=>p?`PACK ${p.charge_pct}`:'No battery reported'},
+  api:async(u)=>{if(u==='/api/laptop/battery'){if(fail)throw new Error('offline');return {has_battery:true,charge_pct:64};}return {available:false};}});
+ vm.runInContext(cut('let pack = undefined','/* Thresholds stay inside').replace(/^let /,'var '),ctx);
+ await vm.runInContext('loadBattery()',ctx);assert.equal(els['bt-body'].innerHTML,'PACK 64');
+ fail=true;await vm.runInContext('loadBattery()',ctx);
+ assert.match(els['bt-body'].innerHTML,/could not be read just now/);assert.match(els['bt-body'].innerHTML,/Showing the last reading/);assert.match(els['bt-body'].innerHTML,/PACK 64/);
+ vm.runInContext('pack=undefined',ctx);await vm.runInContext('loadBattery()',ctx);
+ assert.match(els['bt-body'].innerHTML,/could not be read just now/);assert.doesNotMatch(els['bt-body'].innerHTML,/No battery reported/);
+});

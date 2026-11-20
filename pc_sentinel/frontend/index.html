@@ -821,9 +821,9 @@ function ovCardVisible(id){ const d = snap && snap.hardware.device || {};
   return true; }
 function renderOverviewBattery(){
   const d = snap && snap.hardware.device || {}; if (!d.has_battery) return;
-  if (Date.now() - packAt > 30000 && page === "overview") { packAt = Date.now(); api("/api/laptop/battery").then(v => { pack = v; renderOverviewBattery(); }).catch(() => {}); }
+  if (Date.now() - packAt > 30000 && page === "overview") { packAt = Date.now(); api("/api/laptop/battery").then(v => { pack = v; packError = false; renderOverviewBattery(); }).catch(() => { packError = true; renderOverviewBattery(); }); }
   const p = pack && pack.has_battery ? pack : null, BV = window.BatteryView;
-  if (!p) { $("ov-bat").innerHTML = `<div class="muted">Reading the battery…</div>`; return; }
+  if (!p) { $("ov-bat").innerHTML = `<div class="muted">${packError ? "Battery details could not be read just now. Trying again shortly." : "Reading the battery…"}</div>`; return; }
   const rate = typeof p.rate_w === "number" ? (p.charging ? `charging at ${n1(Math.abs(p.rate_w))} W` : p.rate_w < 0 ? `using ${n1(-p.rate_w)} W` : `${n1(p.rate_w)} W`) : "power not reported";
   const time = p.charging && p.minutes_to_full != null ? `full in ${BV.hm(p.minutes_to_full)}` : !p.plugged_in && p.minutes_left != null ? `${BV.hm(p.minutes_left)} left` : "";
   $("ov-bat").innerHTML = `<div class="big num">${p.charge_pct == null ? "–" : n0(p.charge_pct)}<small>% · ${esc(p.state || "state unavailable")}</small>${typeof p.charge_pct === "number" && p.charge_pct < 20 && p.plugged_in === false && !p.charging ? ` <span class="pill critical">Low, plug in soon</span>` : ""}</div><div class="muted">${[rate, time, p.health_pct != null ? `health ${n1(p.health_pct)}%` : null].filter(Boolean).map(esc).join(" · ")}</div>`; }
@@ -1190,10 +1190,10 @@ async function setupLhm(){ if (lhmBusy) return; lhmBusy = true; const b = $("lhm
 $("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (e.target.closest("[data-lhm]")) setupLhm(); });
 
 /* ---------- battery (laptops) ---------- */
-let pack = undefined, bhist = null, bright = null, batTimer = 0;
+let pack = undefined, packError = false, bhist = null, bright = null, batTimer = 0;
 let brightAt = 0;
 async function loadBattery(){
-  try { pack = await api("/api/laptop/battery"); } catch { pack = null; }
+  try { pack = await api("/api/laptop/battery"); packError = false; } catch { packError = true; if (!pack || !pack.has_battery) pack = null; } // a failed read keeps the last good one
   if (pack && pack.has_battery) { if (!bhist) api("/api/laptop/battery/history").then(h => { bhist = h; renderBattery(); }).catch(() => {});
     if (!bright || Date.now() - brightAt > 30000) { brightAt = Date.now(); try { bright = await api("/api/laptop/brightness"); } catch {} } } // each read starts PowerShell; 30 s is plenty
   renderBattery(); clearTimeout(batTimer); if (page === "battery") batTimer = setTimeout(loadBattery, 5000);
@@ -1202,7 +1202,8 @@ function renderBattery(){
   if (document.activeElement && document.activeElement.id === "bt-br") return;
   const bg = (snap && snap.hardware.groups || []).find(g => g.kind === "battery"), lv = bg && bg.sensors.find(s => /level|charge/i.test(s.name) && s.type !== "Voltage");
   const has = pack && pack.has_battery; $("bt-sub").textContent = has ? "From Windows' battery sensors and battery report" : "";
-  $("bt-body").innerHTML = BatteryView.html(pack, bhist, bright, lv ? lv.value : null);
+  // A failed read on a PC that has a battery must not read as "No battery reported".
+  $("bt-body").innerHTML = (packError ? `<div class="banner warning"><div class="ic">!</div><div><div class="t">Battery details could not be read just now</div><div class="s">${pack ? "Showing the last reading. " : ""}Sentinel tries again every few seconds.</div></div></div>` : "") + (packError && !pack ? "" : BatteryView.html(pack, bhist, bright, lv ? lv.value : null));
   const br = $("bt-br"); if (br) { br.oninput = () => { $("bt-brv").textContent = br.value + "%"; }; br.onchange = async () => { try { bright = await api("/api/laptop/brightness", { method: "POST", body: JSON.stringify({ percent: +br.value }) }); } catch (e) { toast(e.message, true); } }; }
 }
 
