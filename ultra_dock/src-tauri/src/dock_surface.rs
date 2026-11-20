@@ -47,6 +47,12 @@ impl HidingStability {
         let since = self.ready_since.get_or_insert(now_ms);
         now_ms.saturating_sub(*since) >= Self::RECOVERY_MS
     }
+    /// A native switcher session pauses hiding but says nothing about the Dock's health,
+    /// so it keeps the stable window: hiding resumes the moment the switcher closes.
+    pub fn allow_unless_switching(&mut self, ready: bool, switching: bool, now_ms: u64) -> bool {
+        if switching { return false; }
+        self.allow(ready, now_ms)
+    }
     pub fn active(&self, now_ms: u64) -> bool {
         self.ready_since.is_some_and(|since| now_ms.saturating_sub(since) >= Self::RECOVERY_MS)
     }
@@ -201,6 +207,21 @@ pub fn place_in_taskbar(left: i32, top: i32, right: i32, bottom: i32,
 
 #[cfg(test)]
 mod tests {
+    /// Owner bug 9 and defect 4: Alt+Tab restored every button and the 1.5 s stability
+    /// window then started over, so apps showed twice for seconds. A switcher session pauses
+    /// hiding without resetting stability; a health failure still resets it.
+    #[test]
+    fn a_switcher_session_does_not_restart_the_stability_wait() {
+        let mut s = HidingStability::default();
+        assert!(!s.allow(true, 0));
+        assert!(s.allow(true, HidingStability::RECOVERY_MS));
+        assert!(!s.allow_unless_switching(true, true, 1600), "no hiding while the switcher is open");
+        assert!(!s.allow_unless_switching(false, true, 1700), "switcher flags are not a health failure");
+        assert!(s.allow_unless_switching(true, false, 1800), "hiding resumes as soon as the switcher closes");
+        assert!(!s.allow_unless_switching(false, false, 1900), "a real failure still resets");
+        assert!(!s.allow(true, 2000) && s.allow(true, 2000 + HidingStability::RECOVERY_MS));
+    }
+
     use super::*;
     #[cfg(windows)]
     #[test]

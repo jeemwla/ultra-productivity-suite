@@ -248,7 +248,7 @@ mod art {
 }
 
 // ----------------------------------------------------------------------------- organizer config
-struct OrgCfg { keep: Vec<String>, order: Vec<String>, cats: Vec<(String, Vec<String>)>, overrides: HashMap<String, String> }
+struct OrgCfg { keep: Vec<String>, order: Vec<String>, cats: Vec<(String, Vec<String>)>, overrides: HashMap<String, String>, inline_window_list: bool }
 static ORG_CACHE: Mutex<Option<(SystemTime, std::sync::Arc<OrgCfg>)>> = Mutex::new(None);
 
 fn org_path() -> PathBuf { appdata("organizer.json") }
@@ -266,7 +266,7 @@ fn org_config() -> std::sync::Arc<OrgCfg> {
     if let Some(m) = v["categories"].as_object() { for (k, list) in m { cats.push((k.clone(), strs(list))); } }
     cats.sort_by_key(|(k, _)| order.iter().position(|o| o == k).unwrap_or(99));
     let overrides = v["overrides"].as_object().map(|m| m.iter().filter_map(|(k, x)| x.as_str().map(|s| (k.to_lowercase(), s.to_string()))).collect()).unwrap_or_default();
-    let cfg = std::sync::Arc::new(OrgCfg { keep: strs(&v["keep"]), order, cats, overrides });
+    let cfg = std::sync::Arc::new(OrgCfg { keep: strs(&v["keep"]), order, cats, overrides, inline_window_list: v["inline_window_list"].as_bool() == Some(true) });
     if let Ok(mut g) = ORG_CACHE.lock() { *g = Some((mt, cfg.clone())); }
     cfg
 }
@@ -300,7 +300,7 @@ mod category_contract_tests {
         OrgCfg { keep:vec![],order:vec![],cats:vec![
             ("Games".into(),vec!["steam".into()]),
             ("Chat".into(),vec!["discord".into()]),
-        ],overrides:Default::default() }
+        ],overrides:Default::default(),inline_window_list:false }
     }
     #[test]
     fn platform_roots_cover_unlisted_games_before_weak_keywords() {
@@ -656,7 +656,7 @@ fn organizer_loop() {
             SWITCHER_ACTIVE.store(paused, Ordering::Release);
             if paused {
                 ORGANIZER_FAST_STATUS.store(2,Ordering::Relaxed);
-                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
+                // The switcher pauses hiding without restarting the stability wait (owner bug 9).
                 if restore_for_switcher {
                     record_dock_event("switcher-restore-requested");
                     RESTORATION_PENDING.store(true, Ordering::Release);
@@ -672,7 +672,6 @@ fn organizer_loop() {
             }
             if !switcher_barrier::finish_session_if(session) {
                 ORGANIZER_FAST_STATUS.store(3,Ordering::Relaxed);
-                hiding_stability.allow(false,started.elapsed().as_millis() as u64);
                 continue;
             }
             let fast_ready = !SWITCHER_ACTIVE.load(Ordering::Acquire)
@@ -683,7 +682,7 @@ fn organizer_loop() {
                 let flags=[SWITCHER_ACTIVE.load(Ordering::Acquire),SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire),SWITCHER_VISIBLE.load(Ordering::Acquire),
                     LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire),switcher_barrier::faulted(),!may_organize,!ORGANIZE.load(Ordering::Acquire),!HEALTHY.load(Ordering::Acquire),RESTORATION_PENDING.load(Ordering::Acquire)];
                 ORGANIZER_FAST_STATUS.store(4|(flags.iter().enumerate().fold(0,|mask,(i,b)|mask|if *b {1<<i}else{0})<<8),Ordering::Relaxed);
-                hiding_stability.allow(false, started.elapsed().as_millis() as u64);
+                hiding_stability.allow_unless_switching(false, switcher_session_open(), started.elapsed().as_millis() as u64);
                 continue;
             }
             if !hiding_stability.active(started.elapsed().as_millis() as u64) { ORGANIZER_FAST_STATUS.store(5,Ordering::Relaxed); continue; }
@@ -706,7 +705,7 @@ fn organizer_loop() {
         let ready = guarded && SWITCHER_EVENTS_READY.load(Ordering::Acquire) && !switcher_barrier::faulted()
             && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && all_taskbars_covered() && !SWITCHER_ACTIVE.load(Ordering::Acquire)
             && grouping_allowed(may_organize, ORGANIZE.load(Ordering::Relaxed), HEALTHY.load(Ordering::Relaxed), RESTORATION_PENDING.load(Ordering::Acquire));
-        let on = hiding_stability.allow(ready, started.elapsed().as_millis() as u64);
+        let on = hiding_stability.allow_unless_switching(ready, switcher_session_open(), started.elapsed().as_millis() as u64);
         let checks=[may_organize,guarded,SWITCHER_EVENTS_READY.load(Ordering::Acquire),all_taskbars_covered(),
             !SWITCHER_ACTIVE.load(Ordering::Acquire),HEALTHY.load(Ordering::Acquire),!RESTORATION_PENDING.load(Ordering::Acquire),
             !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire),!switcher_barrier::faulted(),ready,on];
@@ -865,6 +864,12 @@ fn native_taskbars() -> Vec<isize> {
     let mut bars: Vec<isize> = vec![];
     unsafe { if EnumWindows(Some(scan), LPARAM(&mut bars as *mut _ as isize)).is_err() { return vec![]; } }
     bars
+}
+
+/// The native switcher (Alt+Tab, Task View) is open or its restore is still pending.
+fn switcher_session_open() -> bool {
+    SWITCHER_ACTIVE.load(Ordering::Acquire) || SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+        || SWITCHER_VISIBLE.load(Ordering::Acquire) || switcher_barrier::session_token().pending()
 }
 
 #[cfg(windows)]
@@ -1401,6 +1406,7 @@ fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
     } else if left { plan_json(&dock_layout::Plan::default()) } else {
         strip_plan(&wins, avail, surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.button_width_css)) };
     layout["show_menu"] = json!(!left);
+    layout["inline_window_list"] = json!(org_config().inline_window_list);
     layout["side"] = json!(if left {"left"} else {"right"});
     layout["centered"] = json!(centered);
     layout["generation"] = generation_json(generation);
@@ -1440,6 +1446,28 @@ async fn activate(hwnd: isize) -> bool {
     return tauri::async_runtime::spawn_blocking(move || activate_now(hwnd)).await.unwrap_or(false);
     #[cfg(not(windows))]
     false
+}
+
+/// Left click on a Dock app button, as on the native taskbar: bring the app's most recent
+/// window up, or minimize it when it is already in front.
+#[tauri::command]
+async fn app_button_click(hwnd: isize) -> bool {
+    #[cfg(windows)]
+    return tauri::async_runtime::spawn_blocking(move || {
+        use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::{GetForegroundWindow, ShowWindowAsync, SW_MINIMIZE}};
+        let listed: Vec<isize> = app_menu_snapshot().iter().map(|w| w.hwnd).collect();
+        let foreground = unsafe { GetForegroundWindow().0 as isize };
+        match dock_app_menu::button_click(hwnd, foreground, &listed) {
+            dock_app_menu::ButtonClick::Activate => activate_now(hwnd),
+            dock_app_menu::ButtonClick::Minimize => {
+                record_dock_event(&format!("minimize:{hwnd}"));
+                unsafe { ShowWindowAsync(HWND(hwnd as _), SW_MINIMIZE).as_bool() }
+            }
+            dock_app_menu::ButtonClick::Ignore => false,
+        }
+    }).await.unwrap_or(false);
+    #[cfg(not(windows))]
+    { let _ = hwnd; false }
 }
 
 #[tauri::command]
@@ -3169,7 +3197,7 @@ fn main() {
             Ok(())
         })
         .on_menu_event(handle_dock_menu)
-        .invoke_handler(tauri::generate_handler![get_windows, activate, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_editor_event, show_app_menu, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
+        .invoke_handler(tauri::generate_handler![get_windows, activate, app_button_click, set_organize, get_icon, set_strip_width, open_config, quit, open_app_view, send_event, hub_info, hub_set_dock, set_dock_cap, dock_cap_info, edition_info, launch_edition, open_dock_settings, open_dock_editor, dock_editor_event, show_app_menu, dock_settings_get, dock_settings_save, dock_settings_reset, show_dock_menu, close_dock_menu])
         .build(tauri::generate_context!())
         .expect("error while building Ultra Suite")
         .run(|_app, e| {

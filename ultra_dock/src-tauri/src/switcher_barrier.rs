@@ -70,6 +70,14 @@ fn alt_modifier_key(vk: u32) -> bool {
     matches!(vk, 0x12 | 0xA4 | 0xA5) // VK_MENU, VK_LMENU, VK_RMENU
 }
 
+/// Apps send an Alt key to take the foreground when they open a window. Such an injected
+/// Alt is not the user reaching for Alt+Tab, so it gives no lead restore. Tab chords, even
+/// injected ones, still use the checked barrier so the switcher lists every window.
+fn counts_as_switcher_key(vk: u32, injected: bool) -> bool {
+    !(injected && alt_modifier_key(vk))
+}
+
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Trigger { AltTab, TaskView }
 
@@ -412,7 +420,7 @@ unsafe extern "system" fn keyboard(
 ) -> windows::Win32::Foundation::LRESULT {
     use std::time::Instant;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, KBDLLHOOKSTRUCT, HC_ACTION, LLKHF_ALTDOWN,
+        CallNextHookEx, KBDLLHOOKSTRUCT, HC_ACTION, LLKHF_ALTDOWN, LLKHF_INJECTED,
         WM_KEYDOWN, WM_SYSKEYDOWN, WM_KEYUP, WM_SYSKEYUP,
     };
     // Only Win transitions, Alt-down and Tab chords matter. No text or history.
@@ -422,7 +430,8 @@ unsafe extern "system" fn keyboard(
     {
         let key = &*(data.0 as *const KBDLLHOOKSTRUCT);
         let down = message.0 == WM_KEYDOWN as usize || message.0 == WM_SYSKEYDOWN as usize;
-        if let Some(session) = STATE.observe_key(key.vkCode, down, key.flags.contains(LLKHF_ALTDOWN)) {
+        let counted = counts_as_switcher_key(key.vkCode, key.flags.contains(LLKHF_INJECTED));
+        if let Some(session) = counted.then(|| STATE.observe_key(key.vkCode, down, key.flags.contains(LLKHF_ALTDOWN))).flatten() {
             let entered = Instant::now();
             if STATE.fault.load(SeqCst) {
                 if let Some(callbacks) = CALLBACKS.get() { (callbacks.fault)(); }
@@ -467,6 +476,15 @@ unsafe extern "system" fn keyboard(
 
 #[cfg(test)]
 mod tests {
+    /// Defect 4: apps send an Alt key to take focus when a window opens. That injected Alt
+    /// must not restore every taskbar button. A real Alt press and any Tab chord still count.
+    #[test]
+    fn an_injected_alt_does_not_start_a_switcher_session() {
+        assert!(!counts_as_switcher_key(0x12, true) && !counts_as_switcher_key(0xA4, true) && !counts_as_switcher_key(0xA5, true));
+        assert!(counts_as_switcher_key(0xA4, false), "a physical Alt keeps its lead time");
+        assert!(counts_as_switcher_key(VK_TAB_CODE, true), "an injected Alt+Tab still restores before the switcher lists windows");
+        assert!(counts_as_switcher_key(VK_LWIN_CODE, true), "Win state is tracked for Task View");
+    }
     use super::*;
 
     fn ticket(state: &State) -> u64 {
