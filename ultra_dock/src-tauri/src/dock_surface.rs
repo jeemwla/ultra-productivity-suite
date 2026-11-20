@@ -210,6 +210,20 @@ mod tests {
         assert!(wanted.matches_native_rect((-1016,2054,-806,2114)));
         assert!(!wanted.matches_native_rect((-1015,2054,-805,2114)),"moved native controls also require reflow");
     }
+    /// Opening and closing a folder only changes the requested width. The strip must stay
+    /// inside its taskbar and keep fitting, so a folder can never cost coverage and
+    /// hand the grouped apps back to the native taskbar.
+    #[test]
+    fn opening_and_closing_a_folder_resizes_the_strip_inside_its_taskbar() {
+        let (left,top,right,bottom)=(0,1392,2560,1440);
+        let closed=place_in_taskbar(left,top,right,bottom,1437,2072,1.0,128);
+        let open=place_in_taskbar(left,top,right,bottom,1437,2072,1.0,400);
+        let huge=place_in_taskbar(left,top,right,bottom,1437,2072,1.0,1800);
+        for p in [closed,open,huge] {
+            assert!(p.fits);assert_eq!(p.x,1437);assert!(p.x+p.width<=2072);assert_eq!((p.y,p.height),(top,48));
+        }
+        assert_eq!((closed.width,open.width,huge.width),(128,400,2072-1437));
+    }
     #[test]
     fn a_taskbar_click_that_raises_the_taskbar_over_the_strip_is_detected() {
         let (taskbar,tooltip,menu)=(100,7,8);
