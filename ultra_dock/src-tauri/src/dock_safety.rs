@@ -36,11 +36,13 @@ impl StripListing {
     /// Layout preparation must survive asynchronous sibling creation and acknowledgements.
     /// It is bounded separately from an actual native-hide attempt, avoiding health/layout feedback.
     pub fn offer(&mut self, hwnd: isize, now_ms: u64, requested: bool, attempted: bool, native_hidden: bool) -> bool {
+        // Checked hidden ownership outlives a health/lease decision made mid-pass.
+        // Its replacement remains available until restoration succeeds.
+        if native_hidden { return self.decide(hwnd,now_ms,true,true); }
         if !requested {
             if let Some(a) = self.windows.get_mut(&hwnd) { a.preparing_since = None; a.first_try = None; }
             return false;
         }
-        if native_hidden { return self.decide(hwnd,now_ms,true,true); }
         let a = self.windows.entry(hwnd).or_default();
         if now_ms < a.retry_at { return false; }
         let since = *a.preparing_since.get_or_insert(now_ms);
@@ -78,6 +80,15 @@ impl StripListing {
 #[cfg(test)]
 mod listing_tests {
     use super::*;
+    #[test]
+    fn a_health_change_after_hiding_preserves_access_until_checked_restoration() {
+        let mut listing=StripListing::default();
+        assert!(listing.offer(9,0,true,true,true));
+        assert!(listing.offer(9,700,false,true,true),"confirmed hidden ownership survives ordinary presentation becoming unhealthy");
+        assert!(!listing.offer(9,1400,false,false,false),"successful native restoration ends the replacement");
+        assert!(listing.offer(9,2100,true,false,false),"new preparation resumes after recovery");
+    }
+
     #[test]
     fn preparing_a_new_surface_does_not_destroy_its_own_candidate_layout() {
         let mut listing = StripListing::default();

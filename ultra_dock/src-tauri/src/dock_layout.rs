@@ -225,6 +225,12 @@ pub struct PairedPlan {
     pub right_span: Span,
     pub generation: u64,
 }
+/// Runtime placement policy is separate from the two-sided geometry experiment.
+pub fn runtime_paired_plan(_groups:&[(String,Vec<String>)],_g:&TaskbarGeom,_cap:Option<usize>,_now:u64)->Option<PairedPlan> {
+    // The two-sided experiment violates the owner's Start-first app order.
+    // Runtime keeps every Dock app after native buttons using free_span.
+    None
+}
 pub const PAIRED_GEOMETRY_MAX_AGE_MS: u64 = 1_000;
 pub const PAIRED_PADDING_CSS: f64 = 8.0;
 
@@ -847,6 +853,15 @@ mod tests {
 #[cfg(test)]
 mod paired_tests {
     use super::*;
+    #[test]
+    fn runtime_contract_preserves_start_first_on_both_monitor_shapes() {
+        for portrait in [false,true] {
+            for cap in [None,Some(0),Some(7)] {
+                assert!(runtime_paired_plan(&groups(6),&geometry(portrait),cap,150).is_none(),
+                    "runtime must not put Dock applications left of Windows Start");
+            }
+        }
+    }
     fn geometry(portrait: bool) -> TaskbarGeom {
         let (left,right,nl,nr,scale)=if portrait {(-1440,0,-776,-665,1.25)} else {(0,2560,1126,1435,1.0)};
         TaskbarGeom {left,right,start_left:Some(nl),start_right:Some(nl+40),buttons_right:Some(nr),scale,

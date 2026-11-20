@@ -15,7 +15,7 @@ main{height:100%;overflow:auto;scrollbar-width:thin;background:var(--bg);border:
 <button class="action" data-action="edit"><span class="symbol" aria-hidden="true">▦</span>Edit folders<span class="arrow" aria-hidden="true">›</span></button>
 <div class="apps"><button data-action="sentinel">PC Sentinel</button><button data-action="alarm">Code Red Alarm</button></div>
 <details><summary>More</summary><button class="action" data-action="updates">Open Ultra Suite / updates</button><button class="action" data-action="quit">Quit Ultra Suite</button></details><div id="status" role="status" aria-live="polite"></div>
-</main><script>
+</main><script src="no_context_menu.js"></script><script>
 const invoke = window.__TAURI__?.core?.invoke;
 const $ = id => document.getElementById(id);
 let cap = null, shown = 0, maximum = 30, organize = true, busy = true;
