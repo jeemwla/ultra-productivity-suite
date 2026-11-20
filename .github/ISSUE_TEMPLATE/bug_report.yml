@@ -1,0 +1,92 @@
+name: Bug report
+description: Something in Ultra Dock, PC Sentinel, Code Red Alarm or the installer does not work as expected.
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please leave out passwords, keys, device_config.json contents and other personal data.
+        Security problems belong in a private report instead: see the Security tab, "Report a vulnerability".
+  - type: dropdown
+    id: app
+    attributes:
+      label: App
+      options:
+        - Ultra Dock (taskbar folders, hub, tray)
+        - PC Sentinel
+        - Code Red Alarm
+        - Installer or updates
+        - Insights (owner and Dev only)
+        - Other or not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Ultra Suite version
+      description: Shown in the hub, or in Windows Settings > Apps > Installed apps.
+      placeholder: "2.2.29"
+    validations:
+      required: true
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Edition
+      options:
+        - Public (GitHub release)
+        - Dev (local owner build)
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run `winver` to see it.
+      placeholder: "Windows 11 24H2, build 26100"
+    validations:
+      required: true
+  - type: dropdown
+    id: displays
+    attributes:
+      label: Displays
+      description: Taskbar and Dock behavior can depend on the monitor setup.
+      options:
+        - One display
+        - Two or more displays
+        - Laptop with external display
+    validations:
+      required: false
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines or error text
+      description: Paste only the relevant lines. They are shown as plain text.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: alarm
+    attributes:
+      label: Alarm safety
+      description: Alarm problems are handled first when an alarm can fail to ring.
+      options:
+        - label: This problem can stop an alarm from ringing or from being heard.
+          required: false

@@ -149,6 +149,25 @@ impl Placement {
     }
 }
 
+/// Longest z-order walk above a strip. The topmost band is short; a longer walk
+/// means the strip lost its topmost position, which also needs a re-raise.
+pub const Z_ORDER_WALK_LIMIT: usize = 512;
+
+/// True when the strip's own taskbar sits above it in the z-order. `above` lists the
+/// windows above the strip, nearest first. Clicking the taskbar (an empty area, a native
+/// button, the clock or tray icons) activates Shell_TrayWnd, which Windows raises over
+/// every older topmost window, so an unchanged strip ends up hidden behind its taskbar
+/// while its apps' native buttons stay hidden.
+pub fn taskbar_above(above: impl IntoIterator<Item = isize>, taskbar: isize) -> bool {
+    let mut walked = 0usize;
+    for hwnd in above {
+        if hwnd == taskbar { return true; }
+        walked += 1;
+        if walked >= Z_ORDER_WALK_LIMIT { return true; }
+    }
+    false
+}
+
 /// A persistent strip follows the native taskbar and yields to full-screen windows.
 pub fn strip_visible(taskbar_visible: bool, fullscreen: bool, fits: bool, requested: bool) -> bool {
     taskbar_visible && !fullscreen && fits && requested
@@ -190,6 +209,14 @@ mod tests {
         assert!(!wanted.matches_native_rect((-1016,2054,-753,2129)),"125-percent suggested resize extends outside the measured 60px taskbar");
         assert!(wanted.matches_native_rect((-1016,2054,-806,2114)));
         assert!(!wanted.matches_native_rect((-1015,2054,-805,2114)),"moved native controls also require reflow");
+    }
+    #[test]
+    fn a_taskbar_click_that_raises_the_taskbar_over_the_strip_is_detected() {
+        let (taskbar,tooltip,menu)=(100,7,8);
+        assert!(!taskbar_above([tooltip,menu],taskbar),"newer topmost popups above the strip are not a covered strip");
+        assert!(taskbar_above([tooltip,taskbar,menu],taskbar),"Shell_TrayWnd activated by a click covers the strip");
+        assert!(!taskbar_above(std::iter::empty(),taskbar),"a strip at the top of the topmost band is visible");
+        assert!(taskbar_above(1000..,taskbar),"an unbounded walk means the strip lost topmost and must be raised");
     }
     #[test]
     fn shell_z_order_refresh_is_bounded_and_restarts_on_next_start_open() {

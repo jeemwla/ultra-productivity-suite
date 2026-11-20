@@ -1,0 +1,82 @@
+# Weekly dependency updates, grouped so each ecosystem opens one pull request for minor and patch
+# releases. Major releases arrive one per pull request because they can need code changes.
+# A cooldown skips releases younger than a few days, which avoids most yanked or compromised versions.
+# Security updates are not delayed by the schedule or the cooldown.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: ci
+
+  # requirements.txt (runtime) and requirements-build.txt (exact build-tool pins) at the repository root.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    labels: [dependencies, python]
+    commit-message:
+      prefix: deps
+
+  # The Tauri CLI pinned for build_release.ps1. Keep it in step with the tauri crates below.
+  - package-ecosystem: npm
+    directory: /ultra_dock
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    groups:
+      tauri-cli:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    labels: [dependencies, javascript]
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: cargo
+    directory: /ultra_dock/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    groups:
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+        update-types: [minor, patch]
+      rust:
+        patterns: ["*"]
+        exclude-patterns: ["tauri", "tauri-*"]
+        update-types: [minor, patch]
+    labels: [dependencies, rust]
+    commit-message:
+      prefix: deps

@@ -6,7 +6,8 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const fin = v => typeof v === "number" && Number.isFinite(v);
   const n0 = v => String(Math.round(v)), n1 = v => Number(v).toFixed(1);
-  const hm = m => fin(m) ? `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, "0")}m` : null;
+  // Whole minutes first, so 59.6 reads "1h 00m", never "0h 60m"; under an hour reads "29m".
+  const hm = m => { if (!fin(m) || m < 0) return null; const t = Math.round(m), h = Math.floor(t / 60); return h ? `${h}h ${String(t % 60).padStart(2, "0")}m` : `${t}m`; };
   const whRaw = mwh => fin(mwh) && mwh > 0 ? `${n1(mwh / 1000)} Wh` : null;
 
   function chargerSub(p) {
@@ -14,6 +15,13 @@
     if (p.plugged_in === true && fin(p.charge_pct) && p.charge_pct < 99)
       return "charging is paused; a charge limit (for example 80% in Armoury Crate, G-Helper or Lenovo Vantage) does this";
     return p.battery_count > 1 ? `${p.battery_count} batteries, shown combined` : "";
+  }
+
+  // The ring turns red below 20%; this says it in words too, so the warning never depends on color alone.
+  function lowNotice(p, pct) {
+    if (!fin(pct) || pct >= 20 || p.plugged_in !== false || p.charging) return "";
+    const left = hm(p.minutes_left);
+    return `<div class="banner critical mt" role="status"><div class="ic">!</div><div><div class="t">Battery low (${n0(pct)}%)</div><div class="s">Plug in soon${left ? `. About ${left} left at the current pace.` : "."}</div></div></div>`;
   }
 
   function stat(k, v, sub) {
@@ -77,7 +85,7 @@
     const wh = mwh => rel ? null : whRaw(mwh);
     const capacity = rel ? "this battery reports capacity in relative units, so watt-hours aren't shown" : wh(p.full_mwh) && wh(p.design_mwh) ? `${wh(p.full_mwh)} now, ${wh(p.design_mwh)} when new` : wh(p.design_mwh) ? `${wh(p.design_mwh)} when new; full charge capacity not reported` : "";
     const brightness = bright && bright.available ? `<div class="muted" style="margin-bottom:6px">Screen brightness</div><div style="display:flex;align-items:center;gap:12px"><input type="range" id="bt-br" min="0" max="100" value="${+bright.percent || 0}" style="flex:1;accent-color:var(--accent)" aria-label="Screen brightness"><b class="num" id="bt-brv">${+bright.percent || 0}%</b></div>` : "";
-    return hero + `<div class="grid g4 mt bt-grid">
+    return hero + lowNotice(p, pct) + `<div class="grid g4 mt bt-grid">
     ${stat("Health", fin(p.health_pct) ? n1(p.health_pct) + "%" : null, capacity)}
     ${stat("Charge cycles", fin(p.cycles) ? n0(p.cycles) : null, fin(p.cycles) ? "full charges so far" : "this battery doesn't report cycles")}
     ${powerStat(p)}
@@ -87,7 +95,7 @@
     ${dailyStat(p)}
     ${stat("Charger", p.plugged_in === true ? "Plugged in" : p.plugged_in === false ? "Unplugged" : null, chargerSub(p))}</div>
     <div class="grid g2 mt"><div><div class="muted" style="margin-bottom:6px">Battery health over time</div>${historySvg(hist && hist.history)}</div><div>${brightness}</div></div>
-    <p class="muted mt">Charging power is what flows into the battery. Windows doesn't report the charger's total output, which also runs the PC.</p>`;
+    ${p.charging || p.plugged_in === true ? `<p class="muted mt">Charging power is what flows into the battery. Windows doesn't report the charger's total output, which also runs the PC.</p>` : ""}`;
   }
 
   const api = { html, hm, NR };

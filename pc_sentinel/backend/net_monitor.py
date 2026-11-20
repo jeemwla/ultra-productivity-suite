@@ -52,6 +52,14 @@ async def measure_tcp_ping(host: str, port: int, timeout: float = 1.5) -> Option
         return None
 
 
+def jitter_ms(samples, window=20):
+    """Mean change between back-to-back replies, the same measure the speed test uses. A spread (standard deviation)
+    reads high whenever latency drifts slowly, which is not jitter. Lost replies break the chain instead of being skipped."""
+    recent = list(samples)[-window:]
+    steps = [abs(a - b) for a, b in zip(recent, recent[1:]) if a is not None and b is not None]
+    return round(statistics.mean(steps), 1) if len(steps) >= 2 else None
+
+
 def is_router_target(target):
     return (target["id"] == "router" or "router" in target["name"].casefold()
             or target["host"] == os.getenv("GLINET_ROUTER_IP", "").strip())
@@ -70,8 +78,7 @@ async def get_live_ping_snapshot(*, router_ping=False) -> Dict:
                         "avg_ms": round(sum(ok) / len(ok), 1) if ok else None,
                         "loss_pct": loss, "history": list(h)[-30:]})
     primary = results[0] if results else {}
-    ok = [v for v in history[targets[0]["id"]] if v is not None] if targets else []
-    jitter = round(statistics.pstdev(ok[-20:]), 1) if len(ok) >= 3 else None
+    jitter = jitter_ms(history[targets[0]["id"]]) if targets else None
     online = any(r["latency_ms"] is not None for r in results)
     return {"online": online, "primary_ping_ms": primary.get("latency_ms"), "jitter_ms": jitter, "targets": results}
 

@@ -3,17 +3,20 @@
 'use strict';
 const clone = value => JSON.parse(JSON.stringify(value));
 const key = app => app.file.toLowerCase();
+const layout = root.DockLayoutPreview || (typeof require==='function' ? require('./dock_layout_preview.js') : null);
 function kept(cfg, app){ return app.pinned || (cfg.keep || []).some(k => app.exe.toLowerCase().includes(k.toLowerCase())); }
 function category(cfg, app){
   const override = cfg.overrides?.[key(app)];
   if (override) return override;
+  const games = Object.keys(cfg.categories || {}).find(name => name.toLowerCase()==='games');
+  if (app.game_install && games) return games;
   let best = 'Other', score = 0;
   for (const [name, words] of Object.entries(cfg.categories || {})) for (const word of words) {
     if (word.length > score && app.exe.toLowerCase().includes(word.toLowerCase())) { best = name; score = word.length; }
   }
   return best;
 }
-function board(cfg, apps){
+function board(cfg, apps, cap=null){
   const unique = [...new Map(apps.map(a => [key(a), a])).values()];
   const singles = [], groups = new Map();
   for (const app of unique) {
@@ -23,16 +26,7 @@ function board(cfg, apps){
     groups.get(cat).push(app);
   }
   const order = [...new Set([...(cfg.order || []), ...groups.keys()])];
-  for (const cat of order) {
-    const members = groups.get(cat) || [];
-    const count=Math.ceil(members.length/6), size=count ? Math.floor(members.length/count) : 0;
-    let offset=0;
-    for (let i=0; i<count; i++) {
-      const n=size+Number(i<members.length%count), chunk=members.slice(offset,offset+n); offset+=n;
-      singles.push({category:cat, folder:chunk.length>1, apps:chunk});
-    }
-  }
-  return singles;
+  return singles.concat(layout.plan(order.map(category=>({category,apps:(groups.get(category)||[]).slice().sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()))})),cap));
 }
 function group(cfg, apps, files, name, existing=false){
   const selected = [...new Set(files.map(f => f.toLowerCase()))];

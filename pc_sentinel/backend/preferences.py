@@ -64,10 +64,32 @@ def _read(destination):
         return defaults(), 0, "invalid_or_unavailable"
 
 
+_cache = {}
+
+
+def _stamp(destination):
+    try:
+        st = destination.stat()
+    except FileNotFoundError:
+        return (str(destination), None)
+    except OSError:
+        return None  # unreadable right now: never cache, read again next time
+    return (str(destination), st.st_mtime_ns, st.st_size, st.st_ino)
+
+
 def load(*, _test_path=None):
+    """The telemetry loop calls this every second; the file is read again only after it changes on disk."""
+    destination = Path(_test_path) if _test_path is not None else path()
     with LOCK:
-        value, revision, status = _read(Path(_test_path) if _test_path is not None else path())
-    return {**value, "revision": str(revision), "storage_status": status}
+        stamp = _stamp(destination)
+        hit = _cache.get("value")
+        if stamp is not None and hit and hit[0] == stamp:
+            value, revision, status = hit[1]
+        else:
+            value, revision, status = _read(destination)
+            if stamp is not None:
+                _cache["value"] = (stamp, (value, revision, status))
+    return {**value, "pages": dict(value["pages"]), "revision": str(revision), "storage_status": status}
 
 
 def save(changes, *, _test_path=None):
