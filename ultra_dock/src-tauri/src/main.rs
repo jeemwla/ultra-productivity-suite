@@ -1958,6 +1958,8 @@ async fn show_app_menu(app: AppHandle, window: WebviewWindow, exe: Option<String
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     let target = dock_app_menu::resolve(&app_menu_snapshot(), exe.as_deref(), hwnd, folder.as_deref(),
         &folder_exes.unwrap_or_default()).ok_or("That app is no longer open.")?;
+    let mut target = target;
+    target.owners = target.windows.iter().filter_map(|&h| window_identity(h).map(|id| (h, id))).collect();
     let menu = Menu::new(&app).map_err(|e| e.to_string())?;
     for row in dock_app_menu::items(&target) {
         match row {
@@ -1984,12 +1986,30 @@ fn activate_now(hwnd: isize) -> bool {
     }
 }
 
+/// The process generation (PID and start time) that owns a window now, if readable.
+fn window_identity(hwnd: isize) -> Option<dock_app_menu::Identity> {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::{GetWindowThreadProcessId, IsWindow}};
+        let h = HWND(hwnd as _);
+        if !IsWindow(Some(h)).as_bool() { return None; }
+        let mut pid = 0u32;
+        if GetWindowThreadProcessId(h, Some(&mut pid)) == 0 || pid == 0 { return None; }
+        return recovery::process_owner(pid).map(|owner| (owner.pid, owner.started));
+    }
+    #[cfg(not(windows))]
+    { let _ = hwnd; None }
+}
+
 fn handle_app_menu(app: &AppHandle, action: dock_app_menu::Action) {
     use dock_app_menu::Action;
     let Some(target) = APP_MENU_TARGET.lock().ok().and_then(|mut t| t.take()) else { return };
     // The snapshot may have changed while the menu was open: act only on windows still listed.
     let live: std::collections::HashSet<isize> = app_menu_snapshot().iter().map(|w| w.hwnd).collect();
-    let windows: Vec<isize> = dock_app_menu::windows_for(action, &target).into_iter().filter(|h| live.contains(h)).collect();
+    let listed: Vec<isize> = dock_app_menu::windows_for(action, &target).into_iter().filter(|h| live.contains(h)).collect();
+    // A handle can be recycled for another app while the menu is open: act only on windows
+    // whose owning process is the one captured when the menu opened.
+    let windows = dock_app_menu::still_owned(&listed, &target.owners, window_identity);
     record_dock_event(&format!("app-menu:{}", action.id()));
     match action {
         Action::Open => {
@@ -2024,10 +2044,11 @@ fn handle_app_menu(app: &AppHandle, action: dock_app_menu::Action) {
         }
         Action::UnpinFromDock => {
             let Some(exe) = target.exe else { return };
-            let current = std::fs::read_to_string(org_path()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())
-                .or_else(|| serde_json::from_str::<Value>(DEFAULT_ORG).ok()).unwrap_or_else(|| json!({}));
-            if let Err(error) = dock_settings_save(dock_app_menu::with_keep(&current, &dock_settings::keep_entry(&exe))) {
-                eprintln!("[dock] {error}"); open_dock_settings_window(app, false);
+            // Never fall back to the defaults over a file that exists but cannot be read or parsed.
+            let saved = dock_app_menu::unpin_config(std::fs::read_to_string(org_path()), DEFAULT_ORG, &dock_settings::keep_entry(&exe))
+                .and_then(dock_settings_save);
+            if let Err(error) = saved {
+                eprintln!("[dock] {error}"); record_dock_event("app-menu:unpin-refused"); open_dock_settings_window(app, false);
             }
         }
         Action::EditFolders => open_dock_settings_window(app, true),
