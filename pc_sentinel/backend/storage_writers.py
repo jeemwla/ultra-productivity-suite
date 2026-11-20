@@ -469,10 +469,14 @@ class Sampler:
             pass
         self.saved_at = time.time()
 
-    def measure(self):
+    def measure(self, now=None):
+        """Starts a 2-minute measurement. Asking again while one runs (a second click or another window) keeps it
+        going instead of throwing away what it has collected so far."""
+        now = now or time.time()
         with self.lock:
-            self.fast_until = time.time() + MEASURE_S
-            self.live, self.live_started = {}, time.time()
+            if self.fast_until <= now:
+                self.fast_until = now + MEASURE_S
+                self.live, self.live_started = {}, now
         return self.report()
 
     def report(self, now=None):

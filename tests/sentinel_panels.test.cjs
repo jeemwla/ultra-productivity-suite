@@ -11,6 +11,18 @@ test('sensor banner explains the missing piece, links official pages and hides w
  assert.equal(P.missingReading({state:'driver_missing'}),'sensor driver missing');assert.equal(P.missingReading(undefined),'needs full sensors');
  assert.doesNotMatch(P.sensorBanner({state:'lhm_missing',text:'<img src=x>',links}).html,/<img src=x>/);
 });
+test('sensor helper states offer Try again and plain readings, never the LibreHardwareMonitor installer',()=>{
+ const m=P.sensorBanner({state:'helper_driver_missing',title:'Sensor driver not installed',text:'Try again to install it',links,retry:true,retry_label:'Try again'});
+ assert.equal(m.retry,true);assert.equal(m.retryLabel,'Try again');assert.equal(m.setup,false);assert.equal(m.kind,'warning');
+ assert.equal(P.sensorBanner({state:'helper_missing',links,retry:true}).retryLabel,'Try again');
+ assert.equal(P.sensorBanner({state:'restart_needed',links,retry:true}).kind,'info');
+ assert.equal(P.sensorBanner({state:'cpu_unsupported',links,retry:false}).retry,false);
+ assert.equal(P.sensorBanner({state:'driver_missing',links}).retry,false);
+ assert.equal(P.missingReading({state:'helper_driver_blocked'}),'sensor driver blocked by Windows');
+ assert.equal(P.missingReading({state:'helper_driver_missing'}),'sensor driver missing');
+ assert.equal(P.missingReading({state:'restart_needed'}),'restart to finish sensor setup');
+ assert.match(P.sensorBanner({state:'helper_missing',links,retry:true}).html,/never changes fans or clocks/);
+});
 test('benchmark panel never claims a gain without both measurements, and respects the noise',()=>{
  assert.match(P.benchHtml(null),/not measured/);assert.doesNotMatch(P.benchHtml(null),/better|worse/);
  const before={ts:1,single_mbps:2000,multi_mbps:9000,wake_us:40};

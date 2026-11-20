@@ -1,0 +1,74 @@
+name: Alarm did not ring or could not be stopped
+description: Code Red Alarm missed an alarm, rang without sound, rang at the wrong time or would not dismiss. These reports are handled first.
+labels: [bug, alarm, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Until this is fixed, a second alarm (a phone, for example) is a safe backup for anything important.
+        Please leave out personal data. Alarm labels can be replaced with "alarm 1", "alarm 2".
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What went wrong
+      options:
+        - Did not ring at all
+        - Window appeared but no sound
+        - Rang at the wrong time or on the wrong day
+        - Rang more than once for one occurrence
+        - Could not be dismissed or snoozed
+        - Countdown timer did not finish or ring
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Ultra Suite version
+      placeholder: "2.2.29"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Alarm type
+      options:
+        - One-time alarm
+        - Repeating alarm (days of the week)
+        - Countdown timer
+    validations:
+      required: true
+  - type: checkboxes
+    id: pc-state
+    attributes:
+      label: PC state at the alarm time
+      description: Tick everything that applies.
+      options:
+        - label: PC was asleep, hibernating or just waking up
+        - label: PC was locked or signed out
+        - label: Laptop was on battery
+        - label: Do not disturb or Focus was on
+        - label: Windows clock or time zone changed recently
+        - label: Ultra Suite was updated or restarted shortly before
+  - type: input
+    id: output
+    attributes:
+      label: Audio output
+      description: The output picked in Code Red Alarm, and whether it was connected (speakers, headphones, Bluetooth, HDMI monitor).
+    validations:
+      required: false
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Scheduled time, the time it rang (if it did) and what was on screen.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: Lines mentioning AlarmEngine or the speaker helper around the alarm time, if available.
+      render: text
+    validations:
+      required: false

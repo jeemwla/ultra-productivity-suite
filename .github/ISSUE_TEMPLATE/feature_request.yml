@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an improvement or a new option for one of the apps.
+labels: [enhancement, triage]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: App
+      options:
+        - Ultra Dock
+        - PC Sentinel
+        - Code Red Alarm
+        - Installer or updates
+        - Whole suite
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is hard or missing today
+      description: Describe the situation and the problem, before any solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested change
+      description: New behavior is usually added as an optional setting, so existing users keep what they have.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds tried
+    validations:
+      required: false

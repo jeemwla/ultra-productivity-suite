@@ -1,0 +1,90 @@
+/* Shared controls for the Ultra Suite windows (hub, Dock settings, Dock menu, starting page). Built only from
+   tokens.css values so every window has the same buttons, pills, switches, fields, focus ring and states. */
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html{color-scheme:dark light}
+body{font:var(--t-3)/var(--lh-body) var(--font);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button,input,select,textarea{font:inherit;color:inherit}
+button{border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.pill,.sw{user-select:none}
+h1,h2,h3{text-wrap:balance}
+p{text-wrap:pretty}
+button:disabled{cursor:default}
+img{-webkit-user-drag:none}
+::selection{background:color-mix(in srgb,var(--accent) 32%,transparent)}
+/* One keyboard focus ring everywhere */
+:is(button,a,input,select,textarea,summary,[tabindex]):focus{outline:none}
+:is(button,a,input,select,textarea,summary,[tabindex]):focus-visible{outline:var(--focus-w) solid var(--accent);outline-offset:var(--focus-gap)}
+/* Scrollbars that match the theme */
+*{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);min-height:34px;padding:0 var(--s-4);border-radius:var(--r-3);
+  background:var(--panel-2);border:1px solid var(--line);color:var(--ink);font-weight:var(--w-medium);font-size:var(--t-3);white-space:nowrap;
+  transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease),color var(--d-1) var(--ease),transform var(--d-1) var(--ease)}
+.btn:hover:not(:disabled){background:var(--panel-3);border-color:var(--line-2)}
+.btn:active:not(:disabled){transform:scale(.98);background:var(--panel-2)}
+.btn:disabled{opacity:var(--disabled)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 88%,var(--ink));border-color:transparent}
+.btn.primary:active:not(:disabled){background:color-mix(in srgb,var(--accent) 80%,var(--ink))}
+.btn.danger{color:var(--bad)}
+.btn.danger:hover:not(:disabled){background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.btn.small{min-height:28px;padding:0 var(--s-3);font-size:var(--t-1)}
+.btn.ghost{background:transparent;border-color:transparent}
+/* Spinner keyframes shared by busy buttons in the hub */
+@keyframes btn-spin{to{transform:rotate(360deg)}}
+.btn.ghost:hover:not(:disabled){background:var(--hover);border-color:transparent}
+
+/* Status pills: a tone color, a matching soft background and a dot, so state never depends on color alone */
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 var(--s-2) 0 var(--s-2);border-radius:var(--r-full);
+  font-size:var(--t-1);font-weight:var(--w-medium);white-space:nowrap;background:var(--panel-2);color:var(--ink-2);flex:none}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+.pill.on{color:var(--ok);background:var(--ok-soft)}
+.pill.warn{color:var(--warn);background:var(--warn-soft)}
+.pill.bad{color:var(--bad);background:var(--bad-soft)}
+.pill.off{color:var(--ink-3)}
+
+/* Switch */
+.sw{position:relative;width:40px;height:22px;border-radius:var(--r-full);background:var(--panel-3);border:1px solid var(--line-2);flex:none;
+  transition:background var(--d-2) var(--ease),border-color var(--d-2) var(--ease)}
+.sw::after{content:"";position:absolute;top:50%;left:3px;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:var(--ink-2);
+  transition:transform var(--d-2) var(--ease),background var(--d-2) var(--ease),width var(--d-1) var(--ease)}
+.sw:hover:not(:disabled){border-color:var(--ink-3)}
+.sw:active:not(:disabled)::after{width:17px}
+.sw[aria-checked=true]{background:var(--accent);border-color:transparent}
+.sw[aria-checked=true]::after{transform:translateX(18px);background:var(--accent-ink)}
+.sw[aria-checked=true]:active:not(:disabled)::after{transform:translateX(15px)}
+.sw:disabled{opacity:var(--disabled)}
+
+/* Fields */
+select,input[type=text],input[type=search],textarea{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-3);min-height:34px;padding:0 var(--s-3);
+  color:var(--ink);transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+textarea{padding:var(--s-2) var(--s-3)}
+select{padding-right:var(--s-2);cursor:pointer}
+:is(select,input[type=text],input[type=search],textarea):hover:not(:disabled){border-color:var(--line-2)}
+:is(select,input[type=text],input[type=search],textarea):focus-visible{outline-offset:0;border-color:var(--accent)}
+:is(select,input,textarea):disabled{opacity:var(--disabled);cursor:default}
+::placeholder{color:var(--ink-3);opacity:1}
+
+/* Empty and error states */
+.empty{display:flex;flex-direction:column;align-items:center;gap:var(--s-1);text-align:center;padding:var(--s-6) var(--s-4);
+  border:1px dashed var(--line-2);border-radius:var(--r-4);color:var(--ink-3);font-size:var(--t-2)}
+.empty b{color:var(--ink-2);font-weight:var(--w-medium);font-size:var(--t-3)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* Windows contrast themes force system colors. Keep every state visible: the switch knob and track, the pill
+   dot, the primary button, disabled controls and the focus ring. */
+@media (forced-colors: active){
+  .btn,.sw,.pill,select,input[type=text],input[type=search],textarea,.empty{border:1px solid ButtonText}
+  .btn.primary{border-width:2px}
+  .btn:disabled,:is(select,input,textarea):disabled{opacity:1;color:GrayText;border-color:GrayText}
+  .sw,.sw::after,.pill::before{forced-color-adjust:none}
+  .sw{background:Canvas;border-color:ButtonText}
+  .sw::after{background:ButtonText}
+  .sw[aria-checked=true]{background:Highlight;border-color:Highlight}
+  .sw[aria-checked=true]::after{background:HighlightText}
+  .sw:disabled{opacity:1;border-color:GrayText}.sw:disabled::after{background:GrayText}
+  .pill::before{background:CanvasText}
+  :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible{outline-color:Highlight}
+}

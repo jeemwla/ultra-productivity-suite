@@ -156,14 +156,14 @@ class ProcessApiTests(unittest.TestCase):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         app=FastAPI();st.register(app)
-        with TestClient(app) as client,patch.object(st,'top_apps',return_value={'all_apps':[{'group_id':'example','processes':[{'pid':1}]}],'observed_at':123}) as collect:
+        with TestClient(app) as client,patch.object(st,'top_apps',return_value={'all_apps':[{'group_id':'exe:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','processes':[{'pid':1}]}],'observed_at':123}) as collect:
             self.assertEqual(client.get('/api/processes?all_limit=513').status_code,422)
             self.assertEqual(client.get('/api/processes?limit=0').status_code,422)
             self.assertEqual(client.get('/api/processes').status_code,200)
             collect.assert_called_with(8,all_limit=0)
-            result=client.get('/api/processes/example');self.assertEqual(result.status_code,200)
+            result=client.get('/api/processes/exe:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');self.assertEqual(result.status_code,200)
             self.assertEqual(result.json()['group']['processes'][0]['pid'],1)
-            collect.assert_called_with(1,include_details=True,group_id='example')
+            collect.assert_called_with(1,include_details=True,group_id='exe:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')
         with TestClient(app) as client,patch.object(st,'top_apps',return_value={'all_apps':[],'observed_at':123}):
             self.assertEqual(client.get('/api/processes/ended-group').status_code,404)
 

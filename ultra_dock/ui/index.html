@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ultra Dock</title>
+<link rel="stylesheet" href="tokens.css" />
 <style>
 /* Matches the Windows 11 taskbar: 40px buttons, 4px corners, soft hover, small running bar */
 :root{
@@ -41,6 +42,9 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .group{display:flex;align-items:center;height:100%}
 .grp{position:relative;height:40px;width:44px;min-width:0;padding:0 6px;border-radius:4px;display:flex;align-items:center;justify-content:center;gap:6px;overflow:hidden;transition:background .12s,width .32s var(--ease),padding .32s var(--ease)}
 .grp:hover{background:var(--hover)} .grp:active{background:var(--press)}
+/* A pressed folder or menu button sinks a little, the same feedback app buttons give */
+.grp:not([aria-expanded=true]):active .folder{transform:scale(.92);transition-duration:.12s}
+.more:active svg{transform:scale(.92);transition-duration:.12s}
 .grp[aria-expanded=true]{width:24px;padding:0;background:transparent}
 .grp .folder{flex:none;transition:opacity .18s var(--ease),transform .32s var(--ease)}
 .grp[aria-expanded=true] .folder{opacity:0;transform:scale(.5);pointer-events:none}
@@ -55,11 +59,14 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .folder{position:relative;width:calc(var(--app-icon-size,24px)*4/3);height:calc(var(--app-icon-size,24px)*4/3);border-radius:8px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
   display:grid;grid-template-columns:repeat(2,calc(var(--app-icon-size,24px)*13/24));grid-template-rows:repeat(2,calc(var(--app-icon-size,24px)*13/24));gap:calc(var(--app-icon-size,24px)/12);padding:calc(var(--app-icon-size,24px)/12);place-content:center}
 .folder img,.folder .ph{width:calc(var(--app-icon-size,24px)*13/24);height:calc(var(--app-icon-size,24px)*13/24);border-radius:3px;display:block}
+.folder:not(:has(> :nth-child(3))){grid-template-rows:calc(var(--app-icon-size,24px)*13/24)}
 .folder.n1{grid-template-columns:24px;grid-template-rows:24px}.folder.n1 img,.folder.n1 .ph{width:24px;height:24px;border-radius:6px}
-.folder .more-n{position:absolute;right:-5px;top:-4px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:#3a3a3a;color:#fff;
-  font:600 9.5px/15px var(--font);text-align:center;box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
-@media (prefers-color-scheme: light){.folder{background:rgba(0,0,0,.07);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}.folder .more-n{background:#e8e8e8;color:#000}}
+.folder .more-n{position:absolute;right:-7px;top:-6px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#3a3a3a;color:#fff;
+  font:600 9px/14px var(--font);text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px #1c1c1c}
+@media (prefers-color-scheme: light){.folder{background:rgba(0,0,0,.07);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}.folder .more-n{background:#e8e8e8;color:#000;box-shadow:0 0 0 2px #f3f3f3}}
 .ph{background:var(--line)}
+/* A press-and-move on an icon must not start dragging the icon image out of the strip */
+.strip img{-webkit-user-drag:none}
 .cnt{font-size:11px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:8px}
 .grp .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease),background .2s}
 .grp.has-active .runbar{width:14px;background:var(--bar-active)}
@@ -69,25 +76,29 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .tray.open .win{opacity:1;transform:none;transition:background .12s,opacity .25s var(--ease),transform .3s var(--ease)}
 .win:hover{background:var(--hover)} .win:active{background:var(--press);transform:scale(.94)}
 .win img{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);display:block;object-fit:contain}
-.activation-error{box-shadow:inset 0 0 0 1px #ff847d}
+.activation-error{box-shadow:inset 0 0 0 1px var(--bad,#ff847d)}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .win .ph{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px);border-radius:6px}
-.win .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease)}
+.win .runbar{position:absolute;left:50%;bottom:2px;width:6px;height:3px;border-radius:2px;background:var(--bar);transform:translateX(-50%);transition:width .2s var(--ease),background .2s}
 .win.active .runbar{width:16px;background:var(--bar-active)}
 /* An app with several windows: one icon, a count, and an inline list of its windows */
-.win .wn{position:absolute;right:3px;top:4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#3a3a3a;color:#fff;font:600 9px/14px var(--font);text-align:center;box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
-@media (prefers-color-scheme: light){.win .wn{background:#e8e8e8;color:#000}}
+.win .wn{position:absolute;right:1px;top:2px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#3a3a3a;color:#fff;font:600 9px/14px var(--font);text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px #1c1c1c}
+@media (prefers-color-scheme: light){.win .wn{background:#e8e8e8;color:#000;box-shadow:0 0 0 2px #f3f3f3}}
 .win[aria-expanded=true]{background:var(--open)}
 .pick{display:flex;align-items:center;height:40px;padding:0 2px;margin:0 2px;border-left:1px solid var(--line);border-right:1px solid var(--line);animation:pin .25s var(--ease)}
 @keyframes pin{from{opacity:0;transform:translateX(-6px)}}
 .wt{height:32px;max-width:170px;padding:0 10px;border-radius:4px;font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wt{transition:background .12s,color .12s}
 .wt:hover{background:var(--hover);color:var(--ink)}
+.wt:active{background:var(--press)}
 .wt.active{color:var(--ink);font-weight:600}
 .pick.dense .wt{max-width:104px;padding:0 7px}
 @media (prefers-reduced-motion:reduce){.pick{animation:none}}
 .more{width:40px;height:40px;border-radius:4px;display:grid;place-items:center;color:var(--ink-2);transition:background .12s,color .12s}
-.more:hover{background:var(--hover);color:var(--ink-2)}
+.more:hover{background:var(--hover);color:var(--ink)}
+.more:active{background:var(--press)}
 .more svg{width:var(--app-icon-size,24px);height:var(--app-icon-size,24px)}
+.more svg{transition:transform var(--d-2,.18s) var(--ease)}
 .more[aria-expanded=true] svg{transform:rotate(180deg)}
 .more{position:relative}
 .more .udot{position:absolute;right:5px;top:10px;width:7px;height:7px;border-radius:50%;background:var(--bar-active);box-shadow:0 0 0 2px rgba(0,0,0,.25);animation:upulse 2.4s var(--ease) infinite}
@@ -95,7 +106,9 @@ button:focus-visible{outline:2px solid var(--bar-active);outline-offset:-2px}
 .act.upd{color:var(--bar-active)}
 @media (prefers-reduced-motion:reduce){.more .udot{animation:none}}
 .act{height:40px;padding:0 10px;border-radius:4px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.act{transition:background .12s,color .12s}
 .act:hover{background:var(--hover);color:var(--ink)}
+.act:active{background:var(--press)}
 .act.on{color:var(--bar-active)}
 /* "Show up to N apps": minus, the value (click for Automatic), plus */
 .capctl{display:flex;align-items:center;height:40px;margin:0 4px;border-left:1px solid var(--line);border-right:1px solid var(--line);padding:0 2px}
@@ -110,20 +123,28 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
 .sv{max-width:480px;margin:0 auto;padding:28px 26px}
 .sv h1{font:600 20px/1.3 "Segoe UI Variable Display","Segoe UI",sans-serif;margin-bottom:6px}
 .sv p{opacity:.72;margin-bottom:18px}
-.sv label{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(127,127,127,.25);border-radius:10px;margin-bottom:8px;cursor:pointer}
-.sv label:has(input:checked){border-color:#2a78d6;background:rgba(42,120,214,.08)}
-.sv textarea{width:100%;min-height:80px;margin-top:6px;border-radius:10px;border:1px solid rgba(127,127,127,.35);padding:10px;font:inherit;background:transparent;color:inherit;resize:vertical}
+.sv label{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(127,127,127,.25);border-radius:var(--r-3,8px);margin-bottom:8px;cursor:pointer;transition:border-color .12s,background .12s}
+.sv label:hover{border-color:rgba(127,127,127,.45)}
+.sv label:has(input:checked){border-color:var(--accent,#2a78d6);background:color-mix(in srgb,var(--accent,#2a78d6) 10%,transparent)}
+.sv label:has(input:focus-visible){outline:2px solid var(--accent,#2a78d6);outline-offset:2px}
+.sv input[type=radio]{accent-color:var(--accent,#2a78d6)}
+.sv textarea{width:100%;min-height:80px;margin-top:6px;border-radius:var(--r-3,8px);border:1px solid rgba(127,127,127,.35);padding:10px;font:inherit;background:transparent;color:inherit;resize:vertical}
 .sv .row{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
-.sv button{height:40px;padding:0 18px;border-radius:10px;font-weight:600;cursor:pointer;border:1px solid rgba(127,127,127,.35)}
-.sv button.primary{background:#2a78d6;border-color:#2a78d6;color:#fff}
+.sv button{height:40px;padding:0 18px;border-radius:var(--r-3,8px);font-weight:600;cursor:pointer;border:1px solid rgba(127,127,127,.35);transition:background .12s,border-color .12s}
+.sv button:hover:not(:disabled){border-color:rgba(127,127,127,.6)}
+.sv button:focus-visible,.sv textarea:focus-visible{outline:2px solid var(--accent,#2a78d6);outline-offset:2px}
+.sv button.primary{background:var(--accent,#2a78d6);border-color:var(--accent,#2a78d6);color:var(--accent-ink,#fff)}
 .sv small{display:block;opacity:.55;margin-top:12px}
 
-.dock-menu{--ink:#fff;--ink-2:#dedfe5;--ink-3:#a5a8b2;--hover:#ffffff15;--line:#ffffff30;position:absolute;width:520px;left:0;bottom:56px;max-width:none;padding:10px;display:grid;grid-template-columns:repeat(3,minmax(max-content,1fr));gap:6px;background:#24262d;color:#fff;border:1px solid #6b6f7d;border-radius:12px;box-shadow:0 4px 14px #0005}
+.dock-menu{--ink:#fff;--ink-2:#dedfe5;--ink-3:#a5a8b2;--hover:#ffffff15;--line:#ffffff30;position:absolute;width:520px;left:0;bottom:56px;max-width:none;padding:10px;display:grid;grid-template-columns:repeat(3,minmax(max-content,1fr));gap:6px;background:#24262d;color:#fff;border:1px solid #6b6f7d;border-radius:var(--r-4,12px);box-shadow:var(--sh-3,0 4px 14px #0005)}
 .dock-menu[hidden]{display:none}
 .dock-menu .act{min-width:max-content;height:36px;padding:0 12px;text-align:left;white-space:nowrap;flex:none}
 .dock-menu .capctl{grid-column:1 / -1;justify-content:center}
 .dock-menu .menu-note{grid-column:1 / -1;white-space:normal;font-size:12px;line-height:1.4;color:#ddd;max-width:460px;padding:4px}
+@media (prefers-color-scheme: light){.dock-menu{--ink:#111318;--ink-2:#3c4049;--ink-3:#5e6470;--hover:#0000000d;--line:#00000024;background:#f9fafc;color:#111318;border-color:#00000026;box-shadow:0 8px 24px rgba(16,24,40,.14)}.dock-menu .menu-note{color:#3c4049}}
 @media(max-width:360px){.dock-menu{grid-template-columns:repeat(2,minmax(max-content,1fr));padding:6px;gap:2px}}
+/* Windows contrast themes: kept last so it overrides the badge and bar colors above */
+@media (forced-colors: active){.runbar,.folder,.folder .more-n,.win .wn{forced-color-adjust:none}.runbar{background:CanvasText!important}.grp.has-active .runbar,.win.active .runbar{background:Highlight!important}.folder{background:Canvas;box-shadow:inset 0 0 0 1px CanvasText}.folder .more-n,.win .wn{background:CanvasText;color:Canvas;box-shadow:none}.collapse-mark::after{background:CanvasText}button:focus-visible{outline-color:Highlight}.wt.active{text-decoration:underline}}
 </style>
 </head>
 <body>
@@ -146,6 +167,7 @@ body.survey{overflow:auto;background:#f6f7f9;color:#111;font-size:14px;line-heig
     <small>Anonymous: only your answer, the app version and Windows are sent.</small>
   </form>
 </div>
+<script src="no_context_menu.js"></script>
 <script>
 const T = window.__TAURI__, invoke = T && T.core ? T.core.invoke : null;
 const view = new URLSearchParams(location.search).get("view") || "strip";
@@ -309,7 +331,17 @@ function render(){
   // keep any open tray at its natural width
   $("strip").querySelectorAll(".tray.open").forEach(t => t.style.width = t.querySelector(".inner").scrollWidth + "px");
   applyFocus();
-  requestAnimationFrame(report);
+  scheduleReport();
+}
+/* Acknowledge a render after layout. A strip that Windows covers (a click raises the
+   taskbar over it) or hides can stop animation frames, and a missing acknowledgement
+   would make the Dock look stale and hand every app back to the native taskbar. */
+function scheduleReport(){
+  let sent = false;
+  const send = () => { if (sent) return; sent = true; report(); };
+  if (document.hidden) { setTimeout(send, 0); return; }
+  requestAnimationFrame(send);
+  setTimeout(send, 250);
 }
 /* Only windows the strip actually shows may lose their native button; the rest stay on the taskbar */
 function report(){
@@ -399,6 +431,31 @@ async function handleDockClick(e){
 }
 $("strip").addEventListener("click", handleDockClick);
 $("dock-menu").addEventListener("click", handleDockClick);
+/* Right-click works like the native taskbar: an app or folder gets its app menu, and
+   empty strip space gets the Dock menu. The browser menu never appears. */
+let contextMenuOpening = false;
+async function handleDockContextMenu(e){
+  e.preventDefault();
+  if (!invoke || contextMenuOpening) return;
+  const t = e.target.closest?.(".wt"), w = e.target.closest?.(".win"), g = e.target.closest?.(".grp");
+  contextMenuOpening = true;
+  try {
+    if (t || w) {
+      const b = t || w, hwnd = +b.dataset.h;
+      const exe = w ? w.dataset.exe : (state.windows.find(x => x.hwnd === hwnd) || {}).exe;
+      // A button for several windows names none of them, like a grouped native button.
+      const named = t || !w.hasAttribute("aria-expanded");
+      await invoke("show_app_menu", { exe: exe || null, hwnd: named && Number.isFinite(hwnd) ? hwnd : null, folder: null, folderExes: null });
+    } else if (g) {
+      const item = layoutItems().find(i => i.key === g.dataset.cat);
+      await invoke("show_app_menu", { exe: null, hwnd: null, folder: g.dataset.cat, folderExes: item ? item.exes : [] });
+    } else {
+      closeAll();
+      await invoke("show_dock_menu");
+    }
+  } catch {} finally { contextMenuOpening = false; }
+}
+if (view === "strip") document.addEventListener("contextmenu", handleDockContextMenu);
 /* Close any open folder and window list (a single app's list lives outside any folder) */
 function closeAll(){
   if (open) { setOpen(null); return; }  // setOpen also clears a list inside the folder

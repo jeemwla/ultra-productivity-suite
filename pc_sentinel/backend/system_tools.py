@@ -299,8 +299,16 @@ def power_plans():
     return {"plans": plans}
 
 
+GROUP_ID = re.compile(r"exe:[0-9a-f]{64}|pid:\d{1,10}:(?:\d{1,12}(?:\.\d{1,9})?|unverified)")
+
+
+def valid_group_id(value) -> bool:
+    """The two id shapes top_apps creates: a hash of the program path, or a process id with its start time."""
+    return isinstance(value, str) and len(value) <= 120 and GROUP_ID.fullmatch(value) is not None
+
+
 def set_power_plan(guid: str):
-    if not re.fullmatch(r"[0-9a-fA-F-]{36}", guid or ""):
+    if not isinstance(guid, str) or not re.fullmatch(r"[0-9a-fA-F-]{36}", guid):
         raise HTTPException(400, "Unknown power plan")
     r = _run(["powercfg", "/setactive", guid])
     if r.returncode != 0:
@@ -474,6 +482,8 @@ def register(app):
     @app.get("/api/processes/{group_id}")
     async def _process_group(group_id: str):
         import asyncio
+        if not valid_group_id(group_id):  # never a process scan for an id Top apps could not have produced
+            raise HTTPException(404, "This process group is no longer present.")
         result = await asyncio.to_thread(top_apps, 1, include_details=True, group_id=group_id)
         if not result["all_apps"]:
             raise HTTPException(404, "This process group is no longer present.")
@@ -483,13 +493,15 @@ def register(app):
     async def _process_icon(group_id: str):
         """The app's own icon. Only groups already listed by Top apps are served; no path comes from the request."""
         import asyncio
+        if not valid_group_id(group_id):
+            raise HTTPException(404, "No icon is available for this process group.", headers={"Cache-Control": "private, max-age=3600"})
         from fastapi.responses import Response
         from .process_icons import icon_png
         result = await asyncio.to_thread(top_apps, 1, group_id=group_id)
         exe = result["all_apps"][0].get("canonical_exe") if result["all_apps"] else None
         png = await asyncio.to_thread(icon_png, exe) if exe else None
-        if not png:
-            raise HTTPException(404, "No icon is available for this process group.")
+        if not png:  # cacheable, so a page reload does not ask again for the same missing icon
+            raise HTTPException(404, "No icon is available for this process group.", headers={"Cache-Control": "private, max-age=3600"})
         return Response(png, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
     @app.get("/api/power/plans")
@@ -506,7 +518,12 @@ def register(app):
 
     @app.post("/api/display")
     def _set_disp(body: dict):
-        return set_refresh(body.get("device", ""), int(body.get("hz", 0)))
+        device, hz = body.get("device"), body.get("hz")
+        if isinstance(hz, float) and hz.is_integer():
+            hz = int(hz)
+        if not isinstance(device, str) or type(hz) is not int or not 1 <= hz <= 1000:
+            raise HTTPException(400, "Choose a monitor and one of its listed refresh rates.")
+        return set_refresh(device, hz)
 
     @app.get("/api/power/mode")
     async def _pmode():
