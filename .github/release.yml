@@ -1,0 +1,25 @@
+# Categories for "Generate release notes" on the releases page. Pull requests are sorted by label.
+changelog:
+  exclude:
+    labels: [skip-changelog]
+  categories:
+    - title: Ultra Dock
+      labels: [dock]
+    - title: PC Sentinel
+      labels: [sentinel]
+    - title: Code Red Alarm
+      labels: [alarm]
+    - title: Installer, updates and core service
+      labels: [installer, core, insights]
+    - title: Bug fixes
+      labels: [bug]
+    - title: Improvements
+      labels: [enhancement, accessibility]
+    - title: Documentation
+      labels: [documentation]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: CI and repository
+      labels: [ci]
+    - title: Other changes
+      labels: ["*"]
