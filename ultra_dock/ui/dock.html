@@ -138,6 +138,10 @@ code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-b
       <button class="sw" role="switch" id="window-list" aria-checked="false" aria-label="Window list on click"></button>
     </div>
     <div class="row">
+      <label class="txt" for="native-folders"><b>Native folder buttons</b><span>On: each folder becomes one taskbar button with its apps inside, and Alt+Tab keeps every window. Folders leave the Dock strip.</span></label>
+      <button class="sw" role="switch" id="native-folders" aria-checked="false" aria-label="Native folder buttons"></button>
+    </div>
+    <div class="row">
       <div class="txt"><b id="cap-label">Apps shown on their own</b><span id="cap-help">The first apps get their own button; the rest go into folders. Automatic groups apps by category.</span></div>
       <div class="cap-controls" role="group" aria-labelledby="cap-label" aria-describedby="cap-help">
         <div class="cap-stepper"><button type="button" id="cap-minus" aria-label="Fewer apps on their own">−</button><output id="cap-count" aria-live="polite" aria-atomic="true">Automatic</output><button type="button" id="cap-plus" aria-label="More apps on their own">+</button></div>
@@ -383,6 +387,7 @@ function renderTop(){
   $("dock-on").setAttribute("aria-checked", String(on));
   $("organize").setAttribute("aria-checked", String(S.organize)); $("organize").disabled = !on;
   $("window-list").setAttribute("aria-checked", String(S.config.inline_window_list === true));
+  $("native-folders").setAttribute("aria-checked", String(S.config.native_folder_buttons === true));
   renderCap();
   $("path").textContent = S.path || "";
 }
@@ -447,6 +452,7 @@ async function refresh(keepConfig, readCap = false){
 /* ---------- events ---------- */
 $("dock-on").onclick = async () => { if (!invoke) return; const on = !S.dock_on; S.dock_on = on; renderTop(); try { await invoke("hub_set_dock", { on }); } catch {} refresh(true); };
 $("window-list").onclick = () => { change({ ...S.config, inline_window_list: S.config.inline_window_list !== true }); renderTop(); };
+$("native-folders").onclick = () => { change({ ...S.config, native_folder_buttons: S.config.native_folder_buttons !== true }); renderTop(); };
 $("organize").onclick = async () => { if (!invoke || !S.dock_on) return; S.organize = !S.organize; renderTop(); try { await invoke("set_organize", { on: S.organize }); } catch {} refresh(true); };
 $("cap-minus").onclick = () => queueCap(-1);
 $("cap-plus").onclick = () => queueCap(1);

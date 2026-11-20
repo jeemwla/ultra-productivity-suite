@@ -26,6 +26,7 @@ mod taskbar_geometry;
 mod launch;
 mod edition;
 mod dock_lease;
+mod native_groups;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -248,7 +249,9 @@ mod art {
 }
 
 // ----------------------------------------------------------------------------- organizer config
-struct OrgCfg { keep: Vec<String>, order: Vec<String>, cats: Vec<(String, Vec<String>)>, overrides: HashMap<String, String>, inline_window_list: bool }
+struct OrgCfg { keep: Vec<String>, order: Vec<String>, cats: Vec<(String, Vec<String>)>, overrides: HashMap<String, String>, inline_window_list: bool,
+    /// Off by default. On: each folder becomes one native taskbar button (native_groups.rs) instead of DeleteTab.
+    native_folder_buttons: bool }
 static ORG_CACHE: Mutex<Option<(SystemTime, std::sync::Arc<OrgCfg>)>> = Mutex::new(None);
 
 fn org_path() -> PathBuf { appdata("organizer.json") }
@@ -266,7 +269,8 @@ fn org_config() -> std::sync::Arc<OrgCfg> {
     if let Some(m) = v["categories"].as_object() { for (k, list) in m { cats.push((k.clone(), strs(list))); } }
     cats.sort_by_key(|(k, _)| order.iter().position(|o| o == k).unwrap_or(99));
     let overrides = v["overrides"].as_object().map(|m| m.iter().filter_map(|(k, x)| x.as_str().map(|s| (k.to_lowercase(), s.to_string()))).collect()).unwrap_or_default();
-    let cfg = std::sync::Arc::new(OrgCfg { keep: strs(&v["keep"]), order, cats, overrides, inline_window_list: v["inline_window_list"].as_bool() == Some(true) });
+    let cfg = std::sync::Arc::new(OrgCfg { keep: strs(&v["keep"]), order, cats, overrides, inline_window_list: v["inline_window_list"].as_bool() == Some(true),
+        native_folder_buttons: v["native_folder_buttons"].as_bool() == Some(true) });
     if let Ok(mut g) = ORG_CACHE.lock() { *g = Some((mt, cfg.clone())); }
     cfg
 }
@@ -300,7 +304,7 @@ mod category_contract_tests {
         OrgCfg { keep:vec![],order:vec![],cats:vec![
             ("Games".into(),vec!["steam".into()]),
             ("Chat".into(),vec!["discord".into()]),
-        ],overrides:Default::default(),inline_window_list:false }
+        ],overrides:Default::default(),inline_window_list:false,native_folder_buttons:false }
     }
     #[test]
     fn platform_roots_cover_unlisted_games_before_weak_keywords() {
@@ -556,6 +560,7 @@ fn restore_all() {
     use windows::Win32::System::Com::*;
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
     RESTORATION_PENDING.store(true, Ordering::Release);
+    if let Err(e) = native_groups::release_all() { eprintln!("[dock] folder buttons are not fully restored: {e}"); }
     if let Some(t) = taskbar_list() {
         match recovery::restore_all(&t) {
             Ok(()) => { /* The organizer clears the recovery view after checking its own gate. */ }
@@ -579,6 +584,10 @@ fn organizer_loop() {
     let mut hiding_stability = dock_surface::HidingStability::default();
     let mut hidden_now: std::collections::HashSet<isize> = Default::default();
     let mut listing = dock_safety::StripListing::default();
+    // Optional native folder buttons (native_groups.rs): no DeleteTab, so nothing to restore for a switcher.
+    let mut native_mode = false;
+    let dock_exe = std::env::current_exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
     // Only one Dock (Public or Dev) may manage the taskbar: see dock_lease.rs. Without the lease nothing is hidden.
     let mut lease = dock_lease::Lease::open(dock_lease::LEASE_NAME);
     let mine = profile().edition();
@@ -608,6 +617,8 @@ fn organizer_loop() {
                     println!("[dock] another Ultra Dock was turned on: handing the taskbar over");
                     set_dock_enabled_local(false);
                     l.release_when_restored(|| {
+                        // Combined folder buttons never hide a window, so their release cannot gate the lease.
+                        if let Err(e) = native_groups::release_all() { eprintln!("[dock] folder buttons: {e}"); }
                         let result = recovery::restore_all(&tbl);
                         if result.is_ok() { switcher_barrier::acknowledge_restored(); RESTORATION_PENDING.store(false, Ordering::Release); }
                         result
@@ -616,6 +627,8 @@ fn organizer_loop() {
                 dock_lease::Step::Release => {
                     RESTORATION_PENDING.store(true, Ordering::Release);
                     l.release_when_restored(|| {
+                        // Combined folder buttons never hide a window, so their release cannot gate the lease.
+                        if let Err(e) = native_groups::release_all() { eprintln!("[dock] folder buttons: {e}"); }
                         let result = recovery::restore_all(&tbl);
                         if result.is_ok() { switcher_barrier::acknowledge_restored(); RESTORATION_PENDING.store(false, Ordering::Release); }
                         result
@@ -688,6 +701,7 @@ fn organizer_loop() {
             if !hiding_stability.active(started.elapsed().as_millis() as u64) { ORGANIZER_FAST_STATUS.store(5,Ordering::Relaxed); continue; }
             ORGANIZER_FAST_STATUS.store(6,Ordering::Relaxed);
             let fg = unsafe { GetForegroundWindow().0 as isize };
+            if native_mode { continue; } // nothing is DeleteTab-hidden, so there is nothing to re-hide
             if let Some(h) = burst.tick(fg, started.elapsed().as_millis() as u64, |h| hidden_now.contains(&h)) {
                 if switcher_barrier::begin_hide() && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
                     && !SWITCHER_ACTIVE.load(Ordering::Acquire) && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) {
@@ -696,6 +710,8 @@ fn organizer_loop() {
             }
         }
         let cfg = org_config();
+        native_mode = native_groups::engaged(cfg.native_folder_buttons, may_organize, ORGANIZE.load(Ordering::Acquire));
+        let mut native_wanted: HashMap<isize, String> = HashMap::new();
         let pins = pinned_apps();
         let wins = enum_app_windows();
         listing.retain(&wins.iter().map(|(h,_,_)| *h).collect());
@@ -736,7 +752,12 @@ fn organizer_loop() {
         for (h, title, exe) in &wins {
             let kept = is_kept(exe, &cfg) || is_pinned(exe, &pins);
             // Only a window the strip has rendered may be hidden, so a render error cannot lose apps.
-            let hidden = on && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
+            if native_mode && !kept {
+                let folder = categorize(exe, &cfg);
+                let wanted = native_groups::folder_identity(profile().aumid_prefix(), &folder, &dock_exe, &system_root);
+                if native_groups::apply(*h, &folder, &wanted) { native_wanted.insert(*h, folder); }
+            }
+            let hidden = !native_mode && on && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire)
                 && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && !switcher_barrier::faulted()
                 && !SWITCHER_VISIBLE.load(Ordering::Acquire) && !SWITCHER_ACTIVE.load(Ordering::Acquire)
                 && ORGANIZE.load(Ordering::Relaxed) && !RESTORATION_PENDING.load(Ordering::Acquire)
@@ -744,17 +765,18 @@ fn organizer_loop() {
                 && !SWITCHER_RESTORE_REQUESTED.load(Ordering::Acquire) && !SWITCHER_ACTIVE.load(Ordering::Acquire)
                 && !LAYOUT_RESTORE_REQUESTED.load(Ordering::Acquire) && recovery::hide_window(*h, reapply, &tbl);
             if hidden { hidden_now.insert(*h); }
-            else if on { recovery::restore_window(*h, &tbl); }
+            else if on || native_mode { recovery::restore_window(*h, &tbl); }
             let presentation = presentation_allowed(may_organize,guarded,ORGANIZE.load(Ordering::Acquire),
                 HEALTHY.load(Ordering::Acquire),RESTORATION_PENDING.load(Ordering::Acquire),
                 SWITCHER_ACTIVE.load(Ordering::Acquire),switcher_barrier::faulted());
-            let offered = !kept && if paused && !hidden {
+            // Native folder buttons are the folder: the strip never offers the same app a second time.
+            let offered = !kept && !native_mode && if paused && !hidden {
                 // Native switching restores buttons, not the user's grouping.
                 // Keep the existing live partition until a normal pass resumes.
                 previously_offered.contains(h)
             } else { listing.offer(*h, started.elapsed().as_millis() as u64,
                 presentation, on && rendered.contains(h), hidden) };
-            if !kept {
+            if !kept && !native_mode {
                 let cat = categorize(exe, &cfg);
                 if offered { cands.push((cfg.order.iter().position(|o| *o == cat).unwrap_or(98), pretty_name(exe), cat, exe.clone())); }
                 if hidden { hidden_exes.insert(exe.clone()); } else { pending.insert(exe.clone()); }
@@ -767,6 +789,8 @@ fn organizer_loop() {
                                     category: categorize(exe, &cfg), active: *h == fg });
             }
         }
+        if native_mode { native_groups::release_unwanted(&native_wanted); }
+        else if native_groups::grouped_count() > 0 && native_groups::release_all().is_err() { eprintln!("[dock] folder buttons are not fully restored yet"); }
         let recovery_view = !ORGANIZE.load(Ordering::Acquire) || RESTORATION_PENDING.load(Ordering::Acquire);
         if recovery_view {
             let previous = SNAPSHOT.lock().map(|s| s.clone()).unwrap_or_default();
@@ -1069,6 +1093,8 @@ fn run_guard(owner: recovery::Owner) {
                 recovery::recover_owner(owner, &t);
                 std::thread::sleep(Duration::from_millis(500));
             }
+            // A crashed Dock's combined folder buttons go back to each app's own button.
+            let _ = native_groups::recover_previous();
         }
     }
 }
@@ -1407,6 +1433,7 @@ fn get_windows(window: WebviewWindow, frontend_error:Option<String>) -> Value {
         strip_plan(&wins, avail, surface.as_ref().and_then(|s|s.geometry.as_ref()).and_then(|g|g.button_width_css)) };
     layout["show_menu"] = json!(!left);
     layout["inline_window_list"] = json!(org_config().inline_window_list);
+    layout["native_folder_buttons"] = json!(org_config().native_folder_buttons);
     layout["side"] = json!(if left {"left"} else {"right"});
     layout["centered"] = json!(centered);
     layout["generation"] = generation_json(generation);
@@ -3091,6 +3118,7 @@ fn restore_from_last_run() {
     use windows::Win32::System::Com::*;
     unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
     RESTORATION_PENDING.store(true, Ordering::Release);
+    if let Err(e) = native_groups::recover_previous() { eprintln!("[dock] earlier folder buttons: {e}"); }
     if let Some(t) = taskbar_list() {
         match recovery::recover_previous(&t) {
             Ok(()) => { RESTORATION_PENDING.store(false, Ordering::Release); }
