@@ -40,7 +40,7 @@ for (const file of tracked) {
     parse(fs.readFileSync(full, 'utf8'), file, 1, true);
   } else if (ext === '.html') {
     const html = fs.readFileSync(full, 'utf8');
-    const re = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi;
+    const re = /<script(\s[^>]*)?>([\s\S]*?)<\/script[^>]*>/gi;
     let m;
     while ((m = re.exec(html)) !== null) {
       const attrs = m[1] || '';
