@@ -32,6 +32,8 @@ img{-webkit-user-drag:none}
 .btn.danger:hover:not(:disabled){background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
 .btn.small{min-height:28px;padding:0 var(--s-3);font-size:var(--t-1)}
 .btn.ghost{background:transparent;border-color:transparent}
+/* Spinner keyframes shared by busy buttons in the hub */
+@keyframes btn-spin{to{transform:rotate(360deg)}}
 .btn.ghost:hover:not(:disabled){background:var(--hover);border-color:transparent}
 
 /* Status pills: a tone color, a matching soft background and a dot, so state never depends on color alone */

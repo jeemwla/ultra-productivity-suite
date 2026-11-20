@@ -13,6 +13,10 @@ p{color:var(--ink-2);margin-bottom:var(--s-5)}
 #retry:disabled{opacity:1;color:var(--ink-2);cursor:progress}
 #retry:disabled::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Try again enabled means the service did not come up: make it the main action and mark the message */
+#retry:not(:disabled){background:var(--accent);color:var(--accent-ink);border-color:transparent}
+#retry:not(:disabled):hover{background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
+main:has(#retry:not(:disabled)) #status{color:var(--warn)}
 @media (prefers-reduced-motion:reduce){#retry:disabled::before{animation:none;border-color:var(--accent)}}
 </style></head>
 <body><main><h1 id="title">Starting app…</h1><p id="status" role="status">Waiting for the local service. This window will open the app when it is ready.</p><button id="retry" class="btn" disabled>Checking the service…</button></main>

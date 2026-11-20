@@ -62,3 +62,11 @@ test('hub cards are named regions and their buttons say which app they act on',(
   }
   assert.equal((hub.match(/aria-describedby="h-(sentinel|alarm|dock|insights)"/g)||[]).length,5);
 });
+
+test('the strip contrast-theme block comes after the badge and bar rules it overrides',()=>{
+  const html=ui('index.html');
+  const forced=html.indexOf('@media (forced-colors: active)');
+  assert.ok(forced>html.indexOf('.win .wn{'),'after the window count badge');
+  assert.ok(forced>html.indexOf('.grp .runbar{'),'after the running bar');
+  assert.match(ui('hub.html'),/@media \(forced-colors: active\)\{\.navitem \.dot\{forced-color-adjust:none/);
+});
