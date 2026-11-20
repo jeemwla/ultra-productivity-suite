@@ -2,7 +2,7 @@
 # Install with:  python -m pip install -r requirements.txt   (building also needs: pyinstaller pillow)
 fastapi>=0.115
 uvicorn[standard]>=0.30
-httpx>=0.27
+httpx>=0.28.1
 pydantic>=2.9
 websockets>=13
 psutil>=6
