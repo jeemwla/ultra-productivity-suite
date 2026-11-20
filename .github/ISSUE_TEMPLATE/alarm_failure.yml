@@ -25,7 +25,7 @@ body:
     id: version
     attributes:
       label: Ultra Suite version
-      placeholder: "2.2.30"
+      placeholder: "2.2.31"
     validations:
       required: true
   - type: dropdown
