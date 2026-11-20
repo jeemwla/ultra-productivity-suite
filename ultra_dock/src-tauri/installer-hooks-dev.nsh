@@ -1,6 +1,8 @@
 ; Ultra Suite (Dev) installer hooks (Tauri NSIS). Used only by build_release.ps1 -Edition Dev.
 ; The Dev edition installs next to the consumer edition and must never stop, change or remove it: every name here is
 ; the Dev one (Ultra Suite Dev.exe, ultrasuite-dev-core.exe, %APPDATA%\UltraSuite-Dev, Run value UltraSuiteDev).
+; Its sensor helper is the Dev one too (service UltraSuiteSensorHelperDev, port 18095, its own Program Files folder).
+!include "${__FILEDIR__}\installer-sensors.nsh"
 
 !macro NSIS_HOOK_PREINSTALL
   ; Updating over a running Dev copy: quit it cleanly first, so its Dock puts every taskbar button back
@@ -23,6 +25,8 @@
   CreateShortCut "$SMPROGRAMS\PC Sentinel (Dev).lnk" "$INSTDIR\${MAINBINARYNAME}.exe" "--open sentinel" "$INSTDIR\appicons\sentinel.ico" 0
   CreateShortCut "$SMPROGRAMS\Ultra Dock (Dev).lnk" "$INSTDIR\${MAINBINARYNAME}.exe" "--show-dock" "$INSTDIR\appicons\dock.ico" 0
   CreateShortCut "$SMPROGRAMS\Insights (Dev).lnk" "$INSTDIR\${MAINBINARYNAME}.exe" "--open insights" "$INSTDIR\appicons\insights.ico" 0
+  ; Full hardware sensors for PC Sentinel (Dev): asked once, Yes by default, one Windows permission prompt
+  !insertmacro ULTRA_SENSOR_SETUP "Dev" "UltraSuiteSensorHelperDev" "Ultra Suite Sensor Helper (Dev)" "$APPDATA\UltraSuite-Dev" "$LOCALAPPDATA\UltraSuite-Dev"
   ; The Dev edition never sends anonymous statistics, so it does not ask.
   CreateDirectory "$APPDATA\UltraSuite-Dev"
   FileOpen $0 "$APPDATA\UltraSuite-Dev\consent.txt" w
@@ -37,6 +41,8 @@
   nsExec::Exec 'taskkill /IM "${MAINBINARYNAME}.exe" /F'
   nsExec::Exec 'taskkill /IM ultrasuite-dev-core.exe /F'
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "UltraSuiteDev"
+  ; Only the Dev sensor helper service is removed (never the Public one). PawnIO stays for other programs.
+  !insertmacro ULTRA_SENSOR_REMOVE "Dev" "UltraSuiteSensorHelperDev" "Ultra Suite Sensor Helper (Dev)" "$LOCALAPPDATA\UltraSuite-Dev"
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

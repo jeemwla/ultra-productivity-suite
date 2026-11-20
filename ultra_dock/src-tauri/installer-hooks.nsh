@@ -1,5 +1,8 @@
 ; Ultra Suite installer hooks (Tauri NSIS)
 
+; Optional full hardware sensors step (sensor helper service plus the PawnIO driver), see installer-sensors.nsh
+!include "${__FILEDIR__}\installer-sensors.nsh"
+
 !macro NSIS_HOOK_PREINSTALL
   ; Updating over a running copy: quit it cleanly first, so Ultra Dock puts every taskbar button back
   IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 +3
@@ -32,6 +35,9 @@
   RMDir "$APPDATA\UltraSuite\addons"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UltraSuiteLaptopPack"
 
+  ; Full hardware sensors for PC Sentinel: asked once, Yes by default, one Windows permission prompt
+  !insertmacro ULTRA_SENSOR_SETUP "Public" "UltraSuiteSensorHelper" "Ultra Suite Sensor Helper" "$APPDATA\UltraSuite" "$LOCALAPPDATA\UltraSuite"
+
   ; Ask once about anonymous stats (never in silent installs)
   CreateDirectory "$APPDATA\UltraSuite"
   IfSilent ultra_no_consent
@@ -59,6 +65,8 @@
   nsExec::Exec 'taskkill /IM "${MAINBINARYNAME}.exe" /F'
   nsExec::Exec 'taskkill /IM ultrasuite-core.exe /F'
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "UltraSuite"
+  ; This edition's sensor helper service goes too (not during /UPDATE). PawnIO stays for other programs.
+  !insertmacro ULTRA_SENSOR_REMOVE "Public" "UltraSuiteSensorHelper" "Ultra Suite Sensor Helper" "$LOCALAPPDATA\UltraSuite"
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

@@ -24,17 +24,23 @@
   function sensorBanner(g) {
     if (!g || g.state === "ok") return null;
     const links = g.links || {};
-    const kind = g.state === "legacy_driver" ? "info" : "warning";
+    const kind = ["legacy_driver", "restart_needed", "cpu_unsupported", "helper_partial"].includes(g.state) ? "info" : "warning";
     const lhm = links.lhm ? `<a href="${esc(links.lhm)}" target="_blank" rel="noopener">LibreHardwareMonitor releases (official)</a>` : "";
     const pawn = links.pawnio ? `<a href="${esc(links.pawnio)}" target="_blank" rel="noopener">PawnIO driver releases (official)</a>` : "";
-    const what = `<details class="mt"><summary>What are these?</summary><p class="muted mt">LibreHardwareMonitor is a free, open-source program that reads temperatures, fan speeds and power. It needs a small kernel driver to reach the sensors. Older versions used WinRing0, which Microsoft Defender flags as vulnerable; current versions use PawnIO, which is installed separately. Ultra Suite only reads what they report.</p></details>`;
+    const what = `<details class="mt"><summary>What are these?</summary><p class="muted mt">LibreHardwareMonitor is a free, open-source program that reads temperatures, fan speeds and power. It needs a small kernel driver to reach the sensors. Older versions used WinRing0, which Microsoft Defender flags as vulnerable; current versions use PawnIO, which is installed separately. PC Sentinel's own sensor helper is built on the same open-source library and uses PawnIO too; it only reads sensors and never changes fans or clocks. Ultra Suite only reads what they report.</p></details>`;
     return { kind, title: g.title || "Sensors", html: `${esc(g.text)} <span class="sg-links">${[lhm, pawn].filter(Boolean).join(" · ")}</span>${what}`,
-      setup: g.state === "lhm_missing" };
+      setup: g.state === "lhm_missing",
+      // PC Sentinel's own sensor helper: "Try again" re-checks and runs its setup (one Windows permission prompt)
+      retry: g.retry === true, retryLabel: g.retry_label || "Try again" };
   }
 
   function missingReading(g) {
     if (!g) return "needs full sensors";
-    return g.state === "driver_missing" ? "sensor driver missing" : g.state === "lhm_stopped" ? "LibreHardwareMonitor not running" : "needs full sensors";
+    if (g.state === "helper_driver_blocked") return "sensor driver blocked by Windows";
+    if (g.state === "restart_needed") return "restart to finish sensor setup";
+    if (g.state === "cpu_unsupported") return "not reported by this CPU";
+    if (g.state === "helper_stopped") return "sensor helper not answering";
+    return g.state === "driver_missing" || g.state === "helper_driver_missing" ? "sensor driver missing" : g.state === "lhm_stopped" ? "LibreHardwareMonitor not running" : "needs full sensors";
   }
 
   /* ---------------------------------------------------------------- Max Performance measurement */

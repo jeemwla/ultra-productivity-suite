@@ -1,0 +1,51 @@
+# Path rules for the "Label pull requests" workflow. The labels feed the app sections of
+# generated release notes (.github/release.yml). A pull request can get several labels.
+dock:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ultra_dock/**
+          - tests/dock_*.test.cjs
+          - tests/hub_ui.test.cjs
+
+sentinel:
+  - changed-files:
+      - any-glob-to-any-file:
+          - pc_sentinel/**
+          - tests/test_sentinel_*.py
+          - tests/sentinel_*.test.cjs
+
+alarm:
+  - changed-files:
+      - any-glob-to-any-file:
+          - code_red_alarm/**
+          - tests/*alarm*
+
+core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - core/**
+
+insights:
+  - changed-files:
+      - any-glob-to-any-file:
+          - insights/**
+
+installer:
+  - changed-files:
+      - any-glob-to-any-file:
+          - build_release.ps1
+          - requirements-build.txt
+          - tools/**
+          - ultra_dock/src-tauri/installer-hooks*.nsh
+          - ultra_dock/src-tauri/tauri.conf.json
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - docs/**
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**

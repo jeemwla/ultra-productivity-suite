@@ -1,0 +1,3209 @@
+{
+ "_note": "PC Sentinel preview fixture (SENTINEL_PREVIEW). Captured from a desktop with identifiers replaced; no serial numbers, user paths or host names.",
+ "snapshot": {
+  "hardware": {
+   "live": true,
+   "source": "LibreHardwareMonitor",
+   "level": "full",
+   "groups": [
+    {
+     "id": "/amdcpu/0",
+     "name": "AMD Ryzen 7 9800X3D",
+     "kind": "cpu",
+     "sensors": [
+      {
+       "id": "/amdcpu/0/voltage/2",
+       "name": "Core #1 VID",
+       "type": "Voltage",
+       "value": 0.325,
+       "min": 0.256,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/3",
+       "name": "Core #2 VID",
+       "type": "Voltage",
+       "value": 0.313,
+       "min": 0.256,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/4",
+       "name": "Core #3 VID",
+       "type": "Voltage",
+       "value": 0.306,
+       "min": 0.256,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/5",
+       "name": "Core #4 VID",
+       "type": "Voltage",
+       "value": 0.319,
+       "min": 0.25,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/6",
+       "name": "Core #5 VID",
+       "type": "Voltage",
+       "value": 0.319,
+       "min": 0.244,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/7",
+       "name": "Core #6 VID",
+       "type": "Voltage",
+       "value": 0.319,
+       "min": 0.244,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/8",
+       "name": "Core #7 VID",
+       "type": "Voltage",
+       "value": 0.319,
+       "min": 0.244,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/voltage/9",
+       "name": "Core #8 VID",
+       "type": "Voltage",
+       "value": 0.319,
+       "min": 0.244,
+       "max": 0.4,
+       "unit": "V"
+      },
+      {
+       "id": "/amdcpu/0/power/0",
+       "name": "Package",
+       "type": "Power",
+       "value": 92.1,
+       "min": 46.6,
+       "max": 128.9,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/1",
+       "name": "Core #1 (SMU)",
+       "type": "Power",
+       "value": 6.6,
+       "min": 1.8,
+       "max": 9.9,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/2",
+       "name": "Core #2 (SMU)",
+       "type": "Power",
+       "value": 7.6,
+       "min": 3.3,
+       "max": 13.3,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/3",
+       "name": "Core #3 (SMU)",
+       "type": "Power",
+       "value": 5.7,
+       "min": 0.3,
+       "max": 10.4,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/4",
+       "name": "Core #4 (SMU)",
+       "type": "Power",
+       "value": 5.8,
+       "min": 0.5,
+       "max": 10.5,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/5",
+       "name": "Core #5 (SMU)",
+       "type": "Power",
+       "value": 6.9,
+       "min": 3.1,
+       "max": 10.4,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/6",
+       "name": "Core #6 (SMU)",
+       "type": "Power",
+       "value": 6.4,
+       "min": 1.2,
+       "max": 10.4,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/7",
+       "name": "Core #7 (SMU)",
+       "type": "Power",
+       "value": 6.4,
+       "min": 0.3,
+       "max": 11.3,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/power/8",
+       "name": "Core #8 (SMU)",
+       "type": "Power",
+       "value": 5.7,
+       "min": 0.1,
+       "max": 10.6,
+       "unit": "W"
+      },
+      {
+       "id": "/amdcpu/0/clock/0",
+       "name": "Bus Speed",
+       "type": "Clock",
+       "value": 99.8,
+       "min": 99.8,
+       "max": 99.8,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/1",
+       "name": "Cores (Average)",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 0.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/2",
+       "name": "Cores (Average Effective)",
+       "type": "Clock",
+       "value": 4258.0,
+       "min": 0.0,
+       "max": 5235.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/3",
+       "name": "Core #1",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 3999.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/4",
+       "name": "Core #1 (Effective)",
+       "type": "Clock",
+       "value": 4568.0,
+       "min": 0.0,
+       "max": 5624.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/5",
+       "name": "Core #2",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 3597.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/6",
+       "name": "Core #2 (Effective)",
+       "type": "Clock",
+       "value": 4981.0,
+       "min": 0.0,
+       "max": 7387.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/7",
+       "name": "Core #3",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 4226.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/8",
+       "name": "Core #3 (Effective)",
+       "type": "Clock",
+       "value": 3721.0,
+       "min": 0.0,
+       "max": 5311.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/9",
+       "name": "Core #4",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 4572.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/10",
+       "name": "Core #4 (Effective)",
+       "type": "Clock",
+       "value": 3947.0,
+       "min": 0.0,
+       "max": 5245.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/11",
+       "name": "Core #5",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 3523.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/12",
+       "name": "Core #5 (Effective)",
+       "type": "Clock",
+       "value": 4756.0,
+       "min": 0.0,
+       "max": 5399.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/13",
+       "name": "Core #6",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 5095.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/14",
+       "name": "Core #6 (Effective)",
+       "type": "Clock",
+       "value": 4363.0,
+       "min": 0.0,
+       "max": 5355.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/15",
+       "name": "Core #7",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 3614.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/16",
+       "name": "Core #7 (Effective)",
+       "type": "Clock",
+       "value": 3979.0,
+       "min": 0.0,
+       "max": 5286.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/17",
+       "name": "Core #8",
+       "type": "Clock",
+       "value": 5225.0,
+       "min": 3872.0,
+       "max": 5225.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/clock/18",
+       "name": "Core #8 (Effective)",
+       "type": "Clock",
+       "value": 3749.0,
+       "min": 0.0,
+       "max": 5218.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/amdcpu/0/temperature/2",
+       "name": "Core (Tctl/Tdie)",
+       "type": "Temperature",
+       "value": 65.5,
+       "min": 47.3,
+       "max": 83.8,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/amdcpu/0/temperature/3",
+       "name": "CCD1 (Tdie)",
+       "type": "Temperature",
+       "value": 61.5,
+       "min": 35.0,
+       "max": 86.5,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/amdcpu/0/load/0",
+       "name": "CPU Total",
+       "type": "Load",
+       "value": 79.4,
+       "min": 19.7,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/1",
+       "name": "CPU Core Max",
+       "type": "Load",
+       "value": 93.9,
+       "min": 62.5,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/2",
+       "name": "CPU Core #1",
+       "type": "Load",
+       "value": 83.1,
+       "min": 6.2,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/3",
+       "name": "CPU Core #2",
+       "type": "Load",
+       "value": 93.9,
+       "min": 40.6,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/4",
+       "name": "CPU Core #3",
+       "type": "Load",
+       "value": 69.2,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/5",
+       "name": "CPU Core #4",
+       "type": "Load",
+       "value": 70.8,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/6",
+       "name": "CPU Core #5",
+       "type": "Load",
+       "value": 90.8,
+       "min": 20.3,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/7",
+       "name": "CPU Core #6",
+       "type": "Load",
+       "value": 81.5,
+       "min": 1.6,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/8",
+       "name": "CPU Core #7",
+       "type": "Load",
+       "value": 78.5,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/load/9",
+       "name": "CPU Core #8",
+       "type": "Load",
+       "value": 67.7,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/amdcpu/0/factor/0",
+       "name": "Core #1",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 50.947,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/1",
+       "name": "Core #2",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 51.047,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/2",
+       "name": "Core #3",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 51.047,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/3",
+       "name": "Core #4",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 51.047,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/4",
+       "name": "Core #5",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 51.047,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/5",
+       "name": "Core #6",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 51.047,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/6",
+       "name": "Core #7",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 51.047,
+       "max": 52.355,
+       "unit": ""
+      },
+      {
+       "id": "/amdcpu/0/factor/7",
+       "name": "Core #8",
+       "type": "Factor",
+       "value": 52.349,
+       "min": 50.997,
+       "max": 52.355,
+       "unit": ""
+      }
+     ]
+    },
+    {
+     "id": "/gpu-amd/5",
+     "name": "AMD Radeon RX 9060 XT",
+     "kind": "gpu",
+     "sensors": [
+      {
+       "id": "/gpu-amd/5/voltage/0",
+       "name": "GPU Core",
+       "type": "Voltage",
+       "value": 0.734,
+       "min": 0.03,
+       "max": 1.087,
+       "unit": "V"
+      },
+      {
+       "id": "/gpu-amd/5/power/3",
+       "name": "GPU Package",
+       "type": "Power",
+       "value": 33.0,
+       "min": 0.0,
+       "max": 106.0,
+       "unit": "W"
+      },
+      {
+       "id": "/gpu-amd/5/clock/0",
+       "name": "GPU Core",
+       "type": "Clock",
+       "value": 140.0,
+       "min": 0.0,
+       "max": 3359.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/gpu-amd/5/clock/2",
+       "name": "GPU Memory",
+       "type": "Clock",
+       "value": 2502.0,
+       "min": 56.0,
+       "max": 2502.0,
+       "unit": "MHz"
+      },
+      {
+       "id": "/gpu-amd/5/temperature/0",
+       "name": "GPU Core",
+       "type": "Temperature",
+       "value": 42.0,
+       "min": 27.0,
+       "max": 48.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/gpu-amd/5/temperature/1",
+       "name": "GPU Memory",
+       "type": "Temperature",
+       "value": 46.0,
+       "min": 28.0,
+       "max": 58.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/gpu-amd/5/temperature/7",
+       "name": "GPU Hot Spot",
+       "type": "Temperature",
+       "value": 45.0,
+       "min": 28.0,
+       "max": 58.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/gpu-amd/5/load/0",
+       "name": "GPU Core",
+       "type": "Load",
+       "value": 6.0,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/1",
+       "name": "GPU Memory",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 40.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/2",
+       "name": "D3D 3D",
+       "type": "Load",
+       "value": 6.6,
+       "min": 0.0,
+       "max": 82.6,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/3",
+       "name": "D3D Compute 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.2,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/4",
+       "name": "D3D Compute 1",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/5",
+       "name": "D3D Copy",
+       "type": "Load",
+       "value": 0.2,
+       "min": 0.0,
+       "max": 30.3,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/6",
+       "name": "D3D Copy",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 33.8,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/7",
+       "name": "D3D High Priority 3D",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 9.7,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/8",
+       "name": "D3D High Priority Compute",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/9",
+       "name": "D3D Security 1",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/10",
+       "name": "D3D Timer 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/11",
+       "name": "D3D True Audio 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/12",
+       "name": "D3D True Audio 1",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/13",
+       "name": "D3D Video Codec 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 87.2,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/load/14",
+       "name": "D3D Video JPEG 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 43.3,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/fan/0",
+       "name": "GPU Fan",
+       "type": "Fan",
+       "value": 1172.0,
+       "min": 0.0,
+       "max": 1389.0,
+       "unit": "RPM"
+      },
+      {
+       "id": "/gpu-amd/5/control/0",
+       "name": "GPU Fan",
+       "type": "Control",
+       "value": 32.0,
+       "min": 0.0,
+       "max": 38.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/5/factor/0",
+       "name": "Fullscreen FPS",
+       "type": "Factor",
+       "value": 0.0,
+       "min": -1.0,
+       "max": 2314.493,
+       "unit": ""
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/0",
+       "name": "GPU Memory Used",
+       "type": "SmallData",
+       "value": 6490.0,
+       "min": 421.0,
+       "max": 7438.0,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/1",
+       "name": "GPU Memory Free",
+       "type": "SmallData",
+       "value": 9814.0,
+       "min": 8866.0,
+       "max": 15883.0,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/2",
+       "name": "GPU Memory Total",
+       "type": "SmallData",
+       "value": 16304.0,
+       "min": 16304.0,
+       "max": 16304.0,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/3",
+       "name": "D3D Dedicated Memory Used",
+       "type": "SmallData",
+       "value": 6490.7,
+       "min": 421.0,
+       "max": 7438.6,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/4",
+       "name": "D3D Dedicated Memory Free",
+       "type": "SmallData",
+       "value": 9697.8,
+       "min": 8749.9,
+       "max": 15767.5,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/5",
+       "name": "D3D Dedicated Memory Total",
+       "type": "SmallData",
+       "value": 16188.5,
+       "min": 16188.5,
+       "max": 16188.5,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/6",
+       "name": "D3D Shared Memory Used",
+       "type": "SmallData",
+       "value": 1275.3,
+       "min": 105.2,
+       "max": 1366.5,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/7",
+       "name": "D3D Shared Memory Free",
+       "type": "SmallData",
+       "value": 14670.8,
+       "min": 14579.6,
+       "max": 15840.8,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/5/smalldata/8",
+       "name": "D3D Shared Memory Total",
+       "type": "SmallData",
+       "value": 15946.0,
+       "min": 15946.0,
+       "max": 15946.0,
+       "unit": "MB"
+      }
+     ]
+    },
+    {
+     "id": "/gpu-amd/0",
+     "name": "AMD Radeon(TM) Graphics",
+     "kind": "gpu",
+     "sensors": [
+      {
+       "id": "/gpu-amd/0/load/2",
+       "name": "D3D 3D",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.3,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/3",
+       "name": "D3D Compute 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.1,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/4",
+       "name": "D3D Compute 1",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/5",
+       "name": "D3D Copy",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 5.8,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/6",
+       "name": "D3D High Priority 3D",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/7",
+       "name": "D3D High Priority Compute",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/8",
+       "name": "D3D Security 1",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/9",
+       "name": "D3D Timer 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/10",
+       "name": "D3D Video Codec 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/11",
+       "name": "D3D Video Decode 1",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/load/12",
+       "name": "D3D Video JPEG 0",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/0",
+       "name": "GPU Memory Used",
+       "type": "SmallData",
+       "value": 2.0,
+       "min": 0.0,
+       "max": 76.0,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/3",
+       "name": "D3D Dedicated Memory Used",
+       "type": "SmallData",
+       "value": 2.4,
+       "min": 0.3,
+       "max": 76.8,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/4",
+       "name": "D3D Dedicated Memory Free",
+       "type": "SmallData",
+       "value": 457.3,
+       "min": 383.0,
+       "max": 459.5,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/5",
+       "name": "D3D Dedicated Memory Total",
+       "type": "SmallData",
+       "value": 459.8,
+       "min": 459.8,
+       "max": 459.8,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/6",
+       "name": "D3D Shared Memory Used",
+       "type": "SmallData",
+       "value": 1.4,
+       "min": 0.5,
+       "max": 3.9,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/7",
+       "name": "D3D Shared Memory Free",
+       "type": "SmallData",
+       "value": 15944.6,
+       "min": 15942.2,
+       "max": 15945.5,
+       "unit": "MB"
+      },
+      {
+       "id": "/gpu-amd/0/smalldata/8",
+       "name": "D3D Shared Memory Total",
+       "type": "SmallData",
+       "value": 15946.0,
+       "min": 15946.0,
+       "max": 15946.0,
+       "unit": "MB"
+      }
+     ]
+    },
+    {
+     "id": "/vram",
+     "name": "Virtual Memory",
+     "kind": "memory",
+     "sensors": [
+      {
+       "id": "/vram/load/1",
+       "name": "Memory",
+       "type": "Load",
+       "value": 95.0,
+       "min": 12.0,
+       "max": 99.7,
+       "unit": "%"
+      },
+      {
+       "id": "/vram/data/2",
+       "name": "Memory Used",
+       "type": "Data",
+       "value": 73.4,
+       "min": 7.4,
+       "max": 75.7,
+       "unit": "GB"
+      },
+      {
+       "id": "/vram/data/3",
+       "name": "Memory Available",
+       "type": "Data",
+       "value": 3.9,
+       "min": 0.2,
+       "max": 54.7,
+       "unit": "GB"
+      }
+     ]
+    },
+    {
+     "id": "/ram",
+     "name": "Total Memory",
+     "kind": "memory",
+     "sensors": [
+      {
+       "id": "/ram/load/0",
+       "name": "Memory",
+       "type": "Load",
+       "value": 91.6,
+       "min": 21.6,
+       "max": 99.9,
+       "unit": "%"
+      },
+      {
+       "id": "/ram/data/0",
+       "name": "Memory Used",
+       "type": "Data",
+       "value": 28.5,
+       "min": 6.7,
+       "max": 31.1,
+       "unit": "GB"
+      },
+      {
+       "id": "/ram/data/1",
+       "name": "Memory Available",
+       "type": "Data",
+       "value": 2.6,
+       "min": 0.0,
+       "max": 24.4,
+       "unit": "GB"
+      }
+     ]
+    },
+    {
+     "id": "/memory/dimm/1",
+     "name": "Corsair - CMrA (#1)",
+     "kind": "memory",
+     "sensors": [
+      {
+       "id": "/memory/dimm/1/temperature/0",
+       "name": "DIMM #1",
+       "type": "Temperature",
+       "value": 47.0,
+       "min": 27.0,
+       "max": 48.3,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/memory/dimm/1/data/50",
+       "name": "Capacity",
+       "type": "Data",
+       "value": 16.0,
+       "min": 16.0,
+       "max": 16.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/memory/dimm/1/timing/20",
+       "name": "tCKAVGmin (Minimum Cycle Time)",
+       "type": "Timing",
+       "value": 0.416,
+       "min": 0.416,
+       "max": 0.416,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/21",
+       "name": "tCKAVGmax (Maximum Cycle Time)",
+       "type": "Timing",
+       "value": 1.01,
+       "min": 1.01,
+       "max": 1.01,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/22",
+       "name": "tAA (CAS Latency Time)",
+       "type": "Timing",
+       "value": 16.666,
+       "min": 16.666,
+       "max": 16.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/23",
+       "name": "tRCD (RAS to CAS Delay Time)",
+       "type": "Timing",
+       "value": 16.666,
+       "min": 16.666,
+       "max": 16.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/24",
+       "name": "tRP (Row Precharge Delay Time)",
+       "type": "Timing",
+       "value": 16.666,
+       "min": 16.666,
+       "max": 16.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/25",
+       "name": "tRAS (Active to Precharge Delay Time)",
+       "type": "Timing",
+       "value": 32.0,
+       "min": 32.0,
+       "max": 32.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/26",
+       "name": "tRC (Active to Active/Refresh Delay Time)",
+       "type": "Timing",
+       "value": 48.666,
+       "min": 48.666,
+       "max": 48.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/27",
+       "name": "tWR (Write Recovery Time)",
+       "type": "Timing",
+       "value": 30.0,
+       "min": 30.0,
+       "max": 30.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/28",
+       "name": "tRFC1 (Normal Refresh Recovery Time)",
+       "type": "Timing",
+       "value": 295.0,
+       "min": 295.0,
+       "max": 295.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/29",
+       "name": "tRFC2 (Fine Granularity Refresh Recovery Time)",
+       "type": "Timing",
+       "value": 160.0,
+       "min": 160.0,
+       "max": 160.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/30",
+       "name": "tRFCsb (Same Bank Refresh Recovery Time)",
+       "type": "Timing",
+       "value": 130.0,
+       "min": 130.0,
+       "max": 130.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/31",
+       "name": "tRFC1_dlr (Normal Refresh Recovery Time 3DS)",
+       "type": "Timing",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/32",
+       "name": "tRFC2_dlr (Fine Granularity Refresh Recovery Time 3DS)",
+       "type": "Timing",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/1/timing/33",
+       "name": "tRFCsb_dlr (Same Bank Refresh Recovery Time 3DS)",
+       "type": "Timing",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "ns"
+      }
+     ]
+    },
+    {
+     "id": "/memory/dimm/3",
+     "name": "Corsair - CMH32GX5M2E6000C36 (#3)",
+     "kind": "memory",
+     "sensors": [
+      {
+       "id": "/memory/dimm/3/temperature/0",
+       "name": "DIMM #3",
+       "type": "Temperature",
+       "value": 47.5,
+       "min": 26.8,
+       "max": 48.5,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/memory/dimm/3/data/50",
+       "name": "Capacity",
+       "type": "Data",
+       "value": 16.0,
+       "min": 16.0,
+       "max": 16.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/memory/dimm/3/timing/20",
+       "name": "tCKAVGmin (Minimum Cycle Time)",
+       "type": "Timing",
+       "value": 0.416,
+       "min": 0.416,
+       "max": 0.416,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/21",
+       "name": "tCKAVGmax (Maximum Cycle Time)",
+       "type": "Timing",
+       "value": 1.01,
+       "min": 1.01,
+       "max": 1.01,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/22",
+       "name": "tAA (CAS Latency Time)",
+       "type": "Timing",
+       "value": 16.666,
+       "min": 16.666,
+       "max": 16.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/23",
+       "name": "tRCD (RAS to CAS Delay Time)",
+       "type": "Timing",
+       "value": 16.666,
+       "min": 16.666,
+       "max": 16.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/24",
+       "name": "tRP (Row Precharge Delay Time)",
+       "type": "Timing",
+       "value": 16.666,
+       "min": 16.666,
+       "max": 16.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/25",
+       "name": "tRAS (Active to Precharge Delay Time)",
+       "type": "Timing",
+       "value": 32.0,
+       "min": 32.0,
+       "max": 32.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/26",
+       "name": "tRC (Active to Active/Refresh Delay Time)",
+       "type": "Timing",
+       "value": 48.666,
+       "min": 48.666,
+       "max": 48.666,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/27",
+       "name": "tWR (Write Recovery Time)",
+       "type": "Timing",
+       "value": 30.0,
+       "min": 30.0,
+       "max": 30.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/28",
+       "name": "tRFC1 (Normal Refresh Recovery Time)",
+       "type": "Timing",
+       "value": 295.0,
+       "min": 295.0,
+       "max": 295.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/29",
+       "name": "tRFC2 (Fine Granularity Refresh Recovery Time)",
+       "type": "Timing",
+       "value": 160.0,
+       "min": 160.0,
+       "max": 160.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/30",
+       "name": "tRFCsb (Same Bank Refresh Recovery Time)",
+       "type": "Timing",
+       "value": 130.0,
+       "min": 130.0,
+       "max": 130.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/31",
+       "name": "tRFC1_dlr (Normal Refresh Recovery Time 3DS)",
+       "type": "Timing",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/32",
+       "name": "tRFC2_dlr (Fine Granularity Refresh Recovery Time 3DS)",
+       "type": "Timing",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "ns"
+      },
+      {
+       "id": "/memory/dimm/3/timing/33",
+       "name": "tRFCsb_dlr (Same Bank Refresh Recovery Time 3DS)",
+       "type": "Timing",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "ns"
+      }
+     ]
+    },
+    {
+     "id": "/nvme/0",
+     "name": "Samsung SSD 970 EVO Plus 1TB",
+     "kind": "storage",
+     "sensors": [
+      {
+       "id": "/nvme/0/temperature/0",
+       "name": "Composite Temperature",
+       "type": "Temperature",
+       "value": 47.0,
+       "min": 0.0,
+       "max": 47.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/nvme/0/temperature/1",
+       "name": "Temperature #1",
+       "type": "Temperature",
+       "value": 46.9,
+       "min": 0.0,
+       "max": 46.9,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/nvme/0/temperature/2",
+       "name": "Temperature #2",
+       "type": "Temperature",
+       "value": 48.9,
+       "min": 0.0,
+       "max": 52.9,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/nvme/0/load/30",
+       "name": "Used Space",
+       "type": "Load",
+       "value": 68.0,
+       "min": 68.0,
+       "max": 68.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/load/51",
+       "name": "Read Activity",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/load/52",
+       "name": "Write Activity",
+       "type": "Load",
+       "value": 0.8,
+       "min": 0.0,
+       "max": 9.2,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/load/53",
+       "name": "Total Activity",
+       "type": "Load",
+       "value": 0.8,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/level/20",
+       "name": "Life",
+       "type": "Level",
+       "value": 100.0,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/level/100",
+       "name": "Available Spare",
+       "type": "Level",
+       "value": 100.0,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/level/101",
+       "name": "Available Spare Threshold",
+       "type": "Level",
+       "value": 10.0,
+       "min": 0.0,
+       "max": 10.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/level/102",
+       "name": "Percentage Used",
+       "type": "Level",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/0/factor/23",
+       "name": "Power On Count",
+       "type": "Factor",
+       "value": 1656.0,
+       "min": 0.0,
+       "max": 1656.0,
+       "unit": ""
+      },
+      {
+       "id": "/nvme/0/factor/24",
+       "name": "Power On Hours",
+       "type": "Factor",
+       "value": 6630.0,
+       "min": 0.0,
+       "max": 6630.0,
+       "unit": ""
+      },
+      {
+       "id": "/nvme/0/data/21",
+       "name": "Data Read",
+       "type": "Data",
+       "value": 1984.0,
+       "min": 0.0,
+       "max": 1984.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/0/data/22",
+       "name": "Data Written",
+       "type": "Data",
+       "value": 2466.0,
+       "min": 0.0,
+       "max": 2466.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/0/data/31",
+       "name": "Free Space",
+       "type": "Data",
+       "value": 319.7,
+       "min": 319.7,
+       "max": 319.7,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/0/data/32",
+       "name": "Total Space",
+       "type": "Data",
+       "value": 1000.2,
+       "min": 1000.2,
+       "max": 1000.2,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/0/throughput/54",
+       "name": "Read Rate",
+       "type": "Throughput",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 243000000.0,
+       "unit": "B/s"
+      },
+      {
+       "id": "/nvme/0/throughput/55",
+       "name": "Write Rate",
+       "type": "Throughput",
+       "value": 3900.0,
+       "min": 0.0,
+       "max": 17400000.0,
+       "unit": "B/s"
+      }
+     ]
+    },
+    {
+     "id": "/nvme/1",
+     "name": "WD_BLACK SN7100 1TB",
+     "kind": "storage",
+     "sensors": [
+      {
+       "id": "/nvme/1/temperature/0",
+       "name": "Composite Temperature",
+       "type": "Temperature",
+       "value": 46.0,
+       "min": 0.0,
+       "max": 50.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/nvme/1/temperature/1",
+       "name": "Temperature #1",
+       "type": "Temperature",
+       "value": 59.9,
+       "min": 0.0,
+       "max": 64.9,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/nvme/1/temperature/2",
+       "name": "Temperature #2",
+       "type": "Temperature",
+       "value": 47.9,
+       "min": 0.0,
+       "max": 51.9,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/nvme/1/load/30",
+       "name": "Used Space",
+       "type": "Load",
+       "value": 46.0,
+       "min": 43.5,
+       "max": 46.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/load/51",
+       "name": "Read Activity",
+       "type": "Load",
+       "value": 1.8,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/load/52",
+       "name": "Write Activity",
+       "type": "Load",
+       "value": 0.2,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/load/53",
+       "name": "Total Activity",
+       "type": "Load",
+       "value": 1.8,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/level/20",
+       "name": "Life",
+       "type": "Level",
+       "value": 99.0,
+       "min": 0.0,
+       "max": 99.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/level/100",
+       "name": "Available Spare",
+       "type": "Level",
+       "value": 100.0,
+       "min": 0.0,
+       "max": 100.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/level/101",
+       "name": "Available Spare Threshold",
+       "type": "Level",
+       "value": 10.0,
+       "min": 0.0,
+       "max": 10.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/level/102",
+       "name": "Percentage Used",
+       "type": "Level",
+       "value": 1.0,
+       "min": 0.0,
+       "max": 1.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nvme/1/factor/23",
+       "name": "Power On Count",
+       "type": "Factor",
+       "value": 641.0,
+       "min": 0.0,
+       "max": 641.0,
+       "unit": ""
+      },
+      {
+       "id": "/nvme/1/factor/24",
+       "name": "Power On Hours",
+       "type": "Factor",
+       "value": 1948.0,
+       "min": 0.0,
+       "max": 1948.0,
+       "unit": ""
+      },
+      {
+       "id": "/nvme/1/data/21",
+       "name": "Data Read",
+       "type": "Data",
+       "value": 24154.0,
+       "min": 0.0,
+       "max": 24154.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/1/data/22",
+       "name": "Data Written",
+       "type": "Data",
+       "value": 18881.0,
+       "min": 0.0,
+       "max": 18881.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/1/data/31",
+       "name": "Free Space",
+       "type": "Data",
+       "value": 539.6,
+       "min": 539.6,
+       "max": 565.6,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/1/data/32",
+       "name": "Total Space",
+       "type": "Data",
+       "value": 1000.2,
+       "min": 1000.2,
+       "max": 1000.2,
+       "unit": "GB"
+      },
+      {
+       "id": "/nvme/1/throughput/54",
+       "name": "Read Rate",
+       "type": "Throughput",
+       "value": 9100000.0,
+       "min": 0.0,
+       "max": 1288200000.0,
+       "unit": "B/s"
+      },
+      {
+       "id": "/nvme/1/throughput/55",
+       "name": "Write Rate",
+       "type": "Throughput",
+       "value": 3000000.0,
+       "min": 0.0,
+       "max": 1846600000.0,
+       "unit": "B/s"
+      }
+     ]
+    },
+    {
+     "id": "/lpc/it8696e/0",
+     "name": "Gigabyte B850M EAGLE WIFI6E ICE",
+     "kind": "motherboard",
+     "sensors": [
+      {
+       "id": "/lpc/it8696e/0/voltage/0",
+       "name": "Voltage #1",
+       "type": "Voltage",
+       "value": 1.26,
+       "min": 1.176,
+       "max": 1.32,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/1",
+       "name": "Voltage #2",
+       "type": "Voltage",
+       "value": 1.872,
+       "min": 1.824,
+       "max": 1.944,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/2",
+       "name": "Voltage #3",
+       "type": "Voltage",
+       "value": 1.98,
+       "min": 1.956,
+       "max": 2.004,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/3",
+       "name": "Voltage #4",
+       "type": "Voltage",
+       "value": 1.848,
+       "min": 1.824,
+       "max": 1.908,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/4",
+       "name": "Voltage #5",
+       "type": "Voltage",
+       "value": 1.248,
+       "min": 1.224,
+       "max": 1.248,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/5",
+       "name": "Voltage #6",
+       "type": "Voltage",
+       "value": 1.152,
+       "min": 1.14,
+       "max": 1.164,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/6",
+       "name": "Voltage #7",
+       "type": "Voltage",
+       "value": 1.392,
+       "min": 1.38,
+       "max": 1.404,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/7",
+       "name": "+3V Standby",
+       "type": "Voltage",
+       "value": 3.312,
+       "min": 3.288,
+       "max": 3.312,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/voltage/8",
+       "name": "CMOS Battery",
+       "type": "Voltage",
+       "value": 3.144,
+       "min": 3.144,
+       "max": 3.144,
+       "unit": "V"
+      },
+      {
+       "id": "/lpc/it8696e/0/temperature/0",
+       "name": "Temperature #1",
+       "type": "Temperature",
+       "value": 37.0,
+       "min": 25.0,
+       "max": 40.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/lpc/it8696e/0/temperature/1",
+       "name": "Temperature #2",
+       "type": "Temperature",
+       "value": 54.0,
+       "min": 31.0,
+       "max": 55.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/lpc/it8696e/0/temperature/2",
+       "name": "Temperature #3",
+       "type": "Temperature",
+       "value": 65.0,
+       "min": 47.0,
+       "max": 84.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/lpc/it8696e/0/temperature/3",
+       "name": "Temperature #4",
+       "type": "Temperature",
+       "value": 42.0,
+       "min": 25.0,
+       "max": 44.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/lpc/it8696e/0/temperature/4",
+       "name": "Temperature #5",
+       "type": "Temperature",
+       "value": 51.0,
+       "min": 28.0,
+       "max": 53.0,
+       "unit": "\u00b0C"
+      },
+      {
+       "id": "/lpc/it8696e/0/fan/0",
+       "name": "Fan #1",
+       "type": "Fan",
+       "value": 951.0,
+       "min": 661.0,
+       "max": 1455.0,
+       "unit": "RPM"
+      },
+      {
+       "id": "/lpc/it8696e/0/fan/1",
+       "name": "Fan #2",
+       "type": "Fan",
+       "value": 977.0,
+       "min": 602.0,
+       "max": 1464.0,
+       "unit": "RPM"
+      },
+      {
+       "id": "/lpc/it8696e/0/fan/2",
+       "name": "Fan #3",
+       "type": "Fan",
+       "value": 2538.0,
+       "min": 2206.0,
+       "max": 2596.0,
+       "unit": "RPM"
+      },
+      {
+       "id": "/lpc/it8696e/0/fan/4",
+       "name": "Fan #5",
+       "type": "Fan",
+       "value": 955.0,
+       "min": 662.0,
+       "max": 1467.0,
+       "unit": "RPM"
+      },
+      {
+       "id": "/lpc/it8696e/0/control/0",
+       "name": "Fan #1",
+       "type": "Control",
+       "value": 45.0,
+       "min": 20.0,
+       "max": 83.0,
+       "unit": "%"
+      },
+      {
+       "id": "/lpc/it8696e/0/control/1",
+       "name": "Fan #2",
+       "type": "Control",
+       "value": 45.0,
+       "min": 20.0,
+       "max": 83.0,
+       "unit": "%"
+      },
+      {
+       "id": "/lpc/it8696e/0/control/4",
+       "name": "Fan #5",
+       "type": "Control",
+       "value": 45.0,
+       "min": 20.0,
+       "max": 83.0,
+       "unit": "%"
+      }
+     ]
+    },
+    {
+     "id": "/nic/preview-0",
+     "name": "Ethernet",
+     "kind": "network",
+     "sensors": [
+      {
+       "id": "/nic/preview-0/load/1",
+       "name": "Network Utilization",
+       "type": "Load",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "%"
+      },
+      {
+       "id": "/nic/preview-0/data/2",
+       "name": "Data Uploaded",
+       "type": "Data",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/nic/preview-0/data/3",
+       "name": "Data Downloaded",
+       "type": "Data",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "GB"
+      },
+      {
+       "id": "/nic/preview-0/throughput/7",
+       "name": "Upload Speed",
+       "type": "Throughput",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "B/s"
+      },
+      {
+       "id": "/nic/preview-0/throughput/8",
+       "name": "Download Speed",
+       "type": "Throughput",
+       "value": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "unit": "B/s"
+      }
+     ]
+    },
+    {
+     "id": "/nic/preview-1",
+     "name": "Wi-Fi",
+     "kind": "network",
+     "sensors": [
+      {
+       "id": "/nic/preview-1/load/1",
+       "name": "Network Utilization",
+       "type": "Load",
+       "value": 0.1,
+       "min": 0.0,
+       "max": 45.9,
+       "unit": "%"
+      },
+      {
+       "id": "/nic/preview-1/data/2",
+       "name": "Data Uploaded",
+       "type": "Data",
+       "value": 12.1,
+       "min": 0.0,
+       "max": 12.1,
+       "unit": "GB"
+      },
+      {
+       "id": "/nic/preview-1/data/3",
+       "name": "Data Downloaded",
+       "type": "Data",
+       "value": 21.4,
+       "min": 0.0,
+       "max": 21.4,
+       "unit": "GB"
+      },
+      {
+       "id": "/nic/preview-1/throughput/7",
+       "name": "Upload Speed",
+       "type": "Throughput",
+       "value": 32500.0,
+       "min": 0.0,
+       "max": 54500000.0,
+       "unit": "B/s"
+      },
+      {
+       "id": "/nic/preview-1/throughput/8",
+       "name": "Download Speed",
+       "type": "Throughput",
+       "value": 71200.0,
+       "min": 0.0,
+       "max": 45500000.0,
+       "unit": "B/s"
+      }
+     ]
+    }
+   ],
+   "summary": {
+    "cpu_name": "AMD Ryzen 7 9800X3D",
+    "cpu_temp": 65.5,
+    "cpu_load": 79.4,
+    "cpu_power": 92.1,
+    "cpu_clock": 5225.0,
+    "gpu_name": "AMD Radeon RX 9060 XT",
+    "gpu_temp": 42.0,
+    "gpu_hotspot": 45.0,
+    "gpu_load": 6.0,
+    "gpu_power": 33.0,
+    "gpu_clock": 140.0,
+    "ram_load": 91.6,
+    "ram_used_gb": 28.5,
+    "ram_total_gb": 31.1,
+    "fans": [
+     {
+      "name": "GPU Fan",
+      "rpm": 1172.0
+     },
+     {
+      "name": "Fan #1",
+      "rpm": 951.0
+     },
+     {
+      "name": "Fan #2",
+      "rpm": 977.0
+     },
+     {
+      "name": "Fan #3",
+      "rpm": 2538.0
+     },
+     {
+      "name": "Fan #5",
+      "rpm": 955.0
+     }
+    ],
+    "fan_max_rpm": 2538.0,
+    "storage_max_temp": 59.9,
+    "health": {
+     "score": 85,
+     "label": "All good",
+     "notes": [
+      "Memory is almost full (92%)"
+     ],
+     "unchecked": []
+    }
+   },
+   "cooling": {
+    "fans": [
+     {
+      "id": "/lpc/it8696e/0/fan/0",
+      "key": "/lpc/it8696e/fan/0",
+      "name": "Fan #1",
+      "sensor_name": "Fan #1",
+      "location": "Motherboard header",
+      "rpm": 951.0,
+      "min_rpm": 661.0,
+      "peak_rpm": 1455.0,
+      "output_pct": 65.4,
+      "duty_pct": 45.0,
+      "curve": "cpu",
+      "driven_by": "CPU temperature",
+      "spinning": true
+     },
+     {
+      "id": "/lpc/it8696e/0/fan/1",
+      "key": "/lpc/it8696e/fan/1",
+      "name": "Fan #2",
+      "sensor_name": "Fan #2",
+      "location": "Motherboard header",
+      "rpm": 977.0,
+      "min_rpm": 602.0,
+      "peak_rpm": 1464.0,
+      "output_pct": 66.7,
+      "duty_pct": 45.0,
+      "curve": "cpu",
+      "driven_by": "CPU temperature",
+      "spinning": true
+     },
+     {
+      "id": "/lpc/it8696e/0/fan/2",
+      "key": "/lpc/it8696e/fan/2",
+      "name": "Fan #3",
+      "sensor_name": "Fan #3",
+      "location": "Motherboard header",
+      "rpm": 2538.0,
+      "min_rpm": 2206.0,
+      "peak_rpm": 2596.0,
+      "output_pct": 97.8,
+      "duty_pct": null,
+      "curve": null,
+      "driven_by": "Not controlled: runs at a fixed speed (often an AIO pump or pump header)",
+      "spinning": true
+     },
+     {
+      "id": "/lpc/it8696e/0/fan/4",
+      "key": "/lpc/it8696e/fan/4",
+      "name": "Fan #5",
+      "sensor_name": "Fan #5",
+      "location": "Motherboard header",
+      "rpm": 955.0,
+      "min_rpm": 662.0,
+      "peak_rpm": 1467.0,
+      "output_pct": 65.1,
+      "duty_pct": 45.0,
+      "curve": "cpu",
+      "driven_by": "CPU temperature",
+      "spinning": true
+     },
+     {
+      "id": "/gpu-amd/5/fan/0",
+      "key": "/gpu-amd/fan/0",
+      "name": "GPU Fan",
+      "sensor_name": "GPU Fan",
+      "location": "Graphics card",
+      "rpm": 1172.0,
+      "min_rpm": 0.0,
+      "peak_rpm": 1389.0,
+      "output_pct": 84.4,
+      "duty_pct": 32.0,
+      "curve": "gpu",
+      "driven_by": "GPU temperature",
+      "spinning": true
+     }
+    ],
+    "controls": 4,
+    "has_fan_data": true,
+    "fancontrol": true,
+    "fancontrol_path": "C:\\FanControl\\Configurations\\userConfig.json"
+   },
+   "power": {
+    "measured": {
+     "CPU package": 92.1,
+     "Graphics card": null
+    },
+    "measured_subtotal_w": 125.1,
+    "measured_total_w": null,
+    "estimated": {
+     "Motherboard and chipset": 18.0,
+     "Memory": 8.0,
+     "Drives": 9.0,
+     "Fans": 9.0,
+     "USB devices and other": 10.0
+    },
+    "estimated_subtotal_w": 54.0,
+    "estimate_assumptions": {
+     "Motherboard and chipset": "Fixed 18 W allowance, not a reading.",
+     "Memory": "4 W per detected DIMM group, assuming at least two; not a reading.",
+     "Drives": "4.5 W per detected drive group, not a reading.",
+     "Fans": "1.8 W per reported fan above 50 RPM, not a reading.",
+     "USB devices and other": "Fixed 10 W allowance, not a device inventory or reading."
+    },
+    "dc_total_w": null,
+    "dc_total_is_estimate": true,
+    "modeled_dc_w": null,
+    "wall_w": null,
+    "modeled_wall_w": null,
+    "wall_model": {
+     "efficiency": 0.9,
+     "is_measured": false,
+     "assumption": "Fixed 90% PSU efficiency assumption. Actual efficiency varies with PSU and load."
+    },
+    "coverage": {
+     "complete": false,
+     "component_readings_complete": false,
+     "unknown_components": [
+      "GPU 2 aggregate power"
+     ],
+     "unmeasured_components": [
+      "Motherboard and chipset",
+      "Memory",
+      "Drives",
+      "Fans",
+      "USB devices and other"
+     ],
+     "detected_gpus": 2,
+     "gpus_with_power": 1,
+     "scope": "Reported CPU package and one aggregate per detected GPU; other system draw is modeled."
+    },
+    "gpu_readings": [
+     {
+      "id": "/gpu-amd/5",
+      "name": "AMD Radeon RX 9060 XT",
+      "watts": 33.0,
+      "sensor": "GPU Package"
+     },
+     {
+      "id": "/gpu-amd/0",
+      "name": "AMD Radeon(TM) Graphics",
+      "watts": null,
+      "sensor": null
+     }
+    ],
+    "advisory_eligible": false
+   },
+   "drives": [
+    {
+     "name": "WD_BLACK SN7100 1TB",
+     "kind": "NVMe SSD",
+     "bus": "NVMe",
+     "size_gb": 1000,
+     "id": "1",
+     "serial": "PREVIEW-0001",
+     "size_bytes": 1000204886016,
+     "size_gib": 931.51,
+     "volumes": [
+      {
+       "mount": "C:",
+       "filesystem": "NTFS",
+       "size_bytes": 999027634176,
+       "free_bytes": 539390529536,
+       "used_bytes": 459637104640
+      }
+     ],
+     "disk_number": 1,
+     "partition_style": "GPT",
+     "logical_sector_bytes": 512,
+     "physical_sector_bytes": 32768,
+     "health": "Healthy",
+     "status": "OK",
+     "firmware": "7615M0WD",
+     "temp": 46,
+     "temp_max": null,
+     "life_left": 99,
+     "hours": 1948,
+     "read_errors": null,
+     "write_errors": null,
+     "smart_source": "LibreHardwareMonitor",
+     "spare": 100,
+     "written_gb": 18881
+    },
+    {
+     "name": "NVMe Samsung SSD 970",
+     "kind": "NVMe SSD",
+     "bus": "NVMe",
+     "size_gb": 1000,
+     "id": "0",
+     "serial": "PREVIEW-0002",
+     "size_bytes": 1000204886016,
+     "size_gib": 931.51,
+     "volumes": [
+      {
+       "mount": "D:",
+       "filesystem": "NTFS",
+       "size_bytes": 1000186310656,
+       "free_bytes": 319679574016,
+       "used_bytes": 680506736640
+      }
+     ],
+     "disk_number": 0,
+     "partition_style": "GPT",
+     "logical_sector_bytes": 512,
+     "physical_sector_bytes": 512,
+     "health": "Healthy",
+     "status": "OK",
+     "firmware": "4B2QEXM7",
+     "temp": 47,
+     "temp_max": null,
+     "life_left": 100,
+     "hours": 6630,
+     "read_errors": null,
+     "write_errors": null,
+     "smart_source": "LibreHardwareMonitor",
+     "spare": 100,
+     "written_gb": 2466
+    }
+   ],
+   "device": {
+    "hostname": "PREVIEW-PC",
+    "hostname_source": "GetComputerNameExW",
+    "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "cores": 8,
+    "threads": 8,
+    "base_mhz": 4700,
+    "gpus": [
+     "AMD Radeon(TM) Graphics",
+     "AMD Radeon RX 9060 XT"
+    ],
+    "board": "Gigabyte Technology Co., Ltd. B850M EAGLE WIFI6E ICE",
+    "maker": "Gigabyte Technology Co., Ltd.",
+    "model": "B850M EAGLE WIFI6E ICE",
+    "type": "desktop",
+    "form_basis": "Desktop chassis reported by the firmware",
+    "has_battery": false,
+    "os": "Microsoft Windows 11 Pro (build 26200)"
+   },
+   "monitors": {
+    "running": [
+     "LibreHardwareMonitor",
+     "FanControl"
+    ],
+    "lhm_installed": true,
+    "lhm_running": true
+   },
+   "sensor_count": 215,
+   "sensor_setup": {
+    "state": "ok",
+    "links": {
+     "lhm": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
+     "pawnio": "https://github.com/namazso/PawnIO.Setup/releases"
+    },
+    "title": "Full sensors are working",
+    "text": ""
+   }
+  },
+  "network": {
+   "online": true,
+   "primary_ping_ms": 15.1,
+   "jitter_ms": 1.4,
+   "targets": [
+    {
+     "id": "cloudflare",
+     "name": "Cloudflare DNS",
+     "host": "1.1.1.1",
+     "latency_ms": 15.1,
+     "avg_ms": 15.9,
+     "loss_pct": 0,
+     "history": [
+      16.7,
+      17.2,
+      15.9,
+      14.0,
+      14.5,
+      17.1,
+      16.3,
+      18.0,
+      13.8,
+      15.1
+     ]
+    },
+    {
+     "id": "google",
+     "name": "Google DNS",
+     "host": "8.8.8.8",
+     "latency_ms": 14.7,
+     "avg_ms": 16.6,
+     "loss_pct": 0,
+     "history": [
+      17.8,
+      13.9,
+      15.1,
+      14.3,
+      23.0,
+      16.1,
+      14.5,
+      17.5,
+      18.8,
+      14.7
+     ]
+    }
+   ]
+  },
+  "vpn": {
+   "supported": false,
+   "message": "Enable router controls in Settings / Extras."
+  },
+  "ts": 0
+ },
+ "processes": {
+  "all_apps": [],
+  "by_cpu": [
+   {
+    "name": "SignalRgb",
+    "exe": "C:\\Program Files\\Preview\\SignalRgb.exe",
+    "file_description": "SignalRgb Core",
+    "raw_filename": "SignalRgb.exe",
+    "raw_filename_display": "SignalRgb.exe",
+    "exe_display": "C:\\Program Files\\Preview\\SignalRgb.exe",
+    "display_name": "SignalRgb Core",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\signalrgb.exe",
+    "group_id": "exe:2d12069f1370ce3650ee7f6652eae6ffb88a66f546e0113fcc56bf2b87c03c92",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 13.6,
+    "mem_mb": 426,
+    "gpu": 0.0,
+    "vram_mb": 3222,
+    "count": 1,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "MsMpEng",
+    "exe": "C:\\Program Files\\Preview\\MsMpEng.exe",
+    "file_description": "Microsoft Defender Antimalware Service",
+    "raw_filename": "MsMpEng.exe",
+    "raw_filename_display": "MsMpEng.exe",
+    "exe_display": "C:\\Program Files\\Preview\\MsMpEng.exe",
+    "display_name": "Microsoft Defender Antimalware Service",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\msmpeng.exe",
+    "group_id": "exe:66118bd976c31d285bf158012dd61580b037797483a0d41d91e7074540c2c9b2",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 7.3,
+    "mem_mb": 625,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 1,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "python",
+    "exe": "C:\\Program Files\\Preview\\python.exe",
+    "file_description": "Python",
+    "raw_filename": "python.exe",
+    "raw_filename_display": "python.exe",
+    "exe_display": "C:\\Program Files\\Preview\\python.exe",
+    "display_name": "Python",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\python.exe",
+    "group_id": "exe:3e128ca28ee181607e1aa0bab7b20a10848c85f77a1ce5c7666e9f822afd30ef",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 5.4,
+    "mem_mb": 1027,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 27,
+    "cpu_complete": false,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "svchost",
+    "exe": "C:\\Program Files\\Preview\\svchost.exe",
+    "file_description": null,
+    "raw_filename": "svchost.exe",
+    "raw_filename_display": "svchost.exe",
+    "exe_display": "C:\\Program Files\\Preview\\svchost.exe",
+    "display_name": "Windows Service Host",
+    "explanation": "Hosts Windows services. Multiple instances can run different services; the filename alone does not identify which services this instance hosts.",
+    "name_source": "windows_glossary",
+    "explanation_source": "windows_glossary",
+    "source_url": "https://learn.microsoft.com/en-us/windows/win32/services/service-programs",
+    "system_path_match": true,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\svchost.exe",
+    "group_id": "exe:3201a28fcf51c575d238c6bbf716cde4bc74ad37b3eaf48c8adbca15f081233e",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.9,
+    "mem_mb": 1319,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 97,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "opera",
+    "exe": "C:\\Program Files\\Preview\\opera.exe",
+    "file_description": "Opera developer Internet Browser",
+    "raw_filename": "opera.exe",
+    "raw_filename_display": "opera.exe",
+    "exe_display": "C:\\Program Files\\Preview\\opera.exe",
+    "display_name": "Opera developer Internet Browser",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\opera.exe",
+    "group_id": "exe:b4bdd432eb6199af5de389650e8c602f6c970d96405a0871d3ca327a57f16727",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.9,
+    "mem_mb": 5412,
+    "gpu": 1.6,
+    "vram_mb": 1443,
+    "count": 52,
+    "cpu_complete": false,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": true
+   },
+   {
+    "name": "explorer",
+    "exe": "C:\\Program Files\\Preview\\explorer.exe",
+    "file_description": "Windows Explorer",
+    "raw_filename": "explorer.exe",
+    "raw_filename_display": "explorer.exe",
+    "exe_display": "C:\\Program Files\\Preview\\explorer.exe",
+    "display_name": "Windows Explorer",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\explorer.exe",
+    "group_id": "exe:4cee57f2a02b5c6790b139772ca124606d08e477c2a669b768c5511d08f9b801",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.6,
+    "mem_mb": 211,
+    "gpu": 0.0,
+    "vram_mb": 324,
+    "count": 3,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "DiscordPTB",
+    "exe": "C:\\Program Files\\Preview\\DiscordPTB.exe",
+    "file_description": "Discord PTB",
+    "raw_filename": "DiscordPTB.exe",
+    "raw_filename_display": "DiscordPTB.exe",
+    "exe_display": "C:\\Program Files\\Preview\\DiscordPTB.exe",
+    "display_name": "Discord PTB",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\discordptb.exe",
+    "group_id": "exe:093848cd62360cd951d51f3768dfbf54a8839a72e6a7b5e3027d98bee0711516",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.4,
+    "mem_mb": 868,
+    "gpu": 1.8,
+    "vram_mb": 629,
+    "count": 6,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": true
+   },
+   {
+    "name": "WmiPrvSE",
+    "exe": "C:\\Program Files\\Preview\\WmiPrvSE.exe",
+    "file_description": "WMI Provider Host",
+    "raw_filename": "WmiPrvSE.exe",
+    "raw_filename_display": "WmiPrvSE.exe",
+    "exe_display": "C:\\Program Files\\Preview\\WmiPrvSE.exe",
+    "display_name": "WMI Provider Host",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\wmiprvse.exe",
+    "group_id": "exe:f3e0504b3ed9267106e8f856d4a92245494359f9c831bc66ab57709c49b54834",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 2.6,
+    "mem_mb": 46,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 1,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   }
+  ],
+  "by_mem": [
+   {
+    "name": "opera",
+    "exe": "C:\\Program Files\\Preview\\opera.exe",
+    "file_description": "Opera developer Internet Browser",
+    "raw_filename": "opera.exe",
+    "raw_filename_display": "opera.exe",
+    "exe_display": "C:\\Program Files\\Preview\\opera.exe",
+    "display_name": "Opera developer Internet Browser",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\opera.exe",
+    "group_id": "exe:b4bdd432eb6199af5de389650e8c602f6c970d96405a0871d3ca327a57f16727",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.9,
+    "mem_mb": 5412,
+    "gpu": 1.6,
+    "vram_mb": 1443,
+    "count": 52,
+    "cpu_complete": false,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": true
+   },
+   {
+    "name": "node",
+    "exe": "C:\\Program Files\\Preview\\node.exe",
+    "file_description": "Node.js JavaScript Runtime",
+    "raw_filename": "node.exe",
+    "raw_filename_display": "node.exe",
+    "exe_display": "C:\\Program Files\\Preview\\node.exe",
+    "display_name": "Node.js JavaScript Runtime",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\node.exe",
+    "group_id": "exe:cfef83d46ea5e69b511ea30aaf1b6ab8fbf7caa6bcfef169d4993fed7c675c20",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 0.4,
+    "mem_mb": 2447,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 58,
+    "cpu_complete": false,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": false,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "claude",
+    "exe": "C:\\Program Files\\Preview\\claude.exe",
+    "file_description": "Claude Code",
+    "raw_filename": "claude.exe",
+    "raw_filename_display": "claude.exe",
+    "exe_display": "C:\\Program Files\\Preview\\claude.exe",
+    "display_name": "Claude Code",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\claude.exe",
+    "group_id": "exe:305a3c8a2d43e17e465395e12de51ac5c81d9342a82ed665f4a45f13f4c58861",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 1.5,
+    "mem_mb": 2022,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 6,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "DeepSeek Harness",
+    "exe": "C:\\Program Files\\Preview\\DeepSeek Harness.exe",
+    "file_description": "DeepSeek Harness",
+    "raw_filename": "DeepSeek Harness.exe",
+    "raw_filename_display": "DeepSeek Harness.exe",
+    "exe_display": "C:\\Program Files\\Preview\\DeepSeek Harness.exe",
+    "display_name": "DeepSeek Harness",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\deepseek harness.exe",
+    "group_id": "exe:965b79643144811005183cbc775d4077ff1aabcf52639ddd3bf7cd4057a8e30b",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 0.3,
+    "mem_mb": 1719,
+    "gpu": 0.0,
+    "vram_mb": 305,
+    "count": 21,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": false,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "opera",
+    "exe": "C:\\Program Files\\Preview\\opera.exe",
+    "file_description": "Opera Internet Browser",
+    "raw_filename": "opera.exe",
+    "raw_filename_display": "opera.exe",
+    "exe_display": "C:\\Program Files\\Preview\\opera.exe",
+    "display_name": "Opera Internet Browser",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\opera.exe",
+    "group_id": "exe:df9a318fc6f0d16030743c13c73f207217d9a45c49752f4dff2a06b4b1f86c18",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 0.3,
+    "mem_mb": 1646,
+    "gpu": 0.0,
+    "vram_mb": 771,
+    "count": 33,
+    "cpu_complete": false,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": false,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "svchost",
+    "exe": "C:\\Program Files\\Preview\\svchost.exe",
+    "file_description": null,
+    "raw_filename": "svchost.exe",
+    "raw_filename_display": "svchost.exe",
+    "exe_display": "C:\\Program Files\\Preview\\svchost.exe",
+    "display_name": "Windows Service Host",
+    "explanation": "Hosts Windows services. Multiple instances can run different services; the filename alone does not identify which services this instance hosts.",
+    "name_source": "windows_glossary",
+    "explanation_source": "windows_glossary",
+    "source_url": "https://learn.microsoft.com/en-us/windows/win32/services/service-programs",
+    "system_path_match": true,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\svchost.exe",
+    "group_id": "exe:3201a28fcf51c575d238c6bbf716cde4bc74ad37b3eaf48c8adbca15f081233e",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.9,
+    "mem_mb": 1319,
+    "gpu": 0.0,
+    "vram_mb": 0,
+    "count": 97,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "claude",
+    "exe": "C:\\Program Files\\Preview\\claude.exe",
+    "file_description": "Claude",
+    "raw_filename": "claude.exe",
+    "raw_filename_display": "claude.exe",
+    "exe_display": "C:\\Program Files\\Preview\\claude.exe",
+    "display_name": "Claude",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\claude.exe",
+    "group_id": "exe:c945b458694c5d2147ea273bd59cfb3779d82f284dd94b0a4025f67ab343fd4e",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 0.9,
+    "mem_mb": 1308,
+    "gpu": 0.0,
+    "vram_mb": 202,
+    "count": 15,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": false
+   },
+   {
+    "name": "msedgewebview2",
+    "exe": "C:\\Program Files\\Preview\\msedgewebview2.exe",
+    "file_description": "Microsoft Edge WebView2",
+    "raw_filename": "msedgewebview2.exe",
+    "raw_filename_display": "msedgewebview2.exe",
+    "exe_display": "C:\\Program Files\\Preview\\msedgewebview2.exe",
+    "display_name": "Microsoft Edge WebView2",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\msedgewebview2.exe",
+    "group_id": "exe:ed9f34eab636eb74e781b7f354acf2d9c25183cd7cffc608a6cfbab7ae488734",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 0.0,
+    "mem_mb": 1265,
+    "gpu": 0.0,
+    "vram_mb": 109,
+    "count": 36,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": false,
+    "gpu_threshold_eligible": false
+   }
+  ],
+  "by_gpu": [
+   {
+    "name": "dwm",
+    "exe": "C:\\Program Files\\Preview\\dwm.exe",
+    "file_description": null,
+    "raw_filename": "dwm.exe",
+    "raw_filename_display": "dwm.exe",
+    "exe_display": "C:\\Program Files\\Preview\\dwm.exe",
+    "display_name": "Desktop Window Manager",
+    "explanation": "Combines app windows into the desktop image, including visual effects.",
+    "name_source": "windows_glossary",
+    "explanation_source": "windows_glossary",
+    "source_url": "https://learn.microsoft.com/en-us/windows/win32/directcomp/architecture-and-components",
+    "system_path_match": true,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\dwm.exe",
+    "group_id": "exe:ed220b598eed6a0500726ed12a9936590d1ce0443b6df881799b080fa7a708b1",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 1.1,
+    "mem_mb": 74,
+    "gpu": 2.7,
+    "vram_mb": 4978,
+    "count": 1,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": true
+   },
+   {
+    "name": "DiscordPTB",
+    "exe": "C:\\Program Files\\Preview\\DiscordPTB.exe",
+    "file_description": "Discord PTB",
+    "raw_filename": "DiscordPTB.exe",
+    "raw_filename_display": "DiscordPTB.exe",
+    "exe_display": "C:\\Program Files\\Preview\\DiscordPTB.exe",
+    "display_name": "Discord PTB",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\discordptb.exe",
+    "group_id": "exe:093848cd62360cd951d51f3768dfbf54a8839a72e6a7b5e3027d98bee0711516",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.4,
+    "mem_mb": 868,
+    "gpu": 1.8,
+    "vram_mb": 629,
+    "count": 6,
+    "cpu_complete": true,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": true
+   },
+   {
+    "name": "opera",
+    "exe": "C:\\Program Files\\Preview\\opera.exe",
+    "file_description": "Opera developer Internet Browser",
+    "raw_filename": "opera.exe",
+    "raw_filename_display": "opera.exe",
+    "exe_display": "C:\\Program Files\\Preview\\opera.exe",
+    "display_name": "Opera developer Internet Browser",
+    "explanation": "Name supplied by executable file metadata; the app's role has not been independently identified.",
+    "name_source": "file_description",
+    "explanation_source": "metadata_notice",
+    "source_url": null,
+    "system_path_match": false,
+    "security_assessment": "not_performed",
+    "canonical_exe": "c:\\program files\\preview\\opera.exe",
+    "group_id": "exe:b4bdd432eb6199af5de389650e8c602f6c970d96405a0871d3ca327a57f16727",
+    "grouping_source": "canonical_executable_path",
+    "cpu": 3.9,
+    "mem_mb": 5412,
+    "gpu": 1.6,
+    "vram_mb": 1443,
+    "count": 52,
+    "cpu_complete": false,
+    "mem_complete": true,
+    "gpu_complete": true,
+    "gpu_percent_basis": "busiest_reported_physical_engine",
+    "cpu_threshold_eligible": true,
+    "gpu_threshold_eligible": true
+   }
+  ],
+  "gpu_available": true,
+  "gpu_collection_status": "complete",
+  "total_processes": 811,
+  "total_groups": 162,
+  "observed_at": 1795049146.9880698,
+  "cpu_hidden_groups": 145,
+  "cpu_threshold_pct": 0.5,
+  "gpu_threshold_pct": 0.5,
+  "cpu_percent_basis": "whole_machine",
+  "memory_basis": "summed_process_working_sets_may_include_shared_pages",
+  "all_included": false,
+  "truncated": false
+ },
+ "display": {
+  "displays": [
+   {
+    "device": "\\\\.\\DISPLAY2",
+    "name": "MAG 273Q X24",
+    "model": "MAG 273Q X24",
+    "identity_status": "reported",
+    "identity_source": "windows_target_edid",
+    "monitors": [
+     {
+      "model": "MAG 273Q X24",
+      "name": "MAG 273Q X24",
+      "identity_source": "windows_target_edid",
+      "identity_status": "reported",
+      "mapping": "windows_source_target",
+      "adapter_id": "00000000:00018ffe",
+      "source_id": 1,
+      "target_id": 520,
+      "connector_instance": 0,
+      "description": "MAG 273Q X24",
+      "note": "Windows/EDID-reported model."
+     }
+    ],
+    "gpu": "AMD Radeon RX 9060 XT",
+    "width": 2560,
+    "height": 1440,
+    "hz": 240,
+    "rates": [
+     48,
+     60,
+     75,
+     100,
+     120,
+     240
+    ],
+    "primary": true
+   },
+   {
+    "device": "\\\\.\\DISPLAY1",
+    "name": "PHL24M1N5500Z",
+    "model": "PHL24M1N5500Z",
+    "identity_status": "reported",
+    "identity_source": "windows_target_edid",
+    "monitors": [
+     {
+      "model": "PHL24M1N5500Z",
+      "name": "PHL24M1N5500Z",
+      "identity_source": "windows_target_edid",
+      "identity_status": "reported",
+      "mapping": "windows_source_target",
+      "adapter_id": "00000000:00018ffe",
+      "source_id": 0,
+      "target_id": 512,
+      "connector_instance": 0,
+      "description": "PHL24M1N5500Z",
+      "note": "Windows/EDID-reported model."
+     }
+    ],
+    "gpu": "AMD Radeon RX 9060 XT",
+    "width": 1440,
+    "height": 2560,
+    "hz": 165,
+    "rates": [
+     48,
+     60,
+     75,
+     100,
+     120,
+     144,
+     165
+    ],
+    "primary": false
+   }
+  ],
+  "identity_query_status": "ok"
+ },
+ "plans": {
+  "plans": [
+   {
+    "guid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+    "name": "Balanced",
+    "active": false
+   },
+   {
+    "guid": "86f3da30-a1b5-4f1c-9f17-6cfea6680f7d",
+    "name": "Ultimate Performance",
+    "active": true
+   },
+   {
+    "guid": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+    "name": "High performance",
+    "active": false
+   },
+   {
+    "guid": "a1841308-3541-4fab-bc81-f71556f20b4a",
+    "name": "Power saver",
+    "active": false
+   },
+   {
+    "guid": "de6a3c0b-594f-4051-80c0-94370cba6455",
+    "name": "BOHRV2",
+    "active": false
+   }
+  ]
+ },
+ "power_mode": {
+  "mode": "balanced",
+  "available": true
+ },
+ "power_max": {
+  "name": "Ultra Suite Max Performance",
+  "profile": {
+   "kind": "desktop",
+   "method": "plan",
+   "title": "Desktop",
+   "why": "Every core awake at full clock, aggressive boost and no device power saving while plugged in.",
+   "settings": [
+    "Minimum processor state 100%",
+    "Maximum processor state 100%",
+    "Core parking off (all cores unparked)",
+    "Processor boost mode aggressive",
+    "Energy performance preference: maximum performance",
+    "PCI Express link power saving off",
+    "USB selective suspend off",
+    "Hard disk never turns off"
+   ],
+   "skipped": []
+  },
+  "exists": false,
+  "active": false,
+  "guid": null,
+  "previous": null,
+  "settings": [
+   "Minimum processor state 100%",
+   "Maximum processor state 100%",
+   "Core parking off (all cores unparked)",
+   "Processor boost mode aggressive",
+   "Energy performance preference: maximum performance",
+   "PCI Express link power saving off",
+   "USB selective suspend off",
+   "Hard disk never turns off"
+  ],
+  "available": true
+ },
+ "writers": {
+  "available": true,
+  "interval_s": 30,
+  "observed_minutes_1h": 4,
+  "method": "process_writes_capped_by_drives",
+  "sandboxed_bps": 1939550.87755484,
+  "top": [
+   {
+    "name": "opera",
+    "level": null,
+    "avg_bps_1h": 11562353.5,
+    "issued_bps_1h": 13789919.6,
+    "capped": true,
+    "active_share_1h": 1.0,
+    "coverage_1h": 0.067,
+    "bytes_today": 2774964841,
+    "per_day_estimate": 998987342855,
+    "known_issue": null,
+    "self": false
+   },
+   {
+    "name": "discordptb",
+    "level": null,
+    "avg_bps_1h": 6806241.1,
+    "issued_bps_1h": 8213975.5,
+    "capped": true,
+    "active_share_1h": 1.0,
+    "coverage_1h": 0.067,
+    "bytes_today": 1633497873,
+    "per_day_estimate": 588059234197,
+    "known_issue": null,
+    "self": false
+   },
+   {
+    "name": "svchost",
+    "level": null,
+    "avg_bps_1h": 966761.8,
+    "issued_bps_1h": 966761.8,
+    "capped": false,
+    "active_share_1h": 1.0,
+    "coverage_1h": 0.067,
+    "bytes_today": 232022827,
+    "per_day_estimate": 83528217720,
+    "known_issue": null,
+    "self": false
+   },
+   {
+    "name": "python",
+    "level": null,
+    "avg_bps_1h": 247059.5,
+    "issued_bps_1h": 247059.5,
+    "capped": false,
+    "active_share_1h": 1.0,
+    "coverage_1h": 0.067,
+    "bytes_today": 59294280,
+    "per_day_estimate": 21345940800,
+    "known_issue": null,
+    "self": false
+   },
+   {
+    "name": "claude",
+    "level": null,
+    "avg_bps_1h": 142018.9,
+    "issued_bps_1h": 142018.9,
+    "capped": false,
+    "active_share_1h": 1.0,
+    "coverage_1h": 0.067,
+    "bytes_today": 34084542,
+    "per_day_estimate": 12270435120,
+    "known_issue": null,
+    "self": false
+   }
+  ],
+  "flagged": [],
+  "drive_write_bps": 29356291.483216688,
+  "drives": {
+   "0 D:": 16315218,
+   "1 C:": 13041073
+  },
+  "measuring": false,
+  "measure_seconds": 120,
+  "measure_elapsed": null,
+  "live": [],
+  "levels": [
+   {
+    "level": "heavy",
+    "window_min": 360,
+    "rate_bps": 5000000.0,
+    "continuity": 0.9
+   },
+   {
+    "level": "warning",
+    "window_min": 60,
+    "rate_bps": 2000000.0,
+    "continuity": 0.9
+   },
+   {
+    "level": "notice",
+    "window_min": 60,
+    "rate_bps": 500000.0,
+    "continuity": 0.9
+   }
+  ],
+  "versions": {}
+ }
+}
