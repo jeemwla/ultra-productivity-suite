@@ -794,7 +794,8 @@ function setSt(id, l, t){ const e = $(id); e.className = "status " + l; e.textCo
 function renderOverview(){
   const hw = snap.hardware, s = hw.summary || {}; buildTiles(); setupOverviewEditor();
   const h = s.health || { score: 100, label: "All good", notes: [] }, hl = h.score >= 85 ? "good" : h.score >= 60 ? "warning" : "critical";
-  const hv = healthView(h, hl); $("health").hidden = false; $("health").className = `banner ${hv.cls}`; $("health-ic").textContent = hv.icon; $("health-t").textContent = hv.label; $("health-s").textContent = (h.notes || []).join(" · ");
+  const hv = healthView(h, hl); $("health").hidden = false; $("health").className = `banner ${hv.cls}`; $("health-ic").textContent = hv.icon; $("health-t").textContent = hv.label;
+  setHtml($("health-s"), esc((h.notes || []).join(" · ")) + (hv.cls !== "good" ? ` <a href="#performance">See Performance</a>` : "")); // where the numbers behind a warning live
   const cpuT = s.cpu_temp; $("t-cpu-sub").textContent = s.cpu_name || "";
   if (cpuT != null) { $("t-cpu-u").textContent = "°C"; tween($("t-cpu"), cpuT, n0); $("t-cpu-m").textContent = [s.cpu_load != null && `${n0(s.cpu_load)}% load`, s.cpu_power != null && `${n0(s.cpu_power)} W`, s.cpu_clock != null && `${n0(s.cpu_clock)} MHz`].filter(Boolean).join(" · "); const l = lvl(cpuT, 80, 90); setSt("t-cpu-st", l, HOT[l]); }
   else { $("t-cpu-u").textContent = "%"; tween($("t-cpu"), s.cpu_load, n0); $("t-cpu-m").textContent = "load · temperature " + (typeof SentinelPanels !== "undefined" ? SentinelPanels.missingReading(hw.sensor_setup) : "needs full sensors"); const l = lvl(s.cpu_load, 85, 97); setSt("t-cpu-st", l, l === "good" ? "Load normal" : "Busy"); }
@@ -1130,6 +1131,7 @@ function sensorsEmpty(q, typeCount, groupCount, hiddenCount, showAll){
 function renderSensors(){
   const hw = snap.hardware, counts = sensorTypeCounts(hw.groups), present = ALLT.filter(t => counts[t]), sig = present.map(t => t + counts[t]).join() + [...types].join();
   if ($("filters").dataset.sig !== sig) { $("filters").dataset.sig = sig; $("filters").innerHTML = present.map(t => `<button class="f" data-t="${t}" aria-pressed="${types.has(t)}" aria-label="${TL[t] || t}, ${counts[t]} sensors">${TL[t] || t} <span class="cnt">${counts[t]}</span></button>`).join(""); }
+  setText($("show-all"), showAllLabel($("show-all").dataset.on === "1", hidden.size)); // how many sensors are hidden, at a glance
   const q = $("q").value.trim().toLowerCase(), showAll = $("show-all").dataset.on === "1", open = new Set(store.get("openGroups", ["cpu", "gpu"])), keys = new Set();
   (hw.groups || []).forEach(g => { const rows = g.sensors.filter(x => types.has(x.type) && (!q || (g.name + " " + x.name + " " + x.type).toLowerCase().includes(q)) && (showAll || !hidden.has(x.id)));
     const key = g.kind + ":" + g.name; keys.add(key); let d = $("groups").querySelector(`details[data-key="${CSS.escape(key)}"]`);
@@ -1158,7 +1160,8 @@ $("q").addEventListener("input", renderSensors);
 // "/" jumps to the search box on the Sensors page; Escape in the box clears it.
 document.addEventListener("keydown", (e) => { if (e.key !== "/" || page !== "sensors" || e.ctrlKey || e.metaKey || e.altKey || (typeof MODAL !== "undefined" && MODAL.open) || e.target.closest("input,textarea,select,[contenteditable=true]")) return; e.preventDefault(); $("q").focus(); $("q").select(); });
 $("q").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("q").value) { e.preventDefault(); e.stopPropagation(); $("q").value = ""; renderSensors(); } });
-$("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = b.dataset.on === "1" ? "Hide hidden" : "Show hidden"; b.setAttribute("aria-pressed", String(b.dataset.on === "1")); renderSensors(); };
+const showAllLabel = (on, n) => on ? "Hide hidden" : n ? `Show hidden (${n})` : "Show hidden";
+$("show-all").onclick = () => { const b = $("show-all"); b.dataset.on = b.dataset.on === "1" ? "0" : "1"; b.textContent = showAllLabel(b.dataset.on === "1", hidden.size); b.setAttribute("aria-pressed", String(b.dataset.on === "1")); renderSensors(); };
 
 /* ---------- system ---------- */
 /* Plain-text device details for a support message or a forum post. No computer name, serial numbers or user paths. */

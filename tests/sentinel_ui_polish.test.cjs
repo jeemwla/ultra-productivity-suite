@@ -182,3 +182,8 @@ test('arrow keys step through chart readings',()=>{
  assert.equal(step(120,null,'ArrowLeft'),118);assert.equal(step(120,5,'ArrowLeft'),4);assert.equal(step(120,0,'ArrowLeft'),0);
  assert.equal(step(120,119,'ArrowRight'),119);assert.equal(step(120,3,'Home'),0);assert.equal(step(120,3,'End'),119);assert.equal(step(120,3,'a'),null);
 });
+test('Show hidden counts hidden sensors and health warnings link to Performance',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('const showAllLabel','$("show-all").onclick'),ctx);const l=vm.runInContext('showAllLabel',ctx);
+ assert.equal(l(false,0),'Show hidden');assert.equal(l(false,4),'Show hidden (4)');assert.equal(l(true,4),'Hide hidden');
+ assert.match(html,/hv\.cls !== "good" \? ` <a href="#performance">See Performance<\/a>`/);
+});
