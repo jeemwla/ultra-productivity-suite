@@ -1120,7 +1120,8 @@ const ALLT = ["Temperature", "Power", "Load", "Clock", "Fan", "Control", "Voltag
 const TL = { Temperature: "Temps", SmallData: "Memory MB", Throughput: "Network" }, KL = { cpu: "CPU", gpu: "GPU", memory: "Memory", storage: "Drive", motherboard: "Motherboard", network: "Network", battery: "Battery", psu: "Power supply", other: "Other" };
 const SEC = [["Temperature", "Temperatures", "°C"], ["Power", "Power draw", "W"], ["Load", "Usage", "%"], ["Clock", "Clock speeds", "MHz"], ["Fan", "Fan speeds", "RPM"], ["Control", "Fan control", "%"], ["Voltage", "Voltages", "V"], ["Current", "Current", "A"], ["Level", "Levels", "%"], ["Data", "Data", "GB"], ["SmallData", "Memory", "MB"], ["Throughput", "Throughput", ""], ["Timing", "Timings", "ns"], ["Factor", "Factors", ""], ["Energy", "Energy", "mWh"], ["Other", "Other", ""]];
 // How many sensors of each type exist, shown on the filter buttons so a type's size is clear before turning it on.
-function sensorTypeCounts(groups){ const c = {}; for (const g of groups || []) for (const x of g.sensors || []) c[x.type] = (c[x.type] || 0) + 1; return c; }
+// Counted in a Map so a sensor type name from the service can never write to an object property such as __proto__.
+function sensorTypeCounts(groups){ const c = new Map(); for (const g of groups || []) for (const x of g.sensors || []) c.set(x.type, (c.get(x.type) || 0) + 1); return Object.fromEntries(c); }
 const setText = (el, v) => { if (el && el.textContent !== v) el.textContent = v; };
 function sensorsEmpty(q, typeCount, groupCount, hiddenCount, showAll){
   if (!groupCount) return "No sensors are reporting yet. Readings appear here as soon as the sensor source answers.";
@@ -1320,7 +1321,9 @@ $("st-go").onclick = () => { if (sp.running) { sp.ws && sp.ws.close(); return; }
 
 /* ---------- main loop ---------- */
 let snap = null, lastMsg = 0, retry = 0;
-function push(k, v){ H[k].push(v == null ? null : v); if (H[k].length > HMAX) H[k].shift(); }
+function push(k, v){ H[k].push(v == null ? null : v); if (H[k].length > HMAX) H[k].shift(); }
+// Page id to renderer. A Map lookup keeps the page name from the address bar from calling any other function.
+const PAGE_RENDER = new Map([["overview", () => { renderOverview(); renderApps(); }], ["performance", () => renderPerformance()], ["cooling", () => renderCooling()], ["power", () => renderPower()], ["storage", () => renderStorage()], ["network", () => { renderNet(); renderVPN(); }], ["sensors", () => renderSensors()], ["system", () => renderSystem()], ["battery", () => {}], ["speed", () => {}]]);
 function render(){
   if (!snap) return; const hw = snap.hardware, s = hw.summary || {}, dev = hw.device || {};
   $("brand-sub").textContent = dev.hostname || "Your PC";
@@ -1333,7 +1336,7 @@ function render(){
   $("settings-form").textContent = dev.type ? `Detected: ${dev.type === "laptop" ? "Laptop" : "Desktop"}${dev.form_basis ? `. ${dev.form_basis}.` : ""}` : "Detecting this PC…";
   const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
   const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
-  ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
+  PAGE_RENDER.get(page)?.();
 }
 /* Fill the charts with the service's last two minutes before live updates start; a slow answer never holds up the page. */
 function seedHistory(samples){ if (!Array.isArray(samples) || H.cpu.length) return 0; let n = 0;
