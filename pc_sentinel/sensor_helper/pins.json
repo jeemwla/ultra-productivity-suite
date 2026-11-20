@@ -12,7 +12,7 @@
     "distribution": "downloaded at install time, never bundled"
   },
   "nuget": [
-    {"id": "LibreHardwareMonitorLib", "version": "0.9.6", "sha512": "nwn6J4tEuiQUcBZgxtWHByKSPE6kx9VfQFx36La0TfezjOXJTfljdQjt1jMFWGcNBLX0OHl8rz/owGPNTqJPFA==", "lib": "lib/net472/LibreHardwareMonitorLib.dll", "license": "MPL-2.0", "source": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor"},
+    {"id": "LibreHardwareMonitorLib", "version": "0.9.6", "sha512": "nwn6J4tEuiQUcBZgxtWHByKSPE6kx9VfQFx36La0TfezjOXJTfljdQjt1jMFWGcNBLX0OHl8rz/owGPNTqJPFA==", "lib": "runtimes/win-x64/lib/net472/LibreHardwareMonitorLib.dll", "license": "MPL-2.0", "source": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor"},
     {"id": "DiskInfoToolkit", "version": "1.1.2", "sha512": "TjNBPEtiC7gTs/kK7HsypZbroqJ4fBOmEKAW+XeOTUhGKb/ZYX0ct7jExEVQV/NgWKM8pltg3tWaYOruCR6Mig==", "lib": "lib/net472/DiskInfoToolkit.dll", "license": "MPL-2.0", "source": "https://github.com/Blacktempel/DiskInfoToolkit"},
     {"id": "BlackSharp.Core", "version": "1.0.7", "sha512": "t5Uaq3W6g33q+Pmmjp/zjCU/4v+aUMfOdkdtE56tsfruxEw18+F/1n04TSe0AjMbIln30tT4g5uSx1igGjMXXg==", "lib": "lib/net472/BlackSharp.Core.dll", "license": "MPL-2.0", "source": "https://github.com/Blacktempel/BlackSharp"},
     {"id": "HidSharp", "version": "2.6.4", "sha512": "5si0iNM5FZSHfodV9xRnIuywTlGXEnSbdOeeVLlwwPHoOXEc1iDuHkVXgA7zVzhVF5K7rpn3zDvoeQcOPj+KZw==", "lib": "lib/netstandard2.0/HidSharp.dll", "license": "Apache-2.0", "source": "https://software.seekye.com/hidsharp"},
