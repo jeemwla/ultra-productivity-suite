@@ -12,6 +12,7 @@ import io
 import json
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,9 +25,11 @@ spec = importlib.util.spec_from_file_location("restart_clock", BACKEND / "clock.
 clock = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(clock)
 tree = ast.parse((BACKEND / "main.py").read_text(encoding="utf-8"))
+SCHEDULER = {"init_db", "log_event", "scheduler_loop", "_alarm_dict", "read_heartbeat", "write_heartbeat",
+             "record_missed", "claim_due_snooze", "HEARTBEAT_EVERY", "GAP"}
 definitions = [node for node in tree.body
-               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-               and node.name in {"init_db", "log_event", "scheduler_loop"}]
+               if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in SCHEDULER)
+               or (isinstance(node, ast.Assign) and any(getattr(t, "id", None) in SCHEDULER for t in node.targets))]
 CODE = compile(ast.Module(body=definitions, type_ignores=[]), str(BACKEND / "main.py"), "exec")
 
 
@@ -43,7 +46,8 @@ class AlarmRestart(unittest.TestCase):
             "DB_PATH": self.path, "Optional": Optional,
             "local_now": lambda: self.now, "due_day": clock.due_day,
             "claim_due_timer": lambda: None,
-            "alarm_delivery_enabled": lambda: True,
+            "alarm_delivery_enabled": lambda: True, "time": time, "CATCH_UP": clock.CATCH_UP,
+            "missed_occurrence": clock.missed_occurrence, "snoozed_until": clock.snoozed_until,
         }
         exec(CODE, self.ns)
         self.ns["init_db"]()
@@ -192,6 +196,68 @@ class AlarmRestart(unittest.TestCase):
         self.save()
         self.ticks("2026-11-12T06:00:00", "2026-11-12T07:05:00", "2026-11-12T07:05:01")
         self.assertEqual(self.rang, ["saved"])
+
+    def events(self):
+        with contextlib.closing(sqlite3.connect(self.path)) as conn:
+            return [(r[0], r[1]) for r in conn.execute("SELECT alarm_id, kind FROM alarm_events WHERE kind != 'due' ORDER BY id")]
+
+    def test_sleep_longer_than_catch_up_logs_the_missed_alarm_without_ringing_it(self):
+        self.save(id="early", recurring=1, target_date=None, weekdays='["Thu"]', time_hhmm="05:45")
+        self.save(id="late", recurring=1, target_date=None, weekdays='["Thu"]', time_hhmm="06:50")
+        self.ticks("2026-11-12T05:00:00", "2026-11-12T07:00:00", "2026-11-12T07:00:01")
+        self.assertEqual(self.rang, ["late"], "the alarm inside the 30-minute window still rings after waking")
+        self.assertEqual(self.events(), [("early", "missed")])
+        self.assertIsNone(self.saved("early")["last_triggered_date"], "a miss is logged, never recorded as rung")
+
+    def test_restart_logs_alarms_missed_while_the_engine_was_off_once(self):
+        self.save(id="morning", recurring=1, target_date=None, weekdays='["Thu"]', time_hhmm="05:45")
+        self.ticks("2026-11-12T05:00:00")
+        self.ticks("2026-11-12T09:00:00")
+        self.assertEqual(self.rang, [])
+        self.assertEqual(self.events(), [("morning", "missed")])
+        self.ticks("2026-11-12T09:05:00")
+        self.assertEqual(self.events(), [("morning", "missed")], "a later restart does not log it again")
+
+    def test_a_fresh_install_reports_nothing_missed(self):
+        self.save(id="morning", recurring=1, target_date=None, weekdays='["Thu"]', time_hhmm="05:45")
+        self.ticks("2026-11-12T09:00:00")
+        self.assertEqual(self.events(), [])
+
+    def snooze(self, until, used=1):
+        with contextlib.closing(sqlite3.connect(self.path)) as conn:
+            conn.execute("UPDATE alarms SET snoozed_until = ?, snoozes_used = ?, snooze_limit = 3, enabled = 0 WHERE id = 'saved'", (until, used))
+            conn.commit()
+
+    def test_a_snooze_rings_again_after_a_restart_and_is_cleared_first(self):
+        self.save(last_triggered_date="2026-11-12", enabled=0)
+        self.snooze("2026-11-12T07:14:00")
+        self.ticks("2026-11-12T07:10:00", "2026-11-12T07:13:59")
+        self.assertEqual(self.rang, [])
+        self.ticks("2026-11-12T07:14:00", "2026-11-12T07:14:01")
+        self.assertEqual(self.rang, ["saved"])
+        saved = self.saved()
+        self.assertIsNone(saved["snoozed_until"])
+        self.assertEqual(saved["snoozes_used"], 1, "the count carries over so the limit holds")
+
+    def test_a_snooze_that_ended_while_the_pc_was_off_is_logged_not_rung(self):
+        self.save(last_triggered_date="2026-11-12", enabled=0)
+        self.snooze("2026-11-12T07:14:00")
+        self.ticks("2026-11-12T08:00:00")
+        self.assertEqual(self.rang, [])
+        self.assertIsNone(self.saved()["snoozed_until"])
+        self.assertEqual(self.events(), [("saved", "missed")])
+
+    def test_spring_forward_rings_an_alarm_inside_the_skipped_hour(self):
+        self.save(id="dst", recurring=1, target_date=None, weekdays='["Sun"]', time_hhmm="02:30")
+        self.ticks("2027-03-14T01:59:59", "2027-03-14T03:00:00", "2027-03-14T03:00:01")
+        self.assertEqual(self.rang, ["dst"])
+
+    def test_fall_back_does_not_ring_the_repeated_hour_twice(self):
+        self.save(id="dst", recurring=1, target_date=None, weekdays='["Sun"]', time_hhmm="01:30")
+        self.ticks("2026-11-01T01:29:59", "2026-11-01T01:30:00", "2026-11-01T01:59:59", "2026-11-01T01:00:00",
+                   "2026-11-01T01:30:00", "2026-11-01T01:30:01")
+        self.assertEqual(self.rang, ["dst"])
+        self.assertEqual(self.events(), [(None, "clock_changed")])
 
 
 if __name__ == "__main__":

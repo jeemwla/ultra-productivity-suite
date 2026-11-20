@@ -3,9 +3,9 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../code_red_alarm/frontend/index.html'),'utf8');
 function harness(){
- const fields={};const $=id=>fields[id]??={value:'',checked:false,hidden:false,textContent:'',classList:{toggle(){}}};
+ const fields={};const $=id=>fields[id]??=(()=>{const attr={};return {value:'',checked:false,hidden:false,disabled:false,textContent:'',classList:{toggle(){}},setAttribute(k,v){attr[k]=String(v)},getAttribute:k=>attr[k],focus(){}}})();
  $('days').children=[];$('days').appendChild=b=>$('days').children.push(b);$('f-time').value='07:00';
- const ctx=vm.createContext({$,document:{querySelectorAll:()=>[],createElement:()=>{const attr={};return {dataset:{},setAttribute(k,v){attr[k]=String(v)},getAttribute:k=>attr[k]}}},render(){},syncTimePicker(){},editingId:null});
+ const ctx=vm.createContext({$,document:{querySelectorAll:()=>[],createElement:()=>{const attr={};return {dataset:{},setAttribute(k,v){attr[k]=String(v)},getAttribute:k=>attr[k]}}},render(){},syncTimePicker(){},editingId:null,engineNow:()=>new Date(),pad2:n=>String(n).padStart(2,'0')});
  const days=html.match(/const DAYS = [^;]+;/)[0];
  vm.runInContext(days+html.slice(html.indexOf('const daysEl ='),html.indexOf('/* ---------- Alarms ---------- */')),ctx);
  $('form').reset=()=>{for(const id of ['f-codered','lock','browser-ring'])$(id).checked=/\bchecked\b/.test(html.match(new RegExp('<input[^>]*id="'+id+'"[^>]*>'))[0]);};

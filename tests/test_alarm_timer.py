@@ -342,7 +342,7 @@ class AlarmTimer(unittest.TestCase):
     def test_scheduler_gives_alarms_priority_then_claims_timer_before_trigger(self):
         timer = self.create(1)
         self.now = timer["deadline"]
-        alarm = self.client.post("/api/alarms", json={"label": "Fixture alarm", "time_hhmm": "07:00", "target_date": "2026-11-12"}).json()
+        alarm = self.client.post("/api/alarms", json={"label": "Fixture alarm", "time_hhmm": "07:05", "target_date": "2026-11-12"}).json()
         triggered = []
 
         async def trigger(item):

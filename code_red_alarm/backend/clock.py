@@ -33,8 +33,26 @@ else:
         return datetime.datetime.now()
 
 
+def snoozed_until(alarm: dict):
+    """The local time a snoozed alarm rings again, or None."""
+    try:
+        return datetime.datetime.fromisoformat(alarm["snoozed_until"]) if alarm.get("snoozed_until") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def next_ring(alarm: dict, now: datetime.datetime):
-    """When an enabled alarm rings next (local time), or None. Used to wake the PC from sleep in time."""
+    """When an alarm rings next (local time), or None. Used to wake the PC from sleep in time.
+
+    A snooze counts even after a one-time alarm turned itself off, so a sleeping PC still wakes for it."""
+    snooze = snoozed_until(alarm)
+    regular = _next_regular(alarm, now)
+    if snooze and snooze > now:
+        return min(snooze, regular) if regular else snooze
+    return regular
+
+
+def _next_regular(alarm: dict, now: datetime.datetime):
     if not alarm.get("enabled"):
         return None
     try:
@@ -96,3 +114,35 @@ def due_day(alarm: dict, prev: datetime.datetime | None, now: datetime.datetime)
             continue
         return iso
     return None
+
+
+def missed_occurrence(alarm: dict, since: datetime.datetime, until: datetime.datetime):
+    """The latest occurrence of an enabled alarm in (since, until] that never rang, as (iso_day, at), or None.
+
+    The scheduler calls this for the stretch it could not cover (PC off or asleep longer than CATCH_UP), so the
+    history and the page can say an alarm was missed instead of skipping it silently. At most 8 days are checked."""
+    if not alarm.get("enabled") or until <= since:
+        return None
+    try:
+        hh, mm = (int(x) for x in str(alarm["time_hhmm"]).split(":"))
+    except (KeyError, ValueError):
+        return None
+    weekdays = alarm.get("weekdays") or []
+    target = alarm.get("target_date")
+    start = max(since.date(), until.date() - datetime.timedelta(days=7))
+    day = until.date()
+    while day >= start:
+        at = datetime.datetime.combine(day, datetime.time(hh, mm))
+        iso = day.isoformat()
+        if (since < at <= until and alarm.get("last_triggered_date") != iso and (not target or target == iso)
+                and (not weekdays or WEEKDAYS[day.weekday()] in weekdays)):
+            return iso, at
+        day -= datetime.timedelta(days=1)
+    return None
+
+
+def roll_forward(hhmm: str, now: datetime.datetime) -> str:
+    """The next date a one-time alarm at hhmm can ring: today if that minute is still ahead, else tomorrow."""
+    hh, mm = (int(x) for x in hhmm.split(":"))
+    at = datetime.datetime.combine(now.date(), datetime.time(hh, mm))
+    return (now.date() if at > now else now.date() + datetime.timedelta(days=1)).isoformat()
