@@ -1372,3 +1372,142 @@ go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loa
 <script src="/psu_picker.js"></script><script src="/ui/battery_view.js"></script><script src="/ui/edit_layout.js"></script><script src="/ui/sentinel_panels.js"></script><script>setupOverviewEditor();</script>
 </body>
 </html>
+async function retrySensors(){ const b = $("sensor-retry"); b.disabled = true; const label = b.textContent; b.textContent = "Starting…";
+  try { const r = await api("/api/sensors/helper/retry", { method: "POST" }); toast(r.message || "Checking sensors again.", !r.started); } catch (e) { toast(e.message, true); } b.disabled = false; b.textContent = label; }
+$("sensor-retry").onclick = retrySensors;
+$("lhm-go").onclick = setupLhm; document.addEventListener("click", (e) => { if (e.target.closest("[data-lhm]")) setupLhm(); });
+
+/* ---------- battery (laptops) ---------- */
+let pack = undefined, bhist = null, bright = null, batTimer = 0;
+async function loadBattery(){
+  try { pack = await api("/api/laptop/battery"); } catch { pack = null; }
+  if (pack && pack.has_battery) { if (!bhist) api("/api/laptop/battery/history").then(h => { bhist = h; renderBattery(); }).catch(() => {}); try { bright = await api("/api/laptop/brightness"); } catch {} }
+  renderBattery(); clearTimeout(batTimer); if (page === "battery") batTimer = setTimeout(loadBattery, 5000);
+}
+const hm = (m) => m == null ? "–" : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+function renderBattery(){
+  if (document.activeElement && document.activeElement.id === "bt-br") return;
+  const bg = (snap && snap.hardware.groups || []).find(g => g.kind === "battery"), lv = bg && bg.sensors.find(s => /level|charge/i.test(s.name) && s.type !== "Voltage");
+  const has = pack && pack.has_battery; $("bt-sub").textContent = has ? "From Windows' battery sensors and battery report" : "";
+  $("bt-body").innerHTML = BatteryView.html(pack, bhist, bright, lv ? lv.value : null);
+  const br = $("bt-br"); if (br) { br.oninput = () => { $("bt-brv").textContent = br.value + "%"; }; br.onchange = async () => { try { bright = await api("/api/laptop/brightness", { method: "POST", body: JSON.stringify({ percent: +br.value }) }); } catch (e) { toast(e.message, true); } }; }
+}
+
+/* ---------- alerts ---------- */
+const AL = Object.assign({ on: true, cpu: 90, gpu: 90, ram: 92 }, store.get("alerts", {})); $("al-on").checked = AL.on; $("al-cpu").value = AL.cpu; $("al-gpu").value = AL.gpu; $("al-ram").value = AL.ram;
+["al-on", "al-cpu", "al-gpu", "al-ram"].forEach(id => $(id).addEventListener("change", () => { Object.assign(AL, { on: $("al-on").checked, cpu: +$("al-cpu").value || 90, gpu: +$("al-gpu").value || 90, ram: +$("al-ram").value || 92 }); store.set("alerts", AL); }));
+const lastAlert = {};
+function checkAlerts(s){ if (!AL.on) return; const fire = (k, cond, msg) => { if (cond && Date.now() - (lastAlert[k] || 0) > 300000) { lastAlert[k] = Date.now(); toast(msg, true); } };
+  fire("cpu", s.cpu_temp != null && s.cpu_temp >= AL.cpu, `CPU is at ${n0(s.cpu_temp)}°C`); const g = s.gpu_hotspot ?? s.gpu_temp; fire("gpu", g != null && g >= AL.gpu, `GPU is at ${n0(g)}°C`); fire("ram", s.ram_load != null && s.ram_load >= AL.ram, `Memory is ${n0(s.ram_load)}% full`); }
+
+/* ---------- updates, about, export ---------- */
+async function checkUpdate(force){ try { const u = await api("/api/update" + (force ? "?force=true" : "")); $("ab-ver").textContent = `Version ${u.current}`;
+  if (u.available && (force || store.get("skipVersion", "") !== u.latest)) { $("upd").hidden = false; $("upd").dataset.v = u.latest; $("upd-t").textContent = `Ultra Suite ${u.latest} is available`; $("upd-s").textContent = u.summary || (u.notes || "").split("\n").map(l => l.replace(/[#*`]/g, "").trim()).find(l => l && !/^ultra suite/i.test(l)) || "New features and fixes."; }
+  else if (force) toast(u.error ? "Couldn't check for updates right now." : `You're on the newest version (${u.current}).`); } catch { if (force) toast("Couldn't check for updates right now.", true); } }
+$("upd-later").onclick = () => { store.set("skipVersion", $("upd").dataset.v || ""); $("upd").hidden = true; };
+$("upd-go").onclick = async () => { $("upd-go").disabled = true; $("upd-go").textContent = "Downloading…"; try { await api("/api/update/install", { method: "POST" }); toast("The installer is starting. Ultra Suite reopens when it's done."); } catch (e) { toast(e.message, true); } $("upd-go").disabled = false; $("upd-go").textContent = "Update now"; };
+$("ab-upd").onclick = () => checkUpdate(true);
+function prepareReport(input, includeIdentifiers=false){
+  const report=JSON.parse(JSON.stringify(input));
+  report.privacy={identifiers_included:includeIdentifiers,description:includeIdentifiers?"Includes available computer identifiers and process details.":"Known identifier fields and user paths redacted; process details omitted. Review free text before sharing."};
+  if(includeIdentifiers)return report;
+  const hostname=report.snapshot?.hardware?.device?.hostname;
+  delete report.apps;
+  const identifier=/^(?:hostname|computer_?name|serial(?:_?number)?|serial_number_raw|uuid|unique_?id|canonical_exe|group_id|exe|(?:.*_)?path|(?:.*_)?ip(?:_address)?|mac(?:_address)?|address|host)$/i;
+  const scrub=(value,key="")=>{
+    if(identifier.test(key)&&value!=null)return "[redacted]";
+    if(typeof value==="string"){
+      if(/(?:[a-z]:[\\/]|\\\\)[^\r\n]*\busers[\\/]/i.test(value)||/\/(?:home|Users)\/[^/\s]+/.test(value))return "[redacted user path]";
+      if(hostname&&value.toLocaleLowerCase().includes(hostname.toLocaleLowerCase()))return "[redacted computer name]";
+      return value;
+    }
+    if(Array.isArray(value))return value.map(v=>scrub(v));
+    if(value&&typeof value==="object")for(const k of Object.keys(value))value[k]=scrub(value[k],k);
+    return value;
+  };
+  return scrub(report);
+}
+$("ab-export").insertAdjacentHTML("beforebegin",'<label style="display:block;margin:12px 0"><input id="ab-export-identifiers" type="checkbox"> Include computer name, process details and file paths</label><p class="muted" style="margin-bottom:10px">Off by default. Known identifiers are hidden in the default report. Review free text before sharing.</p>');
+$("ab-export").onclick = () => { const rep = prepareReport({ exported: new Date().toISOString(), snapshot: snap, apps, plans, displays: disps },$("ab-export-identifiers").checked); const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(rep, null, 2)], { type: "application/json" })); a.download = `pc-sentinel-report-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("Report saved to your Downloads folder."); };
+
+/* ---------- feedback ---------- */
+let fbKind = "idea"; const fbOpen = () => { $("fb-bg").classList.add("show"); $("fb-st").textContent = "Anonymous"; setTimeout(() => $("fb-msg").focus(), 50); }, fbClose = () => $("fb-bg").classList.remove("show");
+$("fb-open").onclick = fbOpen; $("ab-fb").onclick = fbOpen; $("fb-cancel").onclick = fbClose; $("fb-bg").addEventListener("click", (e) => { if (e.target === $("fb-bg")) fbClose(); });
+$("fb-kind").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; fbKind = b.dataset.k; $("fb-kind").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); };
+$("fb-send").onclick = async () => { const msg = $("fb-msg").value.trim(); if (msg.length < 3) { $("fb-st").textContent = "Write a few words first"; return; } $("fb-send").disabled = true; $("fb-st").textContent = "Sending…";
+  try { await api("/api/feedback", { method: "POST", body: JSON.stringify({ kind: fbKind, message: msg }) }); $("fb-st").textContent = "Thank you! Sent."; $("fb-msg").value = ""; setTimeout(fbClose, 900); } catch (e) { $("fb-st").textContent = e.message; } $("fb-send").disabled = false; };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { fbClose(); rnClose(); } });
+
+/* ---------- speed test ---------- */
+const G = { cx: 155, cy: 150, r: 118, start: -135, sweep: 270 }; const STOPS = [0, 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+const sp = { running: false, phase: null, target: 0, shown: 0, down: [], up: [], ws: null, prog: 0 };
+const polar = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [G.cx + r * Math.cos(a), G.cy + r * Math.sin(a)]; };
+const arcP = (f) => { const end = G.start + G.sweep * Math.max(.0001, Math.min(1, f)), [x1, y1] = polar(G.start, G.r), [x2, y2] = polar(end, G.r); return `M${x1.toFixed(1)},${y1.toFixed(1)} A${G.r},${G.r} 0 ${end - G.start > 180 ? 1 : 0} 1 ${x2.toFixed(1)},${y2.toFixed(1)}`; };
+const frac = (v) => { const n = STOPS.length - 1; if (v <= 0) return 0; for (let i = 0; i < n; i++) if (v <= STOPS[i + 1]) return (i + (v - STOPS[i]) / (STOPS[i + 1] - STOPS[i])) / n; return 1; };
+function drawGauge(){ if ($("gauge").dataset.ok) return; $("gauge").dataset.ok = 1;
+  const ticks = STOPS.map((s, i) => { const [x, y] = polar(G.start + G.sweep * i / (STOPS.length - 1), G.r - 26); return `<text class="g-tick" x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle">${s >= 1000 ? s / 1000 + "G" : s}</text>`; }).join("");
+  const minor = Array.from({ length: (STOPS.length - 1) * 4 + 1 }, (_, i) => { const deg = G.start + G.sweep * i / ((STOPS.length - 1) * 4), [a, b] = polar(deg, G.r + 11), [c, d] = polar(deg, G.r + (i % 4 ? 15 : 19)); return `<line x1="${a.toFixed(1)}" y1="${b.toFixed(1)}" x2="${c.toFixed(1)}" y2="${d.toFixed(1)}" stroke="var(--line-strong)" stroke-width="${i % 4 ? 1 : 2}"/>`; }).join("");
+  $("gauge").innerHTML = `${minor}<path d="${arcP(1)}" fill="none" stroke="var(--series-track)" stroke-width="16" stroke-linecap="round"/><path id="g-arc" d="${arcP(0)}" fill="none" stroke="var(--series)" stroke-width="16" stroke-linecap="round"/>${ticks}
+    <g id="g-needle" style="transform:rotate(${G.start}deg)"><path d="M${G.cx - 4},${G.cy} L${G.cx},${G.cy - G.r + 18} L${G.cx + 4},${G.cy} Z" fill="var(--ink)"/><circle cx="${G.cx}" cy="${G.cy}" r="9" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/></g>`; }
+function animG(){ sp.shown += (sp.target - sp.shown) * .09; if (Math.abs(sp.target - sp.shown) < .05) sp.shown = sp.target; const f = sp.phase === "ping" ? 0 : frac(sp.shown);
+  const a = $("g-arc"); if (a) { a.setAttribute("d", arcP(f)); a.setAttribute("stroke", sp.phase === "upload" ? "var(--series-2)" : "var(--series)"); } const nd = $("g-needle"); if (nd) nd.style.transform = `rotate(${G.start + G.sweep * f}deg)`;
+  $("g-val").textContent = sp.phase === "ping" ? n0(sp.target) : auto(sp.shown); if (sp.running || sp.shown !== sp.target) requestAnimationFrame(animG); }
+const setPh = (l, m) => { $("g-phase").className = "g-phase" + (m ? " on" : "") + (m === "up" ? " up" : ""); $("g-phase-t").textContent = l; };
+const setR = (id, v, act, f) => { tween($(id).querySelector(".v span"), v, f || auto, 600); $(id).classList.toggle("active", !!act); };
+function setProg(p, l){ sp.prog = Math.max(0, Math.min(1, p)); $("prog-fill").style.width = (sp.prog * 100).toFixed(1) + "%"; tween($("prog-pct"), sp.prog * 100, v => `${Math.round(v)}%`, 300); if (l) $("prog-label").textContent = l;
+  [["s-ping", 0, .09], ["s-down", .09, .545], ["s-up", .545, 1], ["s-done", 1, 1.01]].forEach(([id, a, b]) => { $(id).className = sp.prog >= b ? "done" : sp.prog >= a && sp.running ? "on" : ""; }); }
+function drawSpeedChart(){ const W = 800, Hh = 150, n = 50, max = Math.max(10, ...sp.down, ...sp.up) * 1.12, x = (i) => 6 + i / (n - 1) * (W - 12), y = (v) => Hh - 4 - v / max * (Hh - 18);
+  const ln = (a, c) => { if (a.length < 2) return ""; const p = a.map((v, i) => [x(i), y(v)]), d = smooth(p); return `<path d="${d} L${p[p.length - 1][0]},${Hh - 4} L${p[0][0]},${Hh - 4} Z" fill="${c}" opacity=".12"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`; };
+  $("st-chart").innerHTML = `<line x1="0" x2="${W}" y1="${Hh - 4}" y2="${Hh - 4}" stroke="var(--line-strong)" vector-effect="non-scaling-stroke"/>` + ln(sp.down, "var(--series)") + ln(sp.up, "var(--series-2)"); }
+function extras(m){ if (!m || !m.grade) { $("extras").innerHTML = ""; return; }
+  $("extras").innerHTML = `<span class="gradebox" title="How much your ping rises while the line is under load"><span class="grade g-${m.grade[0].toLowerCase()}">${esc(m.grade)}</span>Bufferbloat · loaded ping ${n0(m.loaded_down_ms)} / ${n0(m.loaded_up_ms)} ms</span>` + Object.entries(m.quality || {}).map(([k, v]) => `<span class="q ${esc(v)}">${esc(k)} <b>${esc(v)}</b></span>`).join(""); }
+function hist(){ const h = store.get("speedHistory", []); $("history").hidden = !h.length; if (!h.length) return; const mx = Math.max(...h.map(x => x.download_mbps), 1);
+  $("history").innerHTML = `<div class="muted" style="margin-bottom:4px">Recent tests (download, upload, ping, grade)</div>` + h.slice(0, 6).map(x => `<div class="hrow"><span>${when(x.at)}</span>
+    <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.download_mbps)}<span class="hb" style="flex:1"><i style="width:${x.download_mbps / mx * 100}%;background:var(--series)"></i></span></span>
+    <span class="num" style="display:flex;gap:8px;align-items:center">${auto(x.upload_mbps)}<span class="hb" style="flex:1"><i style="width:${Math.min(100, x.upload_mbps / mx * 100)}%;background:var(--series-2)"></i></span></span><span class="num">${n0(x.ping_ms)} ms</span><span>${esc(x.grade || "")}</span></div>`).join(""); }
+(function last(){ const l = store.get("lastSpeed", null); if (!l) { $("st-meta").textContent = "Press START to measure ping, download and upload."; return; } setR("r-ping", l.ping_ms, false, n0); setR("r-jitter", l.jitter_ms, false, n1); setR("r-down", l.download_mbps); setR("r-up", l.upload_mbps); extras(l); hist(); $("st-meta").textContent = `Last test ${when(l.at)} · ${l.server}`; })();
+$("st-go").onclick = () => { if (sp.running) { sp.ws && sp.ws.close(); return; } Object.assign(sp, { running: true, down: [], up: [], target: 0, shown: 0 }); drawGauge(); drawSpeedChart(); extras(null);
+  ["r-ping", "r-jitter", "r-down", "r-up"].forEach(i => setR(i, null)); $("x-down").textContent = $("x-up").textContent = ""; $("st-go").textContent = "STOP"; $("st-go").classList.add("stop"); $("track").classList.add("running"); $("st-meta").textContent = "Testing… pause other downloads for the most accurate result."; setProg(0, "Connecting…"); requestAnimationFrame(animG);
+  const ws = sp.ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/speedtest`); let done = false;
+  ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === "phase") { sp.phase = m.phase; sp.target = 0; setPh({ ping: "Measuring ping", download: "Downloading", upload: "Uploading" }[m.phase], m.phase === "upload" ? "up" : "on"); $(({ ping: "r-ping", download: "r-down", upload: "r-up" })[m.phase]).classList.add("active"); }
+    else if (m.type === "progress") { if (m.phase === "ping") { sp.target = m.ping_ms; setR("r-ping", m.ping_ms, true, n0); setProg(.09 * m.progress, "Measuring ping"); }
+      else { sp.target = m.mbps; (m.phase === "download" ? sp.down : sp.up).push(m.mbps); drawSpeedChart(); setR(m.phase === "download" ? "r-down" : "r-up", m.mbps, true); if (m.loaded_ms != null) $(m.phase === "download" ? "x-down" : "x-up").textContent = `loaded ping ${n0(m.loaded_ms)} ms`;
+        setProg(m.phase === "download" ? .09 + .455 * m.progress : .545 + .455 * m.progress, m.phase === "download" ? "Download in progress" : "Upload in progress"); } }
+    else if (m.type === "phase_done") { if (m.phase === "ping") { setR("r-ping", m.ping_ms, false, n0); setR("r-jitter", m.jitter_ms, false, n1); $("st-sub").textContent = `Server: ${m.server}`; } if (m.phase === "download") { setR("r-down", m.mbps); if (m.server) $("st-sub").textContent = `Download server: ${m.server}`; } if (m.phase === "upload") setR("r-up", m.mbps); }
+    else if (m.type === "note") $("st-meta").textContent = m.note;
+    else if (m.type === "done") { done = true; store.set("lastSpeed", m); const h = store.get("speedHistory", []); h.unshift(m); store.set("speedHistory", h.slice(0, 20)); sp.phase = null; sp.target = m.download_mbps; setPh("Done"); setProg(1, "Test complete"); extras(m); hist(); $("st-meta").textContent = `${auto(m.download_mbps)} down / ${auto(m.upload_mbps)} up Mbps · ping ${n0(m.ping_ms)} ms · ${m.server}`; }
+    else if (m.type === "error") { done = true; setPh("Failed"); $("st-meta").textContent = m.error; } };
+  ws.onclose = () => { sp.running = false; $("st-go").textContent = "TEST AGAIN"; $("st-go").classList.remove("stop"); $("track").classList.remove("running"); if (!done) { setPh("Stopped"); sp.target = 0; $("st-meta").textContent = "Test stopped."; setProg(sp.prog, "Stopped"); } ["r-ping", "r-jitter", "r-down", "r-up"].forEach(i => $(i).classList.remove("active")); requestAnimationFrame(animG); };
+  ws.onerror = () => { $("st-meta").textContent = "Couldn't reach the Sentinel server."; }; };
+
+/* ---------- main loop ---------- */
+let snap = null, lastMsg = 0, retry = 0;
+function push(k, v){ H[k].push(v == null ? null : v); if (H[k].length > HMAX) H[k].shift(); }
+function render(){
+  if (!snap) return; const hw = snap.hardware, s = hw.summary || {}, dev = hw.device || {};
+  $("brand-sub").textContent = dev.hostname || "Your PC";
+  $("brand-sub").title = dev.hostname ? "Windows computer name" : "Windows computer name is unavailable";
+  const sg = window.SentinelPanels && hw.sensor_setup ? SentinelPanels.sensorBanner(hw.sensor_setup) : null;
+  if (sg) { $("basic").hidden = false; $("basic").className = "banner " + sg.kind; $("basic-t").textContent = sg.title; if ($("basic-s").dataset.sig !== sg.html) { $("basic-s").dataset.sig = sg.html; $("basic-s").innerHTML = sg.html; } $("lhm-go").hidden = !sg.setup || sg.retry || hw.can_install_lhm === false; $("sensor-retry").hidden = !sg.retry; if (sg.retry && !$("sensor-retry").disabled) $("sensor-retry").textContent = sg.retryLabel; }
+  else if (hw.sensor_setup) $("basic").hidden = true;
+  else { $("sensor-retry").hidden = true; $("basic").hidden = hw.level !== "basic"; $("basic-t").textContent = "Basic sensor mode"; $("basic-s").textContent = hw.help || "Windows provides load, memory, drives and network. Temperatures, fans and power need LibreHardwareMonitor."; $("lhm-go").hidden = hw.can_install_lhm === false; }
+  applyPreferences();
+  $("settings-form").textContent = dev.type ? `Detected: ${dev.type === "laptop" ? "Laptop" : "Desktop"}${dev.form_basis ? `. ${dev.form_basis}.` : ""}` : "Detecting this PC…";
+  const hot = (s.cpu_temp != null && s.cpu_temp >= AL.cpu) || ((s.gpu_hotspot ?? s.gpu_temp) != null && (s.gpu_hotspot ?? s.gpu_temp) >= AL.gpu);
+  const pb = $("nav-performance"); if (hot && !pb.querySelector(".badge")) pb.insertAdjacentHTML("beforeend", '<span class="badge" aria-label="Running hot"></span>'); else if (!hot) pb.querySelector(".badge")?.remove();
+  ({ overview: () => { renderOverview(); renderApps(); }, performance: renderPerformance, cooling: renderCooling, power: renderPower, storage: renderStorage, network: () => { renderNet(); renderVPN(); }, sensors: renderSensors, system: renderSystem, battery: () => {}, speed: () => {} })[page]?.();
+}
+function onSnap(d){ snap = d; if(d.preferences)acceptPreferences(d.preferences); lastMsg = Date.now(); const s = d.hardware.summary || {};
+  push("cpu", s.cpu_load); push("gpu", s.gpu_load); push("ram", s.ram_load); recordPowerHistory(d.hardware.power); push("cput", s.cpu_temp); push("gput", s.gpu_temp);
+  checkAlerts(s); if (!document.hidden) render(); }
+function connect(){ const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`); ws.onopen = () => { retry = 0; };
+  ws.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } }; ws.onclose = () => setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); ws.onerror = () => ws.close(); }
+setInterval(() => { const fresh = Date.now() - lastMsg < 5000, full = snap && snap.hardware.level !== "basic"; $("live").innerHTML = `<span class="dot ${fresh ? (full ? "good" : "warning") : "critical"}"></span>${fresh ? (snap ? `Live · ${snap.hardware.sensor_count} sensors` : "Live") : "Reconnecting…"}`; }, 1000);
+setInterval(() => { if (page === "overview" && !document.hidden && Date.now()-lastAppsRequest >= (appsExpanded?5000:2500)) loadApps(); }, 2500);
+go((location.hash || "#overview").slice(1), false); loadApps(); loadPower(); loadPowerContext(); loadPreferences(); checkUpdate(false); connect();
+</script>
+<script src="/psu_picker.js"></script><script src="/ui/battery_view.js"></script><script src="/ui/edit_layout.js"></script><script src="/ui/sentinel_panels.js"></script><script>setupOverviewEditor();</script>
+</body>
+</html>
