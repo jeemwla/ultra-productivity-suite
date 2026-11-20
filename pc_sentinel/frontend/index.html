@@ -754,15 +754,26 @@ function lineChart(key, arr, color, fixedMax, unit){
   svg.setAttribute("aria-label", chartLabel(key, vals, u)); // screen readers get the numbers the picture shows
 }
 // Pointer events: mouse, pen and touch (a tap on a chart shows that moment's value).
+function showTip(c, i){ const r = c.getBoundingClientRect(), a = c._data.arr;
+  if (i < 0 || i >= a.length || a[i] == null) return false;
+  let t = c.querySelector(".tip"), cur = c.querySelector(".cursor"); if (!t) { t = document.createElement("div"); t.className = "tip"; c.appendChild(t); cur = document.createElement("div"); cur.className = "cursor"; c.appendChild(cur); }
+  const px = (i + (HMAX - a.length)) / (HMAX - 1) * r.width; t.style.left = `${Math.max(50, Math.min(r.width - 50, px))}px`; cur.style.left = `${px}px`;
+  const ago = a.length - 1 - i; t.textContent = `${auto(a[i])}${c._data.unit} · ${ago ? ago + " s ago" : "now"}`; c._ki = i; return true; }
 const chartTip = (e) => {
   const c = e.target.closest && e.target.closest(".chart"); document.querySelectorAll(".chart .tip,.chart .cursor").forEach(t => { if (!c || t.parentElement !== c) t.remove(); });
   if (!c || !c._data || !c._data.arr.length) return;
-  const r = c.getBoundingClientRect(), a = c._data.arr, pos = (e.clientX - r.left) / r.width, i = Math.round(pos * (HMAX - 1)) - (HMAX - a.length);
-  if (i < 0 || i >= a.length || a[i] == null) return;
-  let t = c.querySelector(".tip"), cur = c.querySelector(".cursor"); if (!t) { t = document.createElement("div"); t.className = "tip"; c.appendChild(t); cur = document.createElement("div"); cur.className = "cursor"; c.appendChild(cur); }
-  const px = e.clientX - r.left; t.style.left = `${Math.max(50, Math.min(r.width - 50, px))}px`; cur.style.left = `${px}px`;
-  const ago = a.length - 1 - i; t.textContent = `${auto(a[i])}${c._data.unit} · ${ago ? ago + " s ago" : "now"}`;
+  const r = c.getBoundingClientRect(), a = c._data.arr, pos = (e.clientX - r.left) / r.width; showTip(c, Math.round(pos * (HMAX - 1)) - (HMAX - a.length));
 };
+/* Keyboard: Tab to a chart, then Left and Right step through readings, Home and End jump, Escape hides the value. */
+function chartStep(len, i, key){ if (key === "Home") return 0; if (key === "End") return len - 1; const cur = i == null ? len - 1 : i;
+  return key === "ArrowLeft" ? Math.max(0, cur - 1) : key === "ArrowRight" ? Math.min(len - 1, cur + 1) : null; }
+document.querySelectorAll('.chart[data-chart]:not([data-chart="speed"])').forEach(c => { c.tabIndex = 0;
+  c.addEventListener("keydown", (e) => { if (!c._data || !c._data.arr.length) return;
+    if (e.key === "Escape") { c.querySelectorAll(".tip,.cursor").forEach(t => t.remove()); c._ki = null; return; }
+    let i = chartStep(c._data.arr.length, c._ki, e.key); if (i == null) return; e.preventDefault();
+    const a = c._data.arr, dir = e.key === "ArrowLeft" || e.key === "End" ? -1 : 1; while (a[i] == null && i > 0 && i < a.length - 1) i += dir; // skip gaps
+    showTip(c, i); });
+  c.addEventListener("blur", () => { c.querySelectorAll(".tip,.cursor").forEach(t => t.remove()); c._ki = null; }); });
 document.addEventListener("pointermove", chartTip); document.addEventListener("pointerdown", chartTip);
 
 /* ---------- overview ---------- */

@@ -177,3 +177,8 @@ test('copied device details are plain text without the computer name',()=>{
  assert.equal(t,'PC Sentinel: Desktop\nProcessor: AMD Ryzen 7\nCores / threads: 8 / 16\nWindows: Windows 11 Pro');
  assert.doesNotMatch(t,/SECRET/);
 });
+test('arrow keys step through chart readings',()=>{
+ const ctx=vm.createContext({});vm.runInContext(cut('function chartStep','document.querySelectorAll(\'.chart[data-chart]'),ctx);const step=vm.runInContext('chartStep',ctx);
+ assert.equal(step(120,null,'ArrowLeft'),118);assert.equal(step(120,5,'ArrowLeft'),4);assert.equal(step(120,0,'ArrowLeft'),0);
+ assert.equal(step(120,119,'ArrowRight'),119);assert.equal(step(120,3,'Home'),0);assert.equal(step(120,3,'End'),119);assert.equal(step(120,3,'a'),null);
+});
