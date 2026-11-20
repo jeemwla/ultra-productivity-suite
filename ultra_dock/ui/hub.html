@@ -96,6 +96,8 @@ tbody tr:hover{background:color-mix(in srgb,var(--panel-2) 60%,transparent)}
 td.muted{color:var(--ink-3)}
 td .edc{display:flex;align-items:center;gap:var(--s-2);font-weight:var(--w-medium);color:var(--ink)}
 td.muted .edc{color:var(--ink-2)}
+/* An edition app that is not installed shows a grey icon */
+td.muted .edc img{filter:grayscale(1);opacity:.55}
 td .edc img{width:22px;height:22px;border-radius:var(--r-2)}
 td .btn{min-height:28px;padding:0 var(--s-3);font-size:var(--t-1)}
 td .small{display:block;margin:var(--s-1) 0 var(--s-2);color:var(--ink-3)}

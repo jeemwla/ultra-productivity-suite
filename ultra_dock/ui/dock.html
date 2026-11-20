@@ -85,6 +85,11 @@ label.txt{cursor:pointer}
 .status.show{opacity:1;transform:none}
 .status.err{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent);pointer-events:auto;user-select:text}
 .confirm{display:flex;gap:var(--s-2);align-items:center;flex-wrap:wrap}
+/* While Reset asks to confirm, its row is tinted so the destructive choice is unmistakable */
+.row:has(#reset-yes){background:var(--bad-soft);margin:0 calc(-1 * var(--s-3));padding-left:var(--s-3);padding-right:var(--s-3);border-radius:var(--r-3);border-top-color:transparent}
+.row:has(#reset-yes) .muted{color:var(--ink)}
+#reset-yes{background:var(--bad);color:var(--bg);border-color:transparent}
+#reset-yes:hover{background:color-mix(in srgb,var(--bad) 86%,#000)}
 code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-break:break-all}
 /* One click selects the whole settings file path for copying */
 #path{user-select:all;cursor:text;background:var(--panel-2);border-radius:var(--r-2);padding:1px var(--s-1)}
@@ -106,6 +111,8 @@ code{font-family:var(--font-mono);font-size:var(--t-1);color:var(--ink-2);word-b
 .tile .member .remove{padding:2px var(--s-2);border-radius:var(--r-2);transition:background var(--d-1) var(--ease)}
 .tile .member .remove:hover{background:var(--accent-soft)}
 #editor-help{font-size:var(--t-2)}
+/* In edit mode (app buttons enabled) every tile shows a dashed edge: each one is a place an app can be dropped */
+.board:has(button[data-file]:not(:disabled)) .tile{border-style:dashed;border-color:var(--line-2)}
 #editor-message:empty{display:none}
 </style>
 </head>
