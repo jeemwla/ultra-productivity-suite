@@ -25,7 +25,7 @@ body:
     attributes:
       label: Ultra Suite version
       description: Shown in the hub, or in Windows Settings > Apps > Installed apps.
-      placeholder: "2.2.29"
+      placeholder: "2.2.30"
     validations:
       required: true
   - type: dropdown
