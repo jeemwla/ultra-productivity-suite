@@ -66,6 +66,8 @@ pub fn sanitize(input: &Value, help: &str) -> Result<Value, String> {
     let mut doc = json!({ "_help": help, "keep": keep, "order": order, "categories": categories, "overrides": overrides });
     // Optional: several windows of one app open an inline list instead of acting like the native button.
     if input["inline_window_list"].as_bool() == Some(true) { doc["inline_window_list"] = json!(true); }
+    // Optional: folders become native taskbar buttons that keep Alt+Tab (native_groups.rs), off by default.
+    if input["native_folder_buttons"].as_bool() == Some(true) { doc["native_folder_buttons"] = json!(true); }
     Ok(doc)
 }
 
@@ -80,6 +82,16 @@ mod tests {
     use super::*;
 
     /// Owner item 10: the inline window list is an option, off by default, kept on save.
+    /// Owner items 4, 9 and 11: native folder buttons are an option, off by default, kept on save.
+    #[test]
+    fn the_native_folder_buttons_option_is_kept_only_when_on() {
+        let on = sanitize(&json!({"native_folder_buttons": true}), "").unwrap();
+        assert_eq!(on["native_folder_buttons"], json!(true));
+        for input in [json!({}), json!({"native_folder_buttons": false}), json!({"native_folder_buttons": 1})] {
+            assert!(sanitize(&input, "").unwrap().get("native_folder_buttons").is_none(), "off by default: {input}");
+        }
+    }
+
     #[test]
     fn the_inline_window_list_option_is_kept_only_when_on() {
         let on = sanitize(&json!({"inline_window_list": true}), "").unwrap();

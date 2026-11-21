@@ -124,7 +124,7 @@ mod win {
     }
 
     // None means identity could not be established. Never interpret access denied as dead.
-    fn owner_alive(owner: Owner) -> Option<bool> {
+    pub fn owner_alive(owner: Owner) -> Option<bool> {
         let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE, false, owner.pid) } {
             Ok(h) => Handle(h),
             Err(error) if error.code().0 as u32 == 0x80070057 => return Some(false), // invalid PID
@@ -137,7 +137,7 @@ mod win {
     fn journal_path(owner: Owner) -> PathBuf { crate::appdata(&journal_name(owner)) }
     fn journal_name(owner: Owner) -> String { format!("dock-recovery-v1-{}-{}.json", owner.pid, owner.started) }
 
-    fn journal_roots() -> io::Result<Vec<PathBuf>> {
+    pub fn journal_roots() -> io::Result<Vec<PathBuf>> {
         // A missing environment or invalid contract cannot stand for an empty journal set.
         let root = std::env::var_os("APPDATA").filter(|s| !s.is_empty()).map(PathBuf::from)
             .ok_or_else(|| io::Error::other("APPDATA is unavailable"))?;
@@ -472,7 +472,7 @@ mod win {
 }
 
 #[cfg(windows)]
-pub use win::{hide_window, own_pending_windows, process_owner, prune_closed, recover_owner, recover_previous, restore_all, restore_window};
+pub use win::{hide_window, journal_roots, owner_alive, own_pending_windows, process_owner, prune_closed, recover_owner, recover_previous, restore_all, restore_window};
 
 #[cfg(test)]
 mod tests {
